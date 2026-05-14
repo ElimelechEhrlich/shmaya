@@ -1,197 +1,192 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { supabase } from '../supabaseClient';
-import { TaskGeneratorService } from '../services/TaskService';
+import { useCustomer } from '../hooks/useCustomer.ts';
+import {
+    isEmployerType as registryIsEmployerType,
+    isRepresentationAllowed,
+    BUSINESS_TYPE_OPTIONS,
+} from '../registries/CustomerRegistry.ts';
 
 const CustomerCard = () => {
     const { id } = useParams();
     const navigate = useNavigate();
-    const [customer, setCustomer] = useState(null);
-    const [loading, setLoading] = useState(true);
-    const [isEditing, setIsEditing] = useState(false);
-const [editData, setEditData] = useState(null);
+    const {
+        customer,
+        editData,
+        loading,
+        isEditing,
+        progress,
+        actions,
+    } = useCustomer(id);
 
-    useEffect(() => {
-        fetchCustomerData();
-    }, [id]);
-const handleUpdateCustomer = async () => {
-    const { error } = await supabase
-        .from('clients')
-        .update({
-            customerDetails: editData?.customerDetails,
-            businessDetails: editData?.businessDetails
-        })
-        .eq('id', id);
+    const handleSave = async () => {
+        const result = await actions.save();
+        if (result.success) {
+            alert("הנתונים נשמרו וסונכרנו בהצלחה!");
+        } else {
+            alert("שגיאה בשמירה: " + result.error);
+        }
+    };
 
-    if (error) {
-        alert("שגיאה בעדכון: " + error.message);
-    } else {
-        setCustomer(editData);
-        setIsEditing(false);
+    if (loading || !editData) {
+        return <div className="p-20 text-center font-bold text-slate-400">טוען נתונים...</div>;
     }
-};
-    const fetchCustomerData = async () => {
-        setLoading(true);
-        const { data, error } = await supabase
-            .from('clients')
-            .select(`*, tasks(*)`) // שליפת הלקוח וכל המשימות שלו
-            .eq('id', id)
-            .single();
 
-        if (error) console.error("Error:", error.message);
-        else setCustomer(data);
-        setLoading(false);
-    };
+    const bType = editData.businessDetails?.businessType;
+    const isEmployerType = registryIsEmployerType(editData);
+    const isVatRelevant = isRepresentationAllowed(editData);
 
-    const toggleTaskStatus = async (taskId, currentStatus) => {
-        const newStatus = currentStatus === 'completed' ? 'pending' : 'completed';
-        const { error } = await supabase
-            .from('tasks')
-            .update({ status: newStatus })
-            .eq('id', taskId);
-
-        if (!error) {
-            setCustomer(prev => ({
-                ...prev,
-                tasks: prev.tasks.map(t => t.id === taskId ? { ...t, status: newStatus } : t)
-            }));
-        }
-    };
-    const handleSaveCustomer = async () => {
-        const { error } = await supabase
-            .from('clients')
-            .update({
-                customerDetails: editData?.customerDetails,
-                businessDetails: editData?.businessDetails
-            })
-            .eq('id', id);
-
-        if (error) alert("שגיאה בעדכון");
-        else {
-            setCustomer(editData);
-            setIsEditing(false);
-        }
-    };
-    // const fetchCustomerData = async () => {
-    //     setLoading(true);
-    //     const { data, error } = await supabase
-    //         .from('clients').select(`*, tasks(*)`).eq('id', id).single();
-
-    //     if (!error) {
-    //         setCustomer(data);
-    //         setEditData(data); // מאתחל את נתוני העריכה
-    //     }
-    //     setLoading(false);
-    // };
-const handleInputChange = (section, field, value) => {
-    setEditData(prev => {
-        // הגנה: אם אין נתונים קודמים, אל תעשה כלום
-        if (!prev) return prev; 
-        
-        return {
-            ...prev,
-            [section]: { 
-                ...prev[section], 
-                [field]: value 
-            }
-        };
-    });
-};
-if (loading ) {
-    return (
-        <div className="flex justify-center items-center h-screen">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-            <span className="mr-3 text-lg font-bold">טוען נתוני לקוח...</span>
-        </div>
-    );
-}    if (!customer) return <div className="p-10 text-center">לקוח לא נמצא</div>;
-
-    const progress = TaskGeneratorService.calculateProgress(customer.tasks || []);
+    const onCh = (category, field) => (value) => actions.updateField(category, field, value);
 
     return (
-        <div className="p-6 bg-gray-50 min-h-screen rtl text-right">
-{/* כותרת וכפתורי פעולה */}
-                <div className="flex justify-between items-center mb-6">
-                    <button onClick={() => navigate('/admin/customers')} className="text-blue-600">➜ חזרה</button>
-                    <button 
-                        onClick={isEditing ? handleSaveCustomer : () => setIsEditing(true)}
-                        className={`px-6 py-2 rounded-lg font-bold shadow-md ${isEditing ? 'bg-green-600 text-white' : 'bg-blue-600 text-white'}`}
-                    >
-                        {isEditing ? '💾 שמור שינויים' : '✏️ ערוך פרטי לקוח'}
-                    </button>
+        <div className="p-6 bg-slate-50 min-h-screen rtl text-right font-sans" dir="rtl">
+            <div className="max-w-7xl mx-auto">
+
+                {/* Actions Bar */}
+                <div className="flex justify-between items-center mb-8">
+                    <button onClick={() => navigate('/admin/customers')} className="text-slate-400 font-bold hover:text-slate-600 transition">➜ חזרה</button>
+                    <div className="flex gap-4">
+                        {isEditing && (
+                            <button onClick={() => actions.setEditMode(false)} className="text-red-500 underline font-bold px-4">ביטול</button>
+                        )}
+                        <button
+                            onClick={isEditing ? handleSave : () => actions.setEditMode(true)}
+                            className={`px-10 py-3 rounded-2xl font-black shadow-xl transition-all ${isEditing ? 'bg-green-600 text-white' : 'bg-slate-900 text-white hover:bg-slate-800'}`}
+                        >
+                            {isEditing ? '💾 שמור וסנכרן משימות' : '✏️ עריכת כרטיס'}
+                        </button>
+                    </div>
                 </div>
 
-            {/* Header */}
-            <div className="bg-white p-6 rounded-xl shadow-sm mb-6 flex justify-between items-center border-r-8 border-blue-600">
-                <div>
-                    <h1 className="text-3xl font-bold">{customer.customerDetails?.fullName}</h1>
-                    <p className="text-gray-500">מזהה עסק: {customer.businessDetails?.businessID}</p>
+                {/* Banner */}
+                <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100 flex justify-between items-center mb-8 relative overflow-hidden">
+                    <div className="absolute top-0 right-0 w-3 h-full bg-blue-600"></div>
+                    <div>
+                        <span className="text-blue-600 font-black text-[10px] uppercase tracking-widest">{bType}</span>
+                        <h1 className="text-4xl font-black text-slate-900 mt-1">{editData.customerDetails?.fullName}</h1>
+                        <p className="text-slate-500 font-bold">{editData.businessDetails?.businessName}</p>
+                    </div>
+                    <div className="text-left bg-slate-50 p-6 rounded-3xl border border-slate-100 min-w-[140px]">
+                        <div className="text-4xl font-black text-slate-800 leading-none">{progress}%</div>
+                        <div className="text-[10px] font-bold text-slate-400 mt-2 uppercase tracking-widest">ביצוע משימות</div>
+                    </div>
                 </div>
-                <div className="bg-blue-50 p-4 rounded-lg text-center">
-                    <div className="text-xs text-blue-400">התקדמות</div>
-                    <div className="text-2xl font-bold text-blue-700">{progress}%</div>
-                </div>
-            </div>
 
-<div className="grid grid-cols-1 lg:grid-cols-3 gap-6 text-right">                {/* פרטי לקוח */}
-                <div className="space-y-6">
-<div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100">
-            <h3 className="font-bold text-blue-700 mb-4 border-b pb-2">👤 פרטי הלקוח</h3>
-            <div className="space-y-2">
-                <DetailRow label="שם מלא" value={customer.customerDetails?.fullName} isEditing={isEditing} section="businessDetails" field="businessName" onChange={handleInputChange}/>
-                <DetailRow label="תעודת זהות" value={customer.customerDetails?.identityId}isEditing={isEditing} section="businessDetails" field="businessName" onChange={handleInputChange} />
-                <DetailRow label="טלפון" value={customer.customerDetails?.phoneNumber} isEditing={isEditing} section="businessDetails" field="businessName" onChange={handleInputChange}/>
-                <DetailRow label="אימייל" value={customer.customerDetails?.email}isEditing={isEditing} section="businessDetails" field="businessName" onChange={handleInputChange} />
-                <DetailRow label="כתובת" value={customer.customerDetails?.address}isEditing={isEditing} section="businessDetails" field="businessName" onChange={handleInputChange} />
-            </div>
-        </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
 
-        {/* כרטיס פרטי עסק */}
-        <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100">
-            <h3 className="font-bold text-blue-700 mb-4 border-b pb-2">🏢 פרטי העסק</h3>
-            <div className="space-y-2">
-                <DetailRow label="שם העסק" value={customer.businessDetails?.businessName}isEditing={isEditing} section="businessDetails" field="businessName" onChange={handleInputChange} />
-                <DetailRow label="מספר עוסק/ח.פ" value={customer.businessDetails?.businessID} isEditing={isEditing} section="businessDetails" field="businessName" onChange={handleInputChange}/>
-                <DetailRow label="סוג עסק" value={customer.businessDetails?.businessType} isEditing={isEditing} section="businessDetails" field="businessName" onChange={handleInputChange}/>
-                <DetailRow label="מהות העיסוק" value={customer.businessDetails?.occupation}isEditing={isEditing} section="businessDetails" field="businessName" onChange={handleInputChange} />
-                <DetailRow label="מעסיק עובדים?" value={customer.businessDetails?.employsWorkers === 'yes' ? 'כן' : 'לא'} isEditing={isEditing} section="businessDetails" field="businessName" onChange={handleInputChange}/>
-            </div>
-        </div>
+                    {/* Column 1: personal & business */}
+                    <div className="space-y-6">
+                        <Section title="👤 פרטים אישיים">
+                            <EditableRow label="שם מלא"        value={editData.customerDetails?.fullName}    isEditing={isEditing} onCh={onCh('customerDetails', 'fullName')} />
+                            <EditableRow label="תעודת זהות"   value={editData.customerDetails?.identityId}  isEditing={isEditing} onCh={onCh('customerDetails', 'identityId')} />
+                            <EditableRow label="טלפון"        value={editData.customerDetails?.phoneNumber} isEditing={isEditing} onCh={onCh('customerDetails', 'phoneNumber')} />
+                            <EditableRow label="כתובת מגורים" value={editData.customerDetails?.address}     isEditing={isEditing} onCh={onCh('customerDetails', 'address')} />
+                            <EditableRow label="אימייל"       value={editData.customerDetails?.email}       isEditing={isEditing} onCh={onCh('customerDetails', 'email')} />
+                        </Section>
 
-        {/* כרטיס סטטוס ביטוחים ומיסים */}
-        <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100">
-            <h3 className="font-bold text-blue-700 mb-4 border-b pb-2">🛡️ ביטוחים ומיסים</h3>
-            <div className="grid grid-cols-2 gap-2 text-sm">
-                <StatusTag label="ביטוח לאומי" active={customer.isInsuranceActive} />
-                <StatusTag label="מס הכנסה" active={customer.isIncomeTaxActive} />
-                <StatusTag label="מע''מ" active={customer.isVatActive} />
-            </div>
-        </div>
-    </div>
+                        <Section title="🏢 פרטי עסק">
+                            <EditableRow label="שם העסק"    value={editData.businessDetails?.businessName} isEditing={isEditing} onCh={onCh('businessDetails', 'businessName')} />
+                            <EditableRow label="מזהה עסק"   value={editData.businessDetails?.businessID}   isEditing={isEditing} onCh={onCh('businessDetails', 'businessID')} />
+                            <EditableRow label="סוג עסק"    value={editData.businessDetails?.businessType} isEditing={isEditing} type="select" options={BUSINESS_TYPE_OPTIONS} onCh={onCh('businessDetails', 'businessType')} />
+                            <EditableRow label="תאריך פתיחה" value={editData.businessDetails?.openingDate}  isEditing={isEditing} type="date" onCh={onCh('businessDetails', 'openingDate')} />
+                            <EditableRow label="משלח יד"    value={editData.businessDetails?.occupation}   isEditing={isEditing} onCh={onCh('businessDetails', 'occupation')} />
 
-                {/* רשימת משימות */}
-                <div className="lg:col-span-2">
-                    <div className="bg-white p-6 rounded-xl shadow-sm">
-                        <h3 className="text-xl font-bold mb-6">משימות פתוחות</h3>
-                        <div className="space-y-3">
-                            {customer.tasks?.map(task => (
-                                <div key={task.id} className="flex justify-between items-center p-4 border rounded-lg hover:bg-gray-50 transition-all">
-                                    <div>
-                                        <span className={`block font-medium ${task.status === 'completed' ? 'line-through text-gray-400' : ''}`}>
-                                            {task.title}
-                                        </span>
-                                        {task.restricted_to && <small className="text-red-500 font-bold">🔒 {task.restricted_to}</small>}
-                                    </div>
-                                    <button 
-                                        onClick={() => toggleTaskStatus(task.id, task.status)}
-                                        className={`px-4 py-1 rounded-full text-xs font-bold ${
-                                            task.status === 'completed' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600'
-                                        }`}
-                                    >
-                                        {task.status === 'completed' ? 'בוצע' : 'סמן כבוצע'}
-                                    </button>
+                            {isEmployerType && (
+                                <div className="mt-4 p-4 bg-blue-50 rounded-2xl border border-blue-100 space-y-4">
+                                    <EditableRow label="מעסיק עובדים?" value={editData.businessDetails?.employsWorkers} isEditing={isEditing} type="select" options={['yes', 'no']} onCh={onCh('businessDetails', 'employsWorkers')} />
+                                    {editData.businessDetails?.employsWorkers === 'yes' && (
+                                        <div className="flex items-center gap-3">
+                                            <span className="text-xs font-bold text-blue-600">תיק ניכויים נדרש?</span>
+                                            <input
+                                                type="checkbox"
+                                                checked={editData.needsDeductionsFile}
+                                                disabled={!isEditing}
+                                                onChange={(e) => actions.updateField(null, 'needsDeductionsFile', e.target.checked)}
+                                                className="w-5 h-5 accent-blue-600"
+                                            />
+                                        </div>
+                                    )}
                                 </div>
-                            ))}
+                            )}
+                        </Section>
+                    </div>
+
+                    {/* Column 2: authorities & payment */}
+                    <div className="space-y-6">
+                        <Section title="🛡️ סטטוס רשויות">
+                            <div className="space-y-3">
+                                <ToggleRow label="ביטוח לאומי" active={editData.isInsuranceActive} isEditing={isEditing} onToggle={(v) => actions.updateField(null, 'isInsuranceActive', v)} />
+                                {editData.isInsuranceActive && (
+                                    <div className="pr-4 border-r-2 border-blue-100 space-y-3 mt-2">
+                                        <EditableRow label="מקדמות ב''ל" value={editData.insuranceDetails?.insurancePrepayment} isEditing={isEditing} onCh={onCh('insuranceDetails', 'insurancePrepayment')} />
+                                        <EditableRow label="שעות עבודה"  value={editData.insuranceDetails?.workHours}            isEditing={isEditing} onCh={onCh('insuranceDetails', 'workHours')} />
+                                    </div>
+                                )}
+
+                                <ToggleRow label="מס הכנסה" active={editData.isIncomeTaxActive} isEditing={isEditing} onToggle={(v) => actions.updateField(null, 'isIncomeTaxActive', v)} />
+                                {editData.isIncomeTaxActive && (
+                                    <div className="pr-4 border-r-2 border-green-100 space-y-3 mt-2">
+                                        <EditableRow label="מקדמות מס" value={editData.incomeTaxDetails?.incomeTaxPrepayment} isEditing={isEditing} onCh={onCh('incomeTaxDetails', 'incomeTaxPrepayment')} />
+                                        <EditableRow label="מחזור צפוי" value={editData.incomeTaxDetails?.annualTurnover}      isEditing={isEditing} onCh={onCh('incomeTaxDetails', 'annualTurnover')} />
+                                        <EditableRow label="סוג ייצוג"  value={editData.incomeTaxDetails?.repType}             isEditing={isEditing} type="select" options={['ראשי', 'משני']} onCh={onCh('incomeTaxDetails', 'repType')} />
+                                    </div>
+                                )}
+
+                                {isVatRelevant && (
+                                    <ToggleRow label="מע''מ" active={editData.isVatActive} isEditing={isEditing} onToggle={(v) => actions.updateField(null, 'isVatActive', v)} />
+                                )}
+                            </div>
+                        </Section>
+
+                        <Section title="💰 תשלומים למשרד">
+                            <EditableRow label="פתיחת תיק (₪)"    value={editData.paymentDetails?.setupFee}   isEditing={isEditing} onCh={onCh('paymentDetails', 'setupFee')} />
+                            <EditableRow label="ריטיינר חודשי (₪)" value={editData.paymentDetails?.monthlyFee} isEditing={isEditing} onCh={onCh('paymentDetails', 'monthlyFee')} />
+                            <div className={`mt-4 p-3 rounded-xl flex justify-between items-center ${editData.paymentDetails?.directDebit ? 'bg-green-50 border border-green-100 text-green-700' : 'bg-slate-100 text-slate-400'}`}>
+                                <span className="text-xs font-bold uppercase">הוראת קבע:</span>
+                                {isEditing ? (
+                                    <button onClick={() => actions.updateField('paymentDetails', 'directDebit', !editData.paymentDetails.directDebit)} className={`px-4 py-1 rounded-full text-[10px] font-black ${editData.paymentDetails?.directDebit ? 'bg-green-600 text-white' : 'bg-slate-300'}`}>
+                                        {editData.paymentDetails?.directDebit ? 'פעיל' : 'כבוי'}
+                                    </button>
+                                ) : (
+                                    <span className="text-sm font-black">{editData.paymentDetails?.directDebit ? 'פעיל ✓' : 'לא פעילה'}</span>
+                                )}
+                            </div>
+                        </Section>
+                    </div>
+
+                    {/* Column 3: notes, description, tasks */}
+                    <div className="space-y-6">
+                        <Section title="📝 הערות">
+                            {isEditing ? (
+                                <textarea className="w-full p-4 bg-slate-50 border rounded-2xl text-sm h-32 outline-none focus:ring-2 focus:ring-blue-500" value={editData.comments || ''} onChange={(e) => actions.updateField(null, 'comments', e.target.value)} />
+                            ) : (
+                                <p className="text-sm text-slate-600 italic leading-relaxed">{editData.comments || 'אין הערות נוספות.'}</p>
+                            )}
+                        </Section>
+
+                        <Section title="📄 תיאור פעילות">
+                            {isEditing ? (
+                                <textarea className="w-full p-4 bg-slate-50 border rounded-2xl text-sm h-32 outline-none focus:ring-2 focus:ring-blue-500" value={editData.businessDetails?.businessDescription || ''} onChange={(e) => actions.updateField('businessDetails', 'businessDescription', e.target.value)} />
+                            ) : (
+                                <p className="text-sm text-slate-600 leading-relaxed">{editData.businessDetails?.businessDescription || 'אין תיאור פעילות.'}</p>
+                            )}
+                        </Section>
+
+                        <div className="bg-slate-900 p-8 rounded-[2.5rem] shadow-2xl text-white">
+                            <h3 className="text-xl font-black mb-6">משימות פתוחות</h3>
+                            <div className="space-y-4">
+                                {customer?.tasks?.filter(t => t.status !== 'completed').slice(0, 5).map(t => (
+                                    <div key={t.id} className="flex justify-between items-center border-b border-white/10 pb-2">
+                                        <span className="text-sm font-bold text-slate-300">{t.title}</span>
+                                        <button
+                                            onClick={() => actions.toggleTaskStatus(t.id, t.status)}
+                                            className="text-[10px] font-bold text-blue-300 hover:text-white"
+                                        >
+                                            סמן כבוצע
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -200,26 +195,35 @@ if (loading ) {
     );
 };
 
-const DetailRow = ({ label, value, isEditing, onChange, name }) => (
-    <div className="flex flex-col border-b border-gray-50 py-2">
-        <span className="text-xs text-gray-400 font-medium">{label}</span>
+const Section = ({ title, children }) => (
+    <div className="bg-white p-7 rounded-[2.5rem] shadow-sm border border-slate-100">
+        <h3 className="text-blue-600 font-black text-[10px] uppercase tracking-[0.2em] mb-6 border-b border-slate-50 pb-2">{title}</h3>
+        {children}
+    </div>
+);
+
+const EditableRow = ({ label, value, isEditing, onCh, type = "text", options = [] }) => (
+    <div className="mb-5 last:mb-0">
+        <label className="text-[10px] font-black text-slate-300 uppercase block mb-1">{label}</label>
         {isEditing ? (
-            <input 
-                type="text" 
-                value={value || ''} 
-                onChange={(e) => onChange(name, e.target.value)}
-                className="mt-1 p-1 border rounded text-sm focus:ring-2 focus:ring-blue-500"
-            />
+            type === "select" ? (
+                <select className="w-full p-2.5 bg-slate-50 border-b-2 border-blue-100 text-sm font-bold outline-none" value={value || ''} onChange={(e) => onCh(e.target.value)}>
+                    <option value="">בחר...</option>
+                    {options.map(o => <option key={o} value={o}>{o === 'yes' ? 'כן' : o === 'no' ? 'לא' : o}</option>)}
+                </select>
+            ) : (
+                <input className="w-full p-2.5 bg-slate-50 border-b-2 border-blue-100 text-sm font-bold outline-none" value={value || ''} onChange={(e) => onCh(e.target.value)} type={type} />
+            )
         ) : (
-            <span className="text-gray-700 font-semibold">{value || '---'}</span>
+            <span className="text-sm font-black text-slate-800">{value || '---'}</span>
         )}
     </div>
 );
 
-const StatusTag = ({ label, active }) => (
-    <div className={`p-2 rounded text-center border ${active ? 'bg-green-50 border-green-200 text-green-700' : 'bg-red-50 border-red-200 text-red-700'}`}>
-        <div className="text-xs">{label}</div>
-        <div className="font-bold">{active ? 'פעיל' : 'לא פעיל'}</div>
+const ToggleRow = ({ label, active, isEditing, onToggle }) => (
+    <div className="flex justify-between items-center p-3 rounded-2xl hover:bg-slate-50 transition-all">
+        <span className={`text-sm font-bold ${active ? 'text-slate-800' : 'text-slate-300'}`}>{label}</span>
+        <input type="checkbox" checked={!!active} disabled={!isEditing} onChange={(e) => onToggle(e.target.checked)} className="w-6 h-6 cursor-pointer accent-blue-600" />
     </div>
 );
 

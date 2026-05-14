@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { supabase } from '../supabaseClient.js';
+import { PersistenceAdapter } from '../services/PersistenceAdapter.ts';
 import { TaskGeneratorService } from '../services/TaskService.js';
+import { BUSINESS_TYPE_OPTIONS } from '../registries/CustomerRegistry.ts';
 import { useNavigate } from 'react-router';
 
 
@@ -12,6 +13,8 @@ const CustomerList = () => {
         const headers = ["שם לקוח", "מזהה עסק", "סוג עסק", "ביטוח לאומי", "מס הכנסה", "מע\"מ", "אישור סופי"];
 
         // 2. עיבוד הנתונים המסוננים לשורות
+        // Last column was a phantom-column comparison that always returned false
+        // (audit §1 finding #3). Now driven by Registry's parent-id-anchored probe.
         const rows = filteredCustomers.map(client => [
             client.customerDetails?.fullName,
             client.businessDetails?.businessID,
@@ -19,7 +22,7 @@ const CustomerList = () => {
             client.isInsuranceActive ? "כן" : "לא",
             client.isIncomeTaxActive ? "כן" : "לא",
             client.isVatActive ? "כן" : "לא",
-            client.isFinalApproved === `${TaskGeneratorService.calculateProgress(client.tasks)}%`
+            TaskGeneratorService.isCustomerFinalized(client.tasks) ? "כן" : "לא",
         ]);
 
         // 3. יצירת תוכן ה-CSV (עם תמיכה בעברית על ידי BOM)
@@ -58,10 +61,9 @@ const CustomerList = () => {
 
     const fetchCustomers = async () => {
         setLoading(true);
-        const { data, error } = await supabase
-            .from('clients')
-            .select('*')
-            .order('created_at', { ascending: false });
+        // Joined tasks are needed for the finalization probe + the export's
+        // "אישור סופי" column. fetchAllCustomersWithTasks runs `select('*, tasks(*)')`.
+        const { data, error } = await PersistenceAdapter.fetchAllCustomersWithTasks();
 
         if (error) console.error('Error fetching customers:', error);
         else setCustomers(data || []);
@@ -79,20 +81,9 @@ const CustomerList = () => {
         const matchesType = filters.businessType === '' || client.businessDetails?.businessType === filters.businessType;
 
         const matchesInsurance = filters.isInsuranceActive === 'all' || String(client.isInsuranceActive) === filters.isInsuranceActive;
-                            console.log(client.isInsuranceActive, filters.isInsuranceActive, String(client.isInsuranceActive) === filters.isInsuranceActive);
-
         const matchesTax = filters.isIncomeTaxActive === 'all' || String(client.isIncomeTaxActive) === filters.isIncomeTaxActive;
-        console.log(client.isIncomeTaxActive, filters.isIncomeTaxActive, String(client.isIncomeTaxActive) === filters.isIncomeTaxActive);
         const matchesVat = filters.isVatActive === 'all' || String(client.isVatActive) === filters.isVatActive;
-        console.log(client.isVatActive, filters.isVatActive, String(client.isVatActive) === filters.isVatActive);
-
-        // כאן הוספתי לוגיקה שבודקת אם "אישור ניהול סופי" בוצע (לפי דגל ב-DB או סטטוס משימה)
-        // לצורך הדוגמה, נניח שיש שדה isFinalApproved ב-DB
-        const matchesApproved = filters.isFinalApproved === 'all' || String(isApproved) === filters.isFinalApproved
-        console.log(isApproved, filters.isFinalApproved, String(isApproved) === filters.isFinalApproved);
-
-
-        // return matchesSearch && matchesType && matchesApproved; // וכל שאר התנאים
+        const matchesApproved = filters.isFinalApproved === 'all' || String(isApproved) === filters.isFinalApproved;
 
         return matchesSearch && matchesType && matchesInsurance && matchesTax && matchesVat && matchesApproved;
     });
@@ -114,9 +105,9 @@ const CustomerList = () => {
 
                 <select className="p-2 border rounded" onChange={(e) => setFilters({ ...filters, businessType: e.target.value })}>
                     <option value="">כל סוגי העסק</option>
-                    <option value="פטור">פטור</option>
-                    <option value="מורשה">מורשה</option>
-                    <option value='חברה בע"מ'>חברה בע"מ</option>
+                    {BUSINESS_TYPE_OPTIONS.map(opt => (
+                        <option key={opt} value={opt}>{opt}</option>
+                    ))}
                 </select>
 
                 <select className="p-2 border rounded" onChange={(e) =>                     setFilters({ ...filters, isInsuranceActive: e.target.value })                }>

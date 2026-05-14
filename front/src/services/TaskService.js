@@ -1,48 +1,71 @@
-// services/TaskService.js
+// src/services/TaskService.js
+//
+// Thin generation facade over taskRegistry.AUTO_TASKS_CONFIG. Cross-cutting
+// progress, finalization, and parent/subtask gating decisions are owned by
+// CustomerRegistry; this file just orchestrates the catalog walk.
+
 import { AUTO_TASKS_CONFIG } from '../constants/taskRegistry';
+import {
+    calculateWeightedProgress,
+    isCustomerFinalized,
+    shouldEmitServiceParent,
+    isSubtaskForcedByBusinessType,
+    isSubtaskBusinessTypeGated,
+} from '../registries/CustomerRegistry';
 
 export class TaskGeneratorService {
-    // פונקציה לייצור משימות
+    /**
+     * Generates tasks for a customer.
+     *
+     * Parent gating:
+     *   - If the parent is a service-owned id (returns non-null from
+     *     shouldEmitServiceParent), the Registry's decision is final.
+     *   - Otherwise the entry's own `condition` lambda decides (non-service
+     *     parents: ADMIN_SETUP, DIRECT_DEBIT, FINAL_APPROVAL).
+     *
+     * Subtask gating:
+     *   - If the subtask has its own `condition`, it's used.
+     *   - Else if the subtask appears in any BUSINESS_TYPES.forcedSubtasks list
+     *     (isSubtaskBusinessTypeGated), it's emitted only when the current
+     *     customer's business type forces it.
+     *   - Otherwise the subtask is emitted whenever its parent fires.
+     */
     static generateForCustomer(customerData) {
         return AUTO_TASKS_CONFIG
-            .filter(parentTask => !parentTask.condition || parentTask.condition(customerData))
+            .filter(parentTask => {
+                const registryDecision = shouldEmitServiceParent(parentTask.id, customerData);
+                if (registryDecision !== null) return registryDecision;
+                return !parentTask.condition || parentTask.condition(customerData);
+            })
             .map(parentTask => ({
                 id: crypto.randomUUID(),
+                parentTaskId: parentTask.id,
                 title: parentTask.title,
                 restrictedTo: parentTask.restrictedTo || null,
                 subTasks: parentTask.subTasks
-                    .filter(sub => !sub.condition || sub.condition(customerData))
+                    .filter(sub => {
+                        if (sub.condition) return sub.condition(customerData);
+                        if (isSubtaskBusinessTypeGated(parentTask.id, sub.id)) {
+                            return isSubtaskForcedByBusinessType(parentTask.id, sub.id, customerData);
+                        }
+                        return true;
+                    })
                     .map(sub => ({
                         id: sub.id,
                         title: sub.title,
                         completed: false,
-                        details: sub.getDetails ? sub.getDetails(customerData) : {}
-                    }))
+                        details: sub.getDetails ? sub.getDetails(customerData) : {},
+                    })),
             }));
     }
 
-    /**
-     * בודק האם לקוח סיים את תהליך הניהול הסופי
-     * @param {Array} tasks - רשימת המשימות של הלקוח
-     */
+    /** Parent-id-anchored finalization probe (Hebrew-substring fallback for legacy rows). */
     static isCustomerFinalized(tasks) {
-        if (!tasks || tasks.length === 0) return false;
-        
-        // some מחזיר true אם לפחות איבר אחד עונה על התנאי
-        return tasks.some(t => 
-            (t.title.includes("אישור ניהול סופי") || t.title.includes("פתיחת תיק סופית")) 
-            && t.status === 'completed'
-        );
+        return isCustomerFinalized(tasks);
     }
 
-    /**
-     * מחשב אחוז התקדמות כללי ללקוח
-     * @param {Array} tasks - רשימת המשימות של הלקוח
-     */
+    /** Returns 0–100 percent. Subtask-weighted via Registry.calculateWeightedProgress. */
     static calculateProgress(tasks) {
-        if (!tasks || tasks.length === 0) return 0;
-        
-        const completed = tasks.filter(t => t.status === 'completed').length;
-        return Math.round((completed / tasks.length) * 100);
+        return calculateWeightedProgress(tasks).percent;
     }
-} // סגירת ה-Class
+}
