@@ -42,6 +42,7 @@ export class TaskGeneratorService {
                 parentTaskId: parentTask.id,
                 title: parentTask.title,
                 restrictedTo: parentTask.restrictedTo || null,
+                priority: parentTask.priority || 'medium',
                 subTasks: parentTask.subTasks
                     .filter(sub => {
                         if (sub.condition) return sub.condition(customerData);
@@ -55,6 +56,7 @@ export class TaskGeneratorService {
                         title: sub.title,
                         completed: false,
                         details: sub.getDetails ? sub.getDetails(customerData) : {},
+                        comment: '',
                     })),
             }));
     }

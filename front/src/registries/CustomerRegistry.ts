@@ -33,6 +33,28 @@ export type ServiceKey =
   | 'nationalInsurance'
   | 'representation'; // models what the legacy schema stores as `isVatActive`
 
+export type TaskPriority = 'low' | 'medium' | 'high' | 'critical';
+export const PRIORITY_LEVELS: TaskPriority[] = ['low', 'medium', 'high', 'critical'];
+
+/** Tailwind color tokens for priority badges. */
+export const PRIORITY_STYLES: Record<TaskPriority, { bg: string; text: string; border: string; label: string }> = {
+  low:      { bg: 'bg-slate-100',  text: 'text-slate-600',  border: 'border-slate-200',  label: 'נמוך' },
+  medium:   { bg: 'bg-blue-50',    text: 'text-blue-700',   border: 'border-blue-200',   label: 'בינוני' },
+  high:     { bg: 'bg-orange-50',  text: 'text-orange-700', border: 'border-orange-200', label: 'גבוה' },
+  critical: { bg: 'bg-red-50',     text: 'text-red-700',    border: 'border-red-200',    label: 'קריטי' },
+};
+
+/** Soft, non-intrusive color branding per parent_task_id. */
+export const CATEGORY_STYLES: Record<string, { accent: string; bg: string; ring: string; emoji: string }> = {
+  ADMIN_SETUP:    { accent: 'border-r-slate-400',  bg: 'bg-slate-50',  ring: 'ring-slate-200',  emoji: '🗂️' },
+  INSURANCE:      { accent: 'border-r-blue-400',   bg: 'bg-blue-50/60', ring: 'ring-blue-200',   emoji: '🛡️' },
+  INCOME_TAX:     { accent: 'border-r-emerald-400', bg: 'bg-emerald-50/60', ring: 'ring-emerald-200', emoji: '💼' },
+  VAT:            { accent: 'border-r-amber-400',  bg: 'bg-amber-50/60', ring: 'ring-amber-200',  emoji: '🧾' },
+  DIRECT_DEBIT:   { accent: 'border-r-purple-400', bg: 'bg-purple-50/60', ring: 'ring-purple-200', emoji: '💳' },
+  FINAL_APPROVAL: { accent: 'border-r-rose-400',   bg: 'bg-rose-50/60',  ring: 'ring-rose-200',   emoji: '✅' },
+};
+export const DEFAULT_CATEGORY_STYLE = { accent: 'border-r-slate-300', bg: 'bg-white', ring: 'ring-slate-200', emoji: '📋' };
+
 /** The three Customer boolean fields that gate services. Narrow union so the
  *  cascade loop can write `next[flag] = false` without a Record<> cast. */
 export type ServiceActiveFlag = 'isIncomeTaxActive' | 'isInsuranceActive' | 'isVatActive';
@@ -108,6 +130,9 @@ export interface Customer {
 
   needsDeductionsFile: boolean;
 
+  /** Soft deactivation — kept on the row so history/tasks survive. */
+  isActive?: boolean;
+
   comments: string;
 }
 
@@ -125,8 +150,10 @@ export interface BusinessTypeRule {
   forcesServicesOff: ServiceKey[];
   /** Parent tasks that fire regardless of service activation flags. */
   forcedParentTasks: string[];
-  /** Subtasks that fire under their parent regardless of normal gating. */
-  forcedSubtasks: { parentId: string; subtaskId: string }[];
+  /** Subtasks forced under their parent. An optional `when` predicate lets the
+   *  rule depend on additional customer state (e.g. taxCoordination requires
+   *  isIncomeTaxActive AND businessType==='זעיר'). */
+  forcedSubtasks: { parentId: string; subtaskId: string; when?: (c: Customer) => boolean }[];
 }
 
 export const BUSINESS_TYPES: Record<BusinessTypeKey, BusinessTypeRule> = {
@@ -138,8 +165,12 @@ export const BUSINESS_TYPES: Record<BusinessTypeKey, BusinessTypeRule> = {
     representationAllowed: false,
     showsEmployerFields: false,
     forcesServicesOff: ['representation'],
-    forcedParentTasks: ['INCOME_TAX'],
-    forcedSubtasks: [{ parentId: 'INCOME_TAX', subtaskId: 'taxCoordination' }],
+    // INCOME_TAX parent only fires when income tax is also active (gated automation).
+    forcedParentTasks: [],
+    // taxCoordination requires both: businessType=='זעיר' AND isIncomeTaxActive.
+    forcedSubtasks: [
+      { parentId: 'INCOME_TAX', subtaskId: 'taxCoordination', when: (c) => c.isIncomeTaxActive },
+    ],
   },
   'פטור': {
     key: 'פטור',
@@ -428,7 +459,9 @@ export function shouldEmitServiceParent(parentId: string, c: Customer): boolean 
   return false;
 }
 
-/** True iff the current customer's business type forces this subtask under this parent. */
+/** True iff the current customer's business type forces this subtask under this parent.
+ *  Honors the optional `when` predicate so multi-condition rules (e.g.
+ *  taxCoordination only when isIncomeTaxActive) work correctly. */
 export function isSubtaskForcedByBusinessType(
   parentId: string,
   subtaskId: string,
@@ -436,7 +469,7 @@ export function isSubtaskForcedByBusinessType(
 ): boolean {
   const btRule = getBusinessTypeRule(c);
   return btRule?.forcedSubtasks.some(
-    (f) => f.parentId === parentId && f.subtaskId === subtaskId
+    (f) => f.parentId === parentId && f.subtaskId === subtaskId && (!f.when || f.when(c))
   ) ?? false;
 }
 
@@ -568,6 +601,8 @@ export const BOOLEAN_FIELDS: string[] = [
 export interface SubTask {
   id: string;
   completed: boolean;
+  /** Optional user-entered comment; persisted in tasks.subTasks JSONB. */
+  comment?: string;
 }
 
 export interface Task {
@@ -629,12 +664,152 @@ export function calculateWeightedProgress(tasks: Task[] | null | undefined): Pro
 
 export const FINAL_APPROVAL_PARENT_ID = 'FINAL_APPROVAL';
 
+// ──────────────────────────────────────────────────────────────────
+// 11. Cascade utilities (parent ↔ subtask completion coupling)
+// ──────────────────────────────────────────────────────────────────
+//
+// Rules:
+//   - Parent → completed  ⇒ every subtask becomes completed.
+//   - Parent → pending    ⇒ subtasks are left as-is (manual control).
+//   - Subtask toggled     ⇒ parent.status = all-subs-done ? 'completed' : 'pending'.
+//
+// Pure functions, no I/O. Callers apply the result via PersistenceAdapter.
+
+interface CascadeInput {
+    status: 'pending' | 'completed';
+    subTasks?: { id: string; completed: boolean; [k: string]: unknown }[];
+}
+
+export interface CascadeResult {
+    status: 'pending' | 'completed';
+    subTasks: { id: string; completed: boolean; [k: string]: unknown }[];
+}
+
+export function cascadeOnParentToggle(task: CascadeInput): CascadeResult {
+    const next: 'pending' | 'completed' = task.status === 'completed' ? 'pending' : 'completed';
+    const subs = task.subTasks ?? [];
+    return {
+        status: next,
+        subTasks: next === 'completed'
+            ? subs.map((s) => ({ ...s, completed: true }))
+            : subs.map((s) => ({ ...s })),
+    };
+}
+
+export function cascadeOnSubtaskToggle(task: CascadeInput, subtaskId: string): CascadeResult {
+    const subs = (task.subTasks ?? []).map((s) =>
+        s.id === subtaskId ? { ...s, completed: !s.completed } : { ...s }
+    );
+    const allDone = subs.length > 0 && subs.every((s) => s.completed);
+    return { status: allDone ? 'completed' : 'pending', subTasks: subs };
+}
+
+export function cascadeOnSubtaskSet(
+    task: CascadeInput,
+    subtaskId: string,
+    completed: boolean
+): CascadeResult {
+    const subs = (task.subTasks ?? []).map((s) =>
+        s.id === subtaskId ? { ...s, completed } : { ...s }
+    );
+    const allDone = subs.length > 0 && subs.every((s) => s.completed);
+    return { status: allDone ? 'completed' : 'pending', subTasks: subs };
+}
+
+// ──────────────────────────────────────────────────────────────────
+// 12. Idempotent task-generation merge
+// ──────────────────────────────────────────────────────────────────
+//
+// When CustomerService.syncTasks runs on an edit, we don't want to wipe and
+// re-create the customer's task list — that would lose subtask completion
+// state and comments. Instead, we merge: for each generated parent task,
+// either match an existing one (preserving its id/status/subtask
+// completion+comments) or insert it fresh.
+
+interface MergeableTask {
+    id?: string;
+    parentTaskId?: string | null;
+    title: string;
+    status?: 'pending' | 'completed';
+    restrictedTo?: string | null;
+    subTasks: { id: string; title: string; completed?: boolean; comment?: string; details?: Record<string, unknown> }[];
+    priority?: TaskPriority;
+}
+
+export interface IdempotentSyncPlan {
+    /** Tasks that should be INSERTED as new rows. */
+    toInsert: MergeableTask[];
+    /** Existing-task patches: { id, subTasks } — preserves status. */
+    toUpdate: { id: string; subTasks: MergeableTask['subTasks'] }[];
+    /** Pending-only existing tasks no longer in the generated set. */
+    toDeletePendingIds: string[];
+}
+
+/**
+ * Build a sync plan that preserves completion state across regenerations.
+ * `generated` is the latest output of TaskGeneratorService.generateForCustomer.
+ * `existing` is what's currently in the DB for this client.
+ */
+export function planIdempotentSync(
+    generated: MergeableTask[],
+    existing: { id: string; parentTaskId?: string | null; status: 'pending' | 'completed'; subTasks?: MergeableTask['subTasks'] }[]
+): IdempotentSyncPlan {
+    const existingByParent = new Map<string, typeof existing[number]>();
+    for (const e of existing) {
+        if (e.parentTaskId) existingByParent.set(e.parentTaskId, e);
+    }
+    const generatedParentIds = new Set<string>();
+
+    const toInsert: MergeableTask[] = [];
+    const toUpdate: IdempotentSyncPlan['toUpdate'] = [];
+
+    for (const g of generated) {
+        if (!g.parentTaskId) {
+            toInsert.push(g);
+            continue;
+        }
+        generatedParentIds.add(g.parentTaskId);
+        const match = existingByParent.get(g.parentTaskId);
+        if (!match) {
+            toInsert.push(g);
+            continue;
+        }
+        // Preserve existing subtask state (completion + comment) for matching ids.
+        const oldByid = new Map((match.subTasks ?? []).map((s) => [s.id, s]));
+        const mergedSubs = g.subTasks.map((newSub) => {
+            const old = oldByid.get(newSub.id);
+            return old
+                ? { ...newSub, completed: !!old.completed, comment: old.comment ?? '' }
+                : { ...newSub, completed: false, comment: '' };
+        });
+        toUpdate.push({ id: match.id, subTasks: mergedSubs });
+    }
+
+    // Pending existing tasks whose parentTaskId is no longer generated → delete.
+    const toDeletePendingIds: string[] = [];
+    for (const e of existing) {
+        if (e.status === 'pending' && e.parentTaskId && !generatedParentIds.has(e.parentTaskId)) {
+            toDeletePendingIds.push(e.id);
+        }
+    }
+
+    return { toInsert, toUpdate, toDeletePendingIds };
+}
+
+/** Read the parent id from a task, accepting either the adapter-translated
+ *  camelCase shape OR a raw snake_case row (defensive — should normally be
+ *  unnecessary because reads go through PersistenceAdapter.fromDbTask). */
+function readParentTaskId(t: Task | Record<string, unknown>): string | undefined {
+  const ct = t as Record<string, unknown>;
+  return (ct.parentTaskId as string | undefined) ?? (ct.parent_task_id as string | undefined);
+}
+
 export function isCustomerFinalized(tasks: Task[] | null | undefined): boolean {
   if (!tasks?.length) return false;
   return tasks.some((t) => {
     if (t.status !== 'completed') return false;
-    if (t.parentTaskId === FINAL_APPROVAL_PARENT_ID) return true;
-    // Legacy fallback (pre-migration rows with NULL parentTaskId)
+    if (readParentTaskId(t) === FINAL_APPROVAL_PARENT_ID) return true;
+    // Legacy fallback (pre-migration rows with NULL parent_task_id)
     return Boolean(
       t.title?.includes('אישור ניהול') || t.title?.includes('פתיחת תיק סופית')
     );

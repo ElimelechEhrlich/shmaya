@@ -1,55 +1,52 @@
 // src/hooks/useCustomer.ts
 //
-// The unified data hook for the customer detail screen. Owns:
-//   - fetch + cache of the customer + joined tasks
-//   - edit-mode state, edit-data working copy
-//   - business-rule cascade on every field update (via Registry)
-//   - save + task-sync orchestration (delegates to CustomerService)
-//   - task status & arbitrary task updates, with automatic LogService entries
-//   - derived UI helpers: subtask-weighted progress, finalized status,
-//     visible-field list
+// Owns the customer-detail screen's entire data layer. Components built on
+// this hook should not need any local useState/useEffect for customer or
+// task data.
 //
-// CustomerCard.jsx is the primary consumer. Components using this hook should
-// not need any local useState/useEffect for customer or task data.
+// Performance model:
+//   Every mutation updates local state SYNCHRONOUSLY (optimistic), then fires
+//   the DB write + log entry in the background. We do NOT reload after each
+//   mutation — the UI stays responsive and the optimistic state is the
+//   visible truth until the next explicit reload.
+//
+//   On DB error we log to console and call reload() to resync.
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
     PersistenceAdapter,
     type CustomerWithTasks,
     type PersistedTask,
+    type PersistedSubTask,
+    type TaskPriority,
 } from '../services/PersistenceAdapter';
 import { LogService } from '../services/LogService';
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore — CustomerService is JS without types; the imported shape is
-// stable per its file-level contract.
+// @ts-ignore — JS service, stable surface
 import { CustomerService } from '../services/CustomerService.js';
 import {
     applyBusinessRules,
     calculateWeightedProgress,
     isCustomerFinalized,
     listVisibleFields,
+    cascadeOnParentToggle,
+    cascadeOnSubtaskSet,
     type Customer,
 } from '../registries/CustomerRegistry';
 
 export interface UseCustomerActions {
-    /** Update one form field. Routed through Registry.applyBusinessRules so the
-     *  cross-field cascade (e.g. זעיר → isVatActive=false) is always enforced. */
     updateField: (category: string | null, field: string, value: unknown) => void;
-
-    /** Enter/exit edit mode. Exiting reverts unsaved changes back to the
-     *  last fetched server state. */
     setEditMode: (editing: boolean) => void;
-
-    /** Persist editData, re-sync tasks, log the diff. Re-fetches on success. */
     save: () => Promise<{ success: boolean; error?: string }>;
-
-    /** Toggle a task between pending↔completed. Logs the change. */
     toggleTaskStatus: (taskId: string, currentStatus: 'pending' | 'completed') => Promise<void>;
-
-    /** Update arbitrary task fields (e.g. subtask completion). Logs the diff. */
     updateTask: (taskId: string, patch: Partial<PersistedTask>) => Promise<void>;
-
-    /** Force a re-fetch from the DB. */
+    setSubtaskCompleted: (taskId: string, subtaskId: string, completed: boolean) => Promise<void>;
+    toggleSubtask: (taskId: string, subtaskId: string) => Promise<void>;
+    updateSubtaskComment: (taskId: string, subtaskId: string, comment: string) => Promise<void>;
+    updateTaskPriority: (taskId: string, priority: TaskPriority) => Promise<void>;
+    deactivate: () => Promise<{ success: boolean; error?: string }>;
+    reactivate: () => Promise<{ success: boolean; error?: string }>;
+    remove: () => Promise<{ success: boolean; error?: string }>;
     reload: () => Promise<void>;
 }
 
@@ -58,13 +55,23 @@ export interface UseCustomerResult {
     editData: CustomerWithTasks | null;
     loading: boolean;
     isEditing: boolean;
-    /** 0–100. Subtask-weighted per Registry.calculateWeightedProgress. */
     progress: number;
-    /** True when a FINAL_APPROVAL task is completed for this customer. */
     isFinalized: boolean;
-    /** Field dot-paths the UI should render for the current state. */
     visibleFields: string[];
     actions: UseCustomerActions;
+}
+
+// Updater that touches a single task inside the tasks array, preserving order.
+function withTaskUpdated(
+    state: CustomerWithTasks | null,
+    taskId: string,
+    transform: (t: PersistedTask) => PersistedTask
+): CustomerWithTasks | null {
+    if (!state) return state;
+    return {
+        ...state,
+        tasks: state.tasks.map((t) => (t.id === taskId ? transform(t) : t)),
+    };
 }
 
 export function useCustomer(customerId: string | undefined): UseCustomerResult {
@@ -105,8 +112,6 @@ export function useCustomer(customerId: string | undefined): UseCustomerResult {
                     next[field] = value;
                 }
                 const normalized = applyBusinessRules(next as unknown as Customer);
-                // Preserve the joined tasks array — applyBusinessRules doesn't touch it,
-                // but the cast through Customer loses the type.
                 return { ...(normalized as unknown as CustomerWithTasks), tasks: prev.tasks };
             });
         },
@@ -116,18 +121,14 @@ export function useCustomer(customerId: string | undefined): UseCustomerResult {
     const setEditMode = useCallback(
         (editing: boolean) => {
             setIsEditing(editing);
-            if (!editing && customer) {
-                setEditData(customer);
-            }
+            if (!editing && customer) setEditData(customer);
         },
         [customer]
     );
 
     const save = useCallback(
         async (): Promise<{ success: boolean; error?: string }> => {
-            if (!customerId || !editData) {
-                return { success: false, error: 'No data to save' };
-            }
+            if (!customerId || !editData) return { success: false, error: 'No data to save' };
             const result = await CustomerService.saveCustomer(editData, true, customerId);
             if (result.success) {
                 setIsEditing(false);
@@ -138,34 +139,192 @@ export function useCustomer(customerId: string | undefined): UseCustomerResult {
         [customerId, editData, reload]
     );
 
+    // ── Task mutations (optimistic) ──
+
     const toggleTaskStatus = useCallback(
         async (taskId: string, currentStatus: 'pending' | 'completed'): Promise<void> => {
-            const newStatus: 'pending' | 'completed' =
-                currentStatus === 'completed' ? 'pending' : 'completed';
-            const { error } = await PersistenceAdapter.updateTaskStatus(taskId, newStatus);
-            if (error) return;
-            await LogService.recordTaskStatusChange(taskId, currentStatus, newStatus);
-            await reload();
+            // Compute cascade locally first.
+            let cascadeResult: { status: 'pending' | 'completed'; subTasks: PersistedSubTask[] } | null = null;
+            const apply = (t: PersistedTask): PersistedTask => {
+                const res = cascadeOnParentToggle({ status: t.status, subTasks: t.subTasks });
+                cascadeResult = res as typeof cascadeResult;
+                return { ...t, status: res.status, subTasks: res.subTasks as PersistedSubTask[] };
+            };
+            setCustomer((s) => withTaskUpdated(s, taskId, apply));
+            setEditData((s) => withTaskUpdated(s, taskId, (t) => ({
+                ...t,
+                status: cascadeResult!.status,
+                subTasks: cascadeResult!.subTasks,
+            })));
+
+            if (!cascadeResult) return;
+            const { error } = await PersistenceAdapter.updateTask(taskId, {
+                status: cascadeResult.status,
+                subTasks: cascadeResult.subTasks,
+            });
+            if (error) {
+                console.error('[useCustomer.toggleTaskStatus] persist failed:', error.message);
+                await reload();
+                return;
+            }
+            await LogService.recordTaskStatusChange(taskId, currentStatus, cascadeResult.status);
+        },
+        [reload]
+    );
+
+    const setSubtaskCompleted = useCallback(
+        async (taskId: string, subtaskId: string, completed: boolean): Promise<void> => {
+            let cascadeResult: { status: 'pending' | 'completed'; subTasks: PersistedSubTask[] } | null = null;
+            let before: PersistedTask | null = null;
+            const apply = (t: PersistedTask): PersistedTask => {
+                before = t;
+                const res = cascadeOnSubtaskSet(
+                    { status: t.status, subTasks: t.subTasks },
+                    subtaskId,
+                    completed
+                );
+                cascadeResult = res as typeof cascadeResult;
+                return { ...t, status: res.status, subTasks: res.subTasks as PersistedSubTask[] };
+            };
+            setCustomer((s) => withTaskUpdated(s, taskId, apply));
+            setEditData((s) => withTaskUpdated(s, taskId, (t) => ({
+                ...t,
+                status: cascadeResult!.status,
+                subTasks: cascadeResult!.subTasks,
+            })));
+
+            if (!cascadeResult || !before) return;
+            const { error } = await PersistenceAdapter.updateTask(taskId, {
+                status: cascadeResult.status,
+                subTasks: cascadeResult.subTasks,
+            });
+            if (error) {
+                console.error('[useCustomer.setSubtaskCompleted] persist failed:', error.message);
+                await reload();
+                return;
+            }
+            await LogService.recordTaskChange(
+                taskId,
+                { subTasks: before.subTasks, status: before.status } as unknown as Record<string, unknown>,
+                { subTasks: cascadeResult.subTasks, status: cascadeResult.status } as unknown as Record<string, unknown>
+            );
+        },
+        [reload]
+    );
+
+    const toggleSubtask = useCallback(
+        async (taskId: string, subtaskId: string): Promise<void> => {
+            const existing = (editData ?? customer)?.tasks.find((t) => t.id === taskId);
+            const sub = existing?.subTasks.find((s) => s.id === subtaskId);
+            await setSubtaskCompleted(taskId, subtaskId, !sub?.completed);
+        },
+        [editData, customer, setSubtaskCompleted]
+    );
+
+    const updateSubtaskComment = useCallback(
+        async (taskId: string, subtaskId: string, comment: string): Promise<void> => {
+            let before: PersistedSubTask[] | null = null;
+            let after: PersistedSubTask[] | null = null;
+            const apply = (t: PersistedTask): PersistedTask => {
+                before = t.subTasks;
+                after = t.subTasks.map((s) => (s.id === subtaskId ? { ...s, comment } : s));
+                return { ...t, subTasks: after };
+            };
+            setCustomer((s) => withTaskUpdated(s, taskId, apply));
+            setEditData((s) => withTaskUpdated(s, taskId, (t) => ({ ...t, subTasks: after! })));
+
+            if (!after) return;
+            const { error } = await PersistenceAdapter.updateTaskSubtasks(taskId, after);
+            if (error) {
+                console.error('[useCustomer.updateSubtaskComment] persist failed:', error.message);
+                await reload();
+                return;
+            }
+            await LogService.recordTaskChange(
+                taskId,
+                { subTasks: before } as unknown as Record<string, unknown>,
+                { subTasks: after } as unknown as Record<string, unknown>
+            );
+        },
+        [reload]
+    );
+
+    const updateTaskPriority = useCallback(
+        async (taskId: string, priority: TaskPriority): Promise<void> => {
+            let before: TaskPriority | undefined;
+            const apply = (t: PersistedTask): PersistedTask => {
+                before = t.priority;
+                return { ...t, priority };
+            };
+            setCustomer((s) => withTaskUpdated(s, taskId, apply));
+            setEditData((s) => withTaskUpdated(s, taskId, (t) => ({ ...t, priority })));
+
+            const { error } = await PersistenceAdapter.updateTaskPriority(taskId, priority);
+            if (error) {
+                console.error('[useCustomer.updateTaskPriority] persist failed:', error.message);
+                await reload();
+                return;
+            }
+            await LogService.recordTaskChange(
+                taskId,
+                { priority: before } as unknown as Record<string, unknown>,
+                { priority } as unknown as Record<string, unknown>
+            );
         },
         [reload]
     );
 
     const updateTask = useCallback(
         async (taskId: string, patch: Partial<PersistedTask>): Promise<void> => {
-            const existing = editData?.tasks.find((t) => t.id === taskId);
+            const existing = (editData ?? customer)?.tasks.find((t) => t.id === taskId);
+            // Optimistic merge
+            const apply = (t: PersistedTask): PersistedTask => ({ ...t, ...patch });
+            setCustomer((s) => withTaskUpdated(s, taskId, apply));
+            setEditData((s) => withTaskUpdated(s, taskId, apply));
+
             const { error } = await PersistenceAdapter.updateTask(taskId, patch);
-            if (error) return;
+            if (error) {
+                console.error('[useCustomer.updateTask] persist failed:', error.message);
+                await reload();
+                return;
+            }
             if (existing) {
-                const after = { ...existing, ...patch };
                 await LogService.recordTaskChange(
                     taskId,
                     existing as unknown as Record<string, unknown>,
-                    after as unknown as Record<string, unknown>
+                    { ...existing, ...patch } as unknown as Record<string, unknown>
                 );
             }
-            await reload();
         },
-        [editData, reload]
+        [editData, customer, reload]
+    );
+
+    const deactivate = useCallback(
+        async (): Promise<{ success: boolean; error?: string }> => {
+            if (!customerId) return { success: false, error: 'No customer loaded' };
+            const r = await CustomerService.deactivateCustomer(customerId);
+            if (r.success) await reload();
+            return r;
+        },
+        [customerId, reload]
+    );
+
+    const reactivate = useCallback(
+        async (): Promise<{ success: boolean; error?: string }> => {
+            if (!customerId) return { success: false, error: 'No customer loaded' };
+            const r = await CustomerService.reactivateCustomer(customerId);
+            if (r.success) await reload();
+            return r;
+        },
+        [customerId, reload]
+    );
+
+    const remove = useCallback(
+        async (): Promise<{ success: boolean; error?: string }> => {
+            if (!customerId) return { success: false, error: 'No customer loaded' };
+            return await CustomerService.deleteCustomer(customerId);
+        },
+        [customerId]
     );
 
     const tasks = editData?.tasks;
@@ -199,6 +358,13 @@ export function useCustomer(customerId: string | undefined): UseCustomerResult {
             save,
             toggleTaskStatus,
             updateTask,
+            setSubtaskCompleted,
+            toggleSubtask,
+            updateSubtaskComment,
+            updateTaskPriority,
+            deactivate,
+            reactivate,
+            remove,
             reload,
         },
     };

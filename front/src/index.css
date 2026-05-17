@@ -1,9 +1,27 @@
 @import "tailwindcss";
 
+/* Modern SaaS typography. Heebo handles Hebrew beautifully; Inter is the
+ * Latin fallback for numbers, IDs, and English chrome. */
+html, body, button, input, select, textarea {
+  font-family: 'Heebo', 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-feature-settings: 'cv11', 'ss01';
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  color: #1e293b; /* slate-800 */
+  background-color: #f8fafc; /* slate-50 */
+}
+
 @layer components {
   .input-style {
-    @apply w-full border border-slate-200 p-3 rounded-lg outline-none 
-           focus:ring-2 focus:ring-blue-500 focus:border-transparent 
-           transition bg-slate-50 text-slate-700;
+    @apply w-full border border-slate-200 p-2.5 rounded-lg outline-none
+           focus:ring-2 focus:ring-blue-500 focus:border-transparent
+           transition bg-white text-slate-800 text-sm font-medium
+           placeholder:text-slate-400;
+  }
+  .card-base {
+    @apply bg-white rounded-2xl shadow-sm border border-slate-200;
   }
 }
