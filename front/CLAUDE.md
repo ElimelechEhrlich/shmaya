@@ -9,6 +9,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **State & Data**: Use the `CustomerRegistry` as the single source of truth for business rules.
 - **Database**: Access Supabase only through dedicated service layers. Always log significant actions.
 
+> The DB rules above are aspirational. The live schema mixes snake_case (`client_id`, `parent_task_id`, `entity_type`, `entity_id`, `is_active`, `created_at`) and camelCase (`subTasks`, `restrictedTo`, the JSONB blobs). All UI/service code uses camelCase exclusively; `src/services/PersistenceAdapter.ts` is the single seam that translates to/from the snake_case columns. Don't add new snake_case knowledge anywhere else.
+
 ## Commands
 
 - `npm run dev` — Vite dev server with HMR
@@ -16,62 +18,86 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `npm run preview` — preview built bundle
 - `npm run lint` — ESLint over the repo
 
-No test runner is configured.
+No test runner is configured. After cloning, run `npm install` (xlsx is required by the Logs export).
 
 ## Stack
 
-React 19 + Vite 8 + Tailwind 4 (via `@tailwindcss/vite`, imported in `src/index.css`). Routing is `react-router` v7. Backend is Supabase (`@supabase/supabase-js`) via a single client in `src/supabaseClient.js`, configured from `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` in `.env`. UI is Hebrew/RTL (`dir="rtl"` on container elements).
+React 19 + Vite 8 + Tailwind 4 (via `@tailwindcss/vite`, imported in `src/index.css`). Routing is `react-router` v7. Backend is Supabase (`@supabase/supabase-js`) via a single client in `src/supabaseClient.js`, configured from `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` in `.env`. UI is Hebrew/RTL (`<html dir="rtl">` in `index.html`). Typography is Heebo (Hebrew) + Inter (Latin chrome). TypeScript is configured via `tsconfig.json` for the `.ts` files only — `.jsx` files coexist without strict checking.
 
-## Architecture
+## Architecture — the four boundaries
 
-The app is an internal CRM/task tracker for a Hebrew-speaking accounting practice. Two Supabase tables drive everything: **`clients`** (nested JSON fields like `customerDetails`, `businessDetails`, `insuranceDetails`, `incomeTaxDetails`, `vatDetails`, `paymentDetails`, plus root-level booleans `isInsuranceActive` / `isIncomeTaxActive` / `isVatActive` / `needsDeductionsFile`) and **`tasks`** (`client_id`, `title`, `status` `'pending' | 'completed'`, `restrictedTo`, JSON `subTasks[]`).
+Every concern has exactly one owner. Putting code in the wrong place is a real bug.
 
-### Auth (single-user, client-side)
+| Boundary | File | Owns |
+|---|---|---|
+| **DB access** | `src/services/PersistenceAdapter.ts` | Every `supabase.from(...)` call. Translates camelCase ↔ snake_case via `CUSTOMER_TO_DB` / `TASK_TO_DB` / `LOG_TO_DB` rename maps. Defensive `insertLog` (UUID-validates `entityId`). The only file that knows about `client_id`, `parent_task_id`, `entity_type`, `entity_id`, `is_active`, `created_at`. |
+| **Business rules** | `src/registries/CustomerRegistry.ts` | Customer domain types, business-type matrix (`BUSINESS_TYPES`), service definitions (`SERVICES`), field visibility/required (`FIELD_RULES`, `isAttributeVisible`/`isAttributeRequired`), cross-field cascade (`applyBusinessRules`), idempotent merge planner (`planIdempotentSync`), parent↔subtask cascade utilities (`cascadeOnParentToggle`, `cascadeOnSubtaskSet`), parentTaskId-anchored progress (`calculateWeightedProgress`) and finalization (`isCustomerFinalized`), priority + category color maps, boolean coercion (`coerceBool`/`boolToOption`). |
+| **State + orchestration** | `src/hooks/useCustomer.ts` + `src/services/CustomerService.js` | Hook owns CustomerCard's entire data layer (fetch, edit-mode, optimistic mutations, cascade application). Service handles save flow + idempotent `syncTasks` + deactivate/delete. |
+| **Logging** | `src/services/LogService.ts` | Every observable state change. Writes via `PersistenceAdapter.insertLog`. Diff-based changesets via internal `diff()`. Actor defaults to `localStorage.user_name`. |
 
-`src/services/authService.js` only accepts the username `"מוישי"` and stores `is_authenticated` / `user_name` in `localStorage`. `ProtectedRoute` checks `localStorage` and redirects unauthenticated users to `/`. There is no server-side auth — Supabase is accessed with the anon key directly from the browser.
+**Validation invariants** (verifiable by grep):
+- `supabase.from(...)` exists only inside `PersistenceAdapter.ts`.
+- Snake_case DB column names (`client_id`, `parent_task_id`, `entity_type`, `entity_id`, `is_active`) appear only inside `PersistenceAdapter.ts` (plus one defensive fallback read in the Registry).
+- No business-type string literal (`'זעיר'`, `'מורשה'`, …) is compared inside any component — components call Registry helpers (`isEmployerType`, `isRepresentationAllowed`, `BUSINESS_TYPE_OPTIONS`).
+- Form boolean selects route through `coerceBool` + `boolToOption`. Raw `JSON.parse(e.target.value)` is forbidden for form-bound booleans.
 
-### Routing
+## Auth (single-user, client-side)
 
-All authenticated routes are nested under `/admin/*` inside `<Layout>` (Sidebar + Header + `<Outlet>`). The login page is `/`. See `src/App.jsx` for the route table — `customers/:id` renders `CustomerCard`, not `CustomerDetails`.
+`src/services/authService.js` only accepts the username `"מוישי"` and stores `is_authenticated` / `user_name` in `localStorage`. `ProtectedRoute` checks `localStorage` and redirects to `/`. There is no Supabase auth — the anon key is shipped to the browser. RLS is the only thing standing between the app and a data wipe; verify policies before going live.
 
-### Task generation pipeline (the heart of the app)
+## Routing
 
-`src/constants/taskRegistry.js` declares `AUTO_TASKS_CONFIG`: a list of parent tasks, each with a `condition(customer)` predicate and a `subTasks[]` array. Each subtask may have its own `condition` and a `getDetails(customer)` function that produces a Hebrew key→value object embedded into the task record.
+All authenticated routes are nested under `/admin/*` inside `<Layout>` (Sidebar + Header + `<Outlet>`). Login is `/`. See `src/App.jsx`:
+- `/admin/dashboard` → `Dashboard` (static stub)
+- `/admin/customers` → `Customers` → `CustomerList` (clickable rows navigate to detail)
+- `/admin/customers/new` → `AddCustomer`
+- `/admin/customers/:id` → `CustomerCard` (powered by `useCustomer`)
+- `/admin/tasks` → `Tasks` (subtask-centric, cross-customer)
+- `/admin/tasks/:id` → `TaskDetails` (placeholder)
+- `/admin/logs` → `Logs` (live from `logs` table; Excel export)
 
-`TaskGeneratorService.generateForCustomer(customer)` in `src/services/TaskService.js` filters the registry against the customer object and emits parent-task objects with filtered subtasks. This is called in two places:
+## Task generation
 
-1. **Preview** — `AddCustomer.jsx` regenerates tasks on every `formData` change so the user sees what tasks would be created.
-2. **Persist** — `CustomerService.syncTasks(client, isEdit)` inserts them into the `tasks` table after a save.
+`src/constants/taskRegistry.js` is declarative data — parent task ids, titles, optional subtask `condition` lambdas, `getDetails` projection functions. Parent gating for service-owned parents (`INSURANCE`, `INCOME_TAX`, `VAT`) is **driven by the Registry**, not by lambdas here. Non-service parents (`ADMIN_SETUP`, `DIRECT_DEBIT`, `FINAL_APPROVAL`) keep their own `condition`.
 
-When changing the registry, remember: the same data shape is used for both preview (with form `formData`) and persistence (with the saved row from `clients`). Both code paths consume nested fields like `customer.insuranceDetails.insuranceId`, so the form state shape and the DB row shape must stay aligned.
+`TaskGeneratorService.generateForCustomer(customer)` in `src/services/TaskService.js` consults the Registry's `shouldEmitServiceParent` and `isSubtaskBusinessTypeGated`/`isSubtaskForcedByBusinessType` and emits tasks with stable `parentTaskId`s (NOT Hebrew title strings). Each emitted row carries `priority: 'medium'` by default and `comment: ''` on every subtask. Called by:
 
-### Edit vs. create sync rule
+1. **Preview** — `AddCustomer.jsx` regenerates on every `formData` change.
+2. **Persist** — `CustomerService.syncTasks(client, isEdit)` runs the **idempotent merge** via `Registry.planIdempotentSync` on edit: matches generated tasks against existing ones by `parentTaskId`, preserves completion status + subtask completion + comments. Only pending parents whose `parentTaskId` is no longer in the generated set are deleted.
 
-`CustomerService.syncTasks` only deletes **pending** tasks before regenerating (`.eq('status', 'pending')`). Completed tasks are kept as historical record. Any new "delete and regenerate" logic must preserve this — never wipe completed tasks.
+When changing the registry, remember the same data shape is consumed by both preview (form `formData`) and persistence (saved row). Both paths read nested fields like `customer.insuranceDetails.insuranceId`; the form state shape and DB row shape must stay aligned.
 
-### Business-rule cascade
+## Business-rule cascade
 
-`CustomerService.applyBusinessLogic(prev, category, field, value)` is the single place that enforces cross-field invariants when editing a customer (e.g. `businessType` being `'זעיר'` or `'פטור'` forces `isVatActive = false`; `employsWorkers === 'yes'` sets `needsDeductionsFile = true`; turning off `isIncomeTaxActive` clears `incomeTaxDetails`; `monthlyFee <= 0` disables `directDebit`). `CustomerCard.jsx` routes all edit changes through it. `AddCustomer.jsx` currently inlines similar logic in its own `handleChange` and effects — be aware of the duplication if you touch either.
+`Registry.applyBusinessRules(customer)` enforces all cross-field invariants in one idempotent function:
+- `businessType` in `{זעיר, פטור}` forces `isVatActive = false` (via `BUSINESS_TYPES[bt].forcesServicesOff`).
+- Symmetric employer cascade: `needsDeductionsFile` follows `employsWorkers === 'yes'` in both directions (no ratchet).
+- Income-tax deactivation clears its derived fields (generalized for every service via `SERVICES[*].clearsOnDeactivate`).
+- `monthlyFee <= 0` forces `directDebit = false`.
 
-### `restrictedTo`
+`AddCustomer.jsx` runs every `formData` change through this in a `useEffect`. `CustomerCard.jsx` routes every edit through `actions.updateField` in `useCustomer`, which applies the same cascade. There is no longer a `CustomerService.applyBusinessLogic` — that's the old name; the new path is the Registry function.
 
-Parent tasks may carry `restrictedTo: 'מוישי'`. `TaskCard` greys out and disables subtask checkboxes when `currentUser !== task.restrictedTo`. The string `"מוישי"` is currently hard-coded both as the only authorized login and as the only restriction value — if you generalize one, generalize the other.
+## Parent↔subtask completion coupling
 
-### Known rough edges
+`Registry.cascadeOnParentToggle(task)` / `cascadeOnSubtaskSet(task, subId, completed)` are pure helpers. The `useCustomer` hook applies them on every toggle:
+- Parent → completed cascades to every subtask.
+- Single subtask flip recomputes parent (`allDone ? 'completed' : 'pending'`).
 
-- `src/services/logService.js` POSTs to the literal string `'YOUR_DB_ENDPOINT/logs'` — logging is effectively a no-op (it console-logs and the fetch fails silently).
-- Both `react-router` and `react-router-dom` are installed; files mix imports from each. Prefer matching the file you're editing rather than churning imports.
-- `CustomerDetails.jsx` is imported in `App.jsx` but not routed; `CustomerCard` is the live customer-detail view.
+All mutations in the hook are **optimistic** — local state updates synchronously, the DB write fires in background. No reload-after-write. On error: `console.error` + `reload()`.
 
+## Database — migrations + schema
 
-db - sql - schema: 
--- WARNING: This schema is for context only and is not meant to be run.
--- Table order and constraints may not be valid for execution.
+Two pending migration files (apply in order):
+- `db/migrations/0001_registry_alignment.sql` — adds `tasks.parent_task_id` + index + Hebrew-substring backfill, creates `logs` table.
+- `db/migrations/0002_priority_and_office_tasks.sql` — adds `tasks.priority`, makes `tasks.client_id` nullable (office-wide tasks), adds `clients.is_active`.
 
+### Live schema (reference only — not for execution)
+
+```sql
 CREATE TABLE public.clients (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   customerDetails jsonb,
-  representationFor ARRAY,
+  representationFor ARRAY,                -- dead field (audit), safe to drop
   businessDetails jsonb,
   insuranceDetails jsonb,
   incomeTaxDetails jsonb,
@@ -81,29 +107,44 @@ CREATE TABLE public.clients (
   isIncomeTaxActive boolean DEFAULT false,
   isVatActive boolean DEFAULT false,
   needsDeductionsFile boolean DEFAULT false,
+  is_active boolean NOT NULL DEFAULT true,  -- soft deactivation
   comments text,
   created_at timestamp with time zone DEFAULT now(),
   CONSTRAINT clients_pkey PRIMARY KEY (id)
 );
+
+CREATE TABLE public.tasks (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  client_id uuid,                          -- NULL = office-wide task
+  createdAt timestamp with time zone DEFAULT now(),
+  title text NOT NULL,
+  status text DEFAULT 'pending'::text,     -- 'pending' | 'completed'
+  restrictedTo text,
+  subTasks jsonb DEFAULT '[]'::jsonb,      -- [{ id, title, completed, details?, comment? }]
+  parent_task_id text,                     -- stable Registry id (ADMIN_SETUP, INSURANCE, INCOME_TAX, VAT, DIRECT_DEBIT, FINAL_APPROVAL)
+  priority text NOT NULL DEFAULT 'medium', -- 'low' | 'medium' | 'high' | 'critical'
+  CONSTRAINT tasks_pkey PRIMARY KEY (id),
+  CONSTRAINT tasks_client_id_fkey FOREIGN KEY (client_id) REFERENCES public.clients(id)
+);
+
 CREATE TABLE public.logs (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   actor text NOT NULL,
   action text NOT NULL,
-  entity_type text NOT NULL,
-  entity_id uuid,
+  entity_type text NOT NULL,               -- 'customer' | 'task' | 'system'
+  entity_id uuid,                          -- nullable; UUID-validated by adapter
   payload jsonb NOT NULL DEFAULT '{}'::jsonb,
   CONSTRAINT logs_pkey PRIMARY KEY (id)
 );
-CREATE TABLE public.tasks (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  client_id uuid,
-  createdAt timestamp with time zone DEFAULT now(),
-  title text NOT NULL,
-  status text DEFAULT 'pending'::text,
-  restrictedTo text,
-  subTasks jsonb DEFAULT '[]'::jsonb,
-  parent_task_id text,
-  CONSTRAINT tasks_pkey PRIMARY KEY (id),
-  CONSTRAINT tasks_client_id_fkey FOREIGN KEY (client_id) REFERENCES public.clients(id)
-);
+```
+
+RLS reminder: a Supabase table created via the dashboard defaults to RLS-enabled with zero policies, which silently blocks all writes from the anon key. If logs aren't persisting, that's the first thing to check.
+
+## `restrictedTo` — single-user lock
+
+Parent tasks may carry `restrictedTo: 'מוישי'`. `TaskCard` greys out and disables subtask checkboxes when `currentUser !== task.restrictedTo`. The string `"מוישי"` is hardcoded both as the only authorized login and as the only restriction value — if you generalize one, generalize the other.
+
+## Deeper architectural docs
+
+`.claude/project-map.md` has the full file-by-file architectural map, the audit findings status, and the open items list (RLS, dual router packages, unused `subtaskIds` informational arrays, etc.).

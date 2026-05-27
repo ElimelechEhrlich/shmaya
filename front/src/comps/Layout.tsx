@@ -1,8 +1,10 @@
-import Sidebar from './Sidebar.jsx';
-import Header from './Header.jsx';
+// src/comps/Layout.tsx
+import React from 'react';
+import Sidebar from './Sidebar';
+import Header from './Header';
 import { Outlet } from 'react-router';
 
-export default function Layout() {
+export default function Layout(): React.ReactElement {
     return (
         <div className="flex h-screen w-full bg-gray-50" dir="rtl">
             {/* סיידבר קבוע בצד */}

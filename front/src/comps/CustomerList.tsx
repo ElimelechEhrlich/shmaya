@@ -1,10 +1,21 @@
+// src/comps/CustomerList.tsx
 import React, { useEffect, useState } from 'react';
-import { PersistenceAdapter } from '../services/PersistenceAdapter.ts';
-import { TaskGeneratorService } from '../services/TaskService.js';
-import { BUSINESS_TYPE_OPTIONS } from '../registries/CustomerRegistry.ts';
-import { useNavigate } from 'react-router';
+import { PersistenceAdapter } from '../services/PersistenceAdapter';
+import { TaskGeneratorService } from '../services/TaskService';
+import { BUSINESS_TYPE_OPTIONS } from '../registries/CustomerRegistry';
+import { useNavigate } from 'react-router-dom';
 
-const INITIAL_FILTERS = {
+// הגדרת המבנה של פילטרים באפליקציה
+interface CustomerFilters {
+    search: string;
+    businessType: string;
+    isInsuranceActive: string;
+    isIncomeTaxActive: string;
+    isVatActive: string;
+    isFinalApproved: string;
+}
+
+const INITIAL_FILTERS: CustomerFilters = {
     search: '',
     businessType: '',
     isInsuranceActive: 'all',
@@ -13,47 +24,55 @@ const INITIAL_FILTERS = {
     isFinalApproved: 'all',
 };
 
-const CustomerList = () => {
+const CustomerList: React.FC = () => {
     const navigate = useNavigate();
-    const [customers, setCustomers] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [filters, setFilters] = useState(INITIAL_FILTERS);
+    const [customers, setCustomers] = useState<any[]>([]);
+    const [loading, setLoading] = useState<boolean>(true);
+    const [filters, setFilters] = useState<CustomerFilters>(INITIAL_FILTERS);
 
-    useEffect(() => { fetchCustomers(); }, []);
+    useEffect(() => { 
+        fetchCustomers(); 
+    }, []);
 
-    const fetchCustomers = async () => {
+    const fetchCustomers = async (): Promise<void> => {
         setLoading(true);
         const { data, error } = await PersistenceAdapter.fetchAllCustomersWithTasks();
-        if (error) console.error('Error fetching customers:', error);
-        else setCustomers(data || []);
+        if (error) {
+            console.error('Error fetching customers:', error);
+        } else {
+            setCustomers(data || []);
+        }
         setLoading(false);
     };
 
     const filteredCustomers = customers.filter(client => {
-        const isApproved = TaskGeneratorService.isCustomerFinalized(client.tasks);
+        const isApproved = TaskGeneratorService.isCustomerFinalized(client.tasks || []);
         const matchesSearch =
-            client.customerDetails?.fullName?.includes(filters.search) ||
-            client.businessDetails?.businessID?.includes(filters.search);
+            (client.customerDetails?.fullName || '').includes(filters.search) ||
+            (client.businessDetails?.businessID || '').includes(filters.search);
+            
         const matchesType = filters.businessType === '' || client.businessDetails?.businessType === filters.businessType;
-        const matchesInsurance = filters.isInsuranceActive === 'all' || String(client.isInsuranceActive) === filters.isInsuranceActive;
-        const matchesTax = filters.isIncomeTaxActive === 'all' || String(client.isIncomeTaxActive) === filters.isIncomeTaxActive;
-        const matchesVat = filters.isVatActive === 'all' || String(client.isVatActive) === filters.isVatActive;
+        const matchesInsurance = filters.isInsuranceActive === 'all' || String(!!client.isInsuranceActive) === filters.isInsuranceActive;
+        const matchesTax = filters.isIncomeTaxActive === 'all' || String(!!client.isIncomeTaxActive) === filters.isIncomeTaxActive;
+        const matchesVat = filters.isVatActive === 'all' || String(!!client.isVatActive) === filters.isVatActive;
         const matchesApproved = filters.isFinalApproved === 'all' || String(isApproved) === filters.isFinalApproved;
+        
         return matchesSearch && matchesType && matchesInsurance && matchesTax && matchesVat && matchesApproved;
     });
 
-    const exportToExcel = () => {
+    const exportToExcel = (): void => {
         const headers = ["שם לקוח", "מזהה עסק", "סוג עסק", "ביטוח לאומי", "מס הכנסה", "מע\"מ", "אישור סופי"];
         const rows = filteredCustomers.map(client => [
-            client.customerDetails?.fullName,
-            client.businessDetails?.businessID,
-            client.businessDetails?.businessType,
+            client.customerDetails?.fullName || '',
+            client.businessDetails?.businessID || '',
+            client.businessDetails?.businessType || '',
             client.isInsuranceActive ? "כן" : "לא",
             client.isIncomeTaxActive ? "כן" : "לא",
             client.isVatActive ? "כן" : "לא",
-            TaskGeneratorService.isCustomerFinalized(client.tasks) ? "כן" : "לא",
+            TaskGeneratorService.isCustomerFinalized(client.tasks || []) ? "כן" : "לא",
         ]);
-        const csvContent = "﻿" + [headers, ...rows].map(e => e.join(",")).join("\n");
+        
+        const csvContent = "\uFEFF" + [headers, ...rows].map(e => e.join(",")).join("\n");
         const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
         const link = document.createElement("a");
         link.href = URL.createObjectURL(blob);
@@ -64,9 +83,13 @@ const CustomerList = () => {
         document.body.removeChild(link);
     };
 
-    const resetFilters = () => setFilters(INITIAL_FILTERS);
+    const resetFilters = (): void => {
+        setFilters(INITIAL_FILTERS);
+    };
 
-    if (loading) return <div className="p-12 text-center font-bold text-slate-400">טוען לקוחות...</div>;
+    if (loading) {
+        return <div className="p-12 text-center font-bold text-slate-400">טוען לקוחות...</div>;
+    }
 
     return (
         <div className="p-6 min-h-screen" dir="rtl">
@@ -96,7 +119,9 @@ const CustomerList = () => {
                         />
                         <select className="input-style cursor-pointer" value={filters.businessType} onChange={(e) => setFilters({ ...filters, businessType: e.target.value })}>
                             <option value="">כל סוגי העסק</option>
-                            {BUSINESS_TYPE_OPTIONS.map(opt => (<option key={opt} value={opt}>{opt}</option>))}
+                            {BUSINESS_TYPE_OPTIONS.map((opt) => (
+                                <option key={opt} value={opt}>{opt}</option>
+                            ))}
                         </select>
                         <select className="input-style cursor-pointer" value={filters.isInsuranceActive} onChange={(e) => setFilters({ ...filters, isInsuranceActive: e.target.value })}>
                             <option value="all">ביטוח לאומי (הכל)</option>
@@ -127,21 +152,21 @@ const CustomerList = () => {
                     </div>
                 </div>
 
-                {/* Data table — entire row is clickable */}
+                {/* Data table */}
                 <div className="card-base overflow-hidden">
                     <table className="w-full text-right border-collapse">
                         <thead className="bg-slate-50 border-b border-slate-200">
                             <tr>
-                                <th className="p-4 text-xs font-bold text-slate-600 uppercase tracking-wider">שם לקוח</th>
-                                <th className="p-4 text-xs font-bold text-slate-600 uppercase tracking-wider">מזהה עסק</th>
-                                <th className="p-4 text-xs font-bold text-slate-600 uppercase tracking-wider">סוג עסק</th>
-                                <th className="p-4 text-xs font-bold text-slate-600 uppercase tracking-wider">רשויות</th>
+                                <th className="p-4 text-xs font-bold text-slate-600 uppercase tracking-wider text-center">מזהה עסק</th>
+                                <th className="p-4 text-xs font-bold text-slate-600 uppercase tracking-wider text-center">שם לקוח</th>
+                                <th className="p-4 text-xs font-bold text-slate-600 uppercase tracking-wider text-center">סוג עסק</th>
+                                <th className="p-4 text-xs font-bold text-slate-600 uppercase tracking-wider text-center">רשויות</th>
                                 <th className="p-4 text-xs font-bold text-slate-600 uppercase tracking-wider text-center">סטטוס</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
-                            {filteredCustomers.map(client => {
-                                const isApproved = TaskGeneratorService.isCustomerFinalized(client.tasks);
+                            {filteredCustomers.map((client: any) => {
+                                const isApproved = TaskGeneratorService.isCustomerFinalized(client.tasks || []);
                                 const isInactive = client.isActive === false;
                                 return (
                                     <tr
@@ -149,13 +174,13 @@ const CustomerList = () => {
                                         onClick={() => navigate(`/admin/customers/${client.id}`)}
                                         className={`cursor-pointer hover:bg-blue-50/50 transition group ${isInactive ? 'opacity-60' : ''}`}
                                     >
-                                        <td className="p-4 font-bold text-slate-800 group-hover:text-blue-700 transition">
+                                        <td className="p-4 font-bold text-slate-800 group-hover:text-blue-700 transition ">
                                             {client.customerDetails?.fullName || '—'}
                                             {isInactive && <span className="text-[10px] text-slate-400 mr-2">(לא פעיל)</span>}
                                         </td>
-                                        <td className="p-4 text-sm font-mono text-slate-600">{client.businessDetails?.businessID || '—'}</td>
-                                        <td className="p-4 text-sm text-slate-600">{client.businessDetails?.businessType || '—'}</td>
-                                        <td className="p-4 text-xs space-x-1 rtl:space-x-reverse">
+                                        <td className="p-4 text-sm font-mono text-slate-600 text-center">{client.businessDetails?.businessID || '—'}</td>
+                                        <td className="p-4 text-sm text-slate-600 text-center">{client.businessDetails?.businessType || '—'}</td>
+                                        <td className="p-4 text-xs space-x-1 rtl:space-x-reverse text-center">
                                             {client.isInsuranceActive && <span className="bg-blue-100 text-blue-700 px-2 py-1 rounded font-medium">ב״ל</span>}
                                             {client.isIncomeTaxActive && <span className="bg-emerald-100 text-emerald-700 px-2 py-1 rounded font-medium">מ״ה</span>}
                                             {client.isVatActive && <span className="bg-amber-100 text-amber-700 px-2 py-1 rounded font-medium">מע״מ</span>}

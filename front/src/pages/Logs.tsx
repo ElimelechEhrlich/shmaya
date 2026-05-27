@@ -1,38 +1,66 @@
+// src/pages/Logs.tsx
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import * as XLSX from 'xlsx';
-import { PersistenceAdapter } from '../services/PersistenceAdapter.ts';
+import { PersistenceAdapter } from '../services/PersistenceAdapter';
 
-/**
- * Activity log viewer + Excel export.
- * All DB I/O via PersistenceAdapter; snake_case columns (created_at,
- * entity_type, entity_id) are translated by the adapter.
- */
-export default function Logs() {
-    const [logs, setLogs] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [filters, setFilters] = useState({
+// הגדרת המבנה של רשומת לוג במערכת
+interface LogEntry {
+    id: string;
+    createdAt: string | Date;
+    actor: string | null;
+    action: string | null;
+    entityType: string | null;
+    entityId: string | null;
+    payload?: {
+        changeSet?: Record<string, { old: any; new: any }>;
+        after?: {
+            id?: string;
+            customerDetails?: {
+                fullName?: string;
+            };
+        };
+        [key: string]: any;
+    } | null;
+}
+
+// הגדרת המבנה של פילטרים ביומן הפעולות
+interface LogFilters {
+    from: string;
+    to: string;
+    actor: string;
+    entityType: string;
+}
+
+interface PayloadCellProps {
+    payload: LogEntry['payload'];
+}
+
+export default function Logs(): React.ReactElement {
+    const [logs, setLogs] = useState<LogEntry[]>([]);
+    const [loading, setLoading] = useState<boolean>(true);
+    const [filters, setFilters] = useState<LogFilters>({
         from: '',
         to: '',
         actor: 'all',
         entityType: 'all',
     });
 
-    const load = useCallback(async () => {
+    const load = useCallback(async (): Promise<void> => {
         setLoading(true);
         const { data, error } = await PersistenceAdapter.fetchAllLogs(1000);
         if (error) console.error('[Logs] fetch failed:', error.message);
-        setLogs(data ?? []);
+        setLogs((data as LogEntry[]) ?? []);
         setLoading(false);
     }, []);
 
     useEffect(() => { load(); }, [load]);
 
     const actors = useMemo(
-        () => [...new Set(logs.map(l => l.actor).filter(Boolean))].sort(),
+        () => [...new Set(logs.map(l => l.actor).filter(Boolean))].sort() as string[],
         [logs]
     );
     const entityTypes = useMemo(
-        () => [...new Set(logs.map(l => l.entityType).filter(Boolean))].sort(),
+        () => [...new Set(logs.map(l => l.entityType).filter(Boolean))].sort() as string[],
         [logs]
     );
 
@@ -50,7 +78,7 @@ export default function Logs() {
         return true;
     }), [logs, filters]);
 
-    const exportToExcel = () => {
+    const exportToExcel = (): void => {
         const rows = filtered.map(l => ({
             'תאריך': new Date(l.createdAt).toLocaleString('he-IL'),
             'משתמש': l.actor ?? '',
@@ -62,11 +90,12 @@ export default function Logs() {
         const ws = XLSX.utils.json_to_sheet(rows);
         ws['!cols'] = [{ wch: 22 }, { wch: 14 }, { wch: 22 }, { wch: 12 }, { wch: 38 }, { wch: 80 }];
         const wb = XLSX.utils.book_new();
+        // התיקון בתוך פונקציית exportToExcel:
         XLSX.utils.book_append_sheet(wb, ws, 'Logs');
         XLSX.writeFile(wb, `logs_${new Date().toISOString().slice(0, 10)}.xlsx`);
     };
 
-    const resetFilters = () => setFilters({ from: '', to: '', actor: 'all', entityType: 'all' });
+    const resetFilters = (): void => setFilters({ from: '', to: '', actor: 'all', entityType: 'all' });
 
     return (
         <div className="p-6 min-h-screen" dir="rtl">
@@ -103,7 +132,7 @@ export default function Logs() {
                             <input
                                 type="date"
                                 value={filters.from}
-                                onChange={(e) => setFilters({ ...filters, from: e.target.value })}
+                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFilters({ ...filters, from: e.target.value })}
                                 className="input-style cursor-pointer"
                             />
                         </div>
@@ -112,7 +141,7 @@ export default function Logs() {
                             <input
                                 type="date"
                                 value={filters.to}
-                                onChange={(e) => setFilters({ ...filters, to: e.target.value })}
+                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFilters({ ...filters, to: e.target.value })}
                                 className="input-style cursor-pointer"
                             />
                         </div>
@@ -120,7 +149,7 @@ export default function Logs() {
                             <label className="text-xs font-bold text-slate-500 block mb-1">משתמש</label>
                             <select
                                 value={filters.actor}
-                                onChange={(e) => setFilters({ ...filters, actor: e.target.value })}
+                                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFilters({ ...filters, actor: e.target.value })}
                                 className="input-style cursor-pointer"
                             >
                                 <option value="all">כל המשתמשים</option>
@@ -131,7 +160,7 @@ export default function Logs() {
                             <label className="text-xs font-bold text-slate-500 block mb-1">סוג ישות</label>
                             <select
                                 value={filters.entityType}
-                                onChange={(e) => setFilters({ ...filters, entityType: e.target.value })}
+                                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFilters({ ...filters, entityType: e.target.value })}
                                 className="input-style cursor-pointer"
                             >
                                 <option value="all">הכל</option>
@@ -197,7 +226,7 @@ export default function Logs() {
     );
 }
 
-const PayloadCell = ({ payload }) => {
+const PayloadCell: React.FC<PayloadCellProps> = ({ payload }) => {
     if (!payload) return <span className="text-slate-300">—</span>;
     if (payload.changeSet) {
         const entries = Object.entries(payload.changeSet);
@@ -228,7 +257,7 @@ const PayloadCell = ({ payload }) => {
     );
 };
 
-const formatValue = (v) => {
+const formatValue = (v: any): string => {
     if (v === null || v === undefined) return '∅';
     if (typeof v === 'string') return v.length > 18 ? v.slice(0, 18) + '…' : v;
     if (typeof v === 'object') return JSON.stringify(v).slice(0, 18) + '…';

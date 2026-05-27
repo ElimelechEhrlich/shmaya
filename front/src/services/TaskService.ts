@@ -1,4 +1,4 @@
-// src/services/TaskService.js
+// src/services/TaskService.ts
 //
 // Thin generation facade over taskRegistry.AUTO_TASKS_CONFIG. Cross-cutting
 // progress, finalization, and parent/subtask gating decisions are owned by
@@ -13,45 +13,63 @@ import {
     isSubtaskBusinessTypeGated,
 } from '../registries/CustomerRegistry';
 
+// הגדרת המבנה של נתוני הלקוח
+export interface CustomerData {
+    id?: string;
+    businessType?: string;
+    isIncomeTaxActive?: boolean;
+    isVatActive?: boolean;
+    isInsuranceActive?: boolean;
+    [key: string]: any; // תמיכה בשדות דינמיים נוספים של הלקוח
+}
+
+// הגדרת המבנה של תת-משימה מיוצרת
+export interface GeneratedSubTask {
+    id: string;
+    title: string;
+    completed: boolean;
+    details: Record<string, any>;
+    comment: string;
+}
+
+// הגדרת המבנה של משימה ראשית מיוצרת
+export interface GeneratedTask {
+    id: string;
+    parentTaskId: string;
+    title: string;
+    restrictedTo: string[] | null;
+    priority: 'low' | 'medium' | 'high' | 'critical' | string;
+    subTasks: GeneratedSubTask[];
+}
+
 export class TaskGeneratorService {
     /**
      * Generates tasks for a customer.
-     *
-     * Parent gating:
-     *   - If the parent is a service-owned id (returns non-null from
-     *     shouldEmitServiceParent), the Registry's decision is final.
-     *   - Otherwise the entry's own `condition` lambda decides (non-service
-     *     parents: ADMIN_SETUP, DIRECT_DEBIT, FINAL_APPROVAL).
-     *
-     * Subtask gating:
-     *   - If the subtask has its own `condition`, it's used.
-     *   - Else if the subtask appears in any BUSINESS_TYPES.forcedSubtasks list
-     *     (isSubtaskBusinessTypeGated), it's emitted only when the current
-     *     customer's business type forces it.
-     *   - Otherwise the subtask is emitted whenever its parent fires.
      */
-    static generateForCustomer(customerData) {
+    static generateForCustomer(customerData: CustomerData): GeneratedTask[] {
         return AUTO_TASKS_CONFIG
-            .filter(parentTask => {
-                const registryDecision = shouldEmitServiceParent(parentTask.id, customerData);
+            .filter((parentTask: any) => {
+                // תיקון: המרה ל-any של customerData כדי להתאים לחתימת הפונקציה ב-Registry
+                const registryDecision = shouldEmitServiceParent(parentTask.id, customerData as any);
                 if (registryDecision !== null) return registryDecision;
                 return !parentTask.condition || parentTask.condition(customerData);
             })
-            .map(parentTask => ({
+            .map((parentTask: any): GeneratedTask => ({
                 id: crypto.randomUUID(),
                 parentTaskId: parentTask.id,
                 title: parentTask.title,
                 restrictedTo: parentTask.restrictedTo || null,
                 priority: parentTask.priority || 'medium',
                 subTasks: parentTask.subTasks
-                    .filter(sub => {
+                    .filter((sub: any) => {
                         if (sub.condition) return sub.condition(customerData);
                         if (isSubtaskBusinessTypeGated(parentTask.id, sub.id)) {
-                            return isSubtaskForcedByBusinessType(parentTask.id, sub.id, customerData);
+                            // תיקון: המרה ל-any של customerData גם כאן
+                            return isSubtaskForcedByBusinessType(parentTask.id, sub.id, customerData as any);
                         }
                         return true;
                     })
-                    .map(sub => ({
+                    .map((sub: any): GeneratedSubTask => ({
                         id: sub.id,
                         title: sub.title,
                         completed: false,
@@ -62,12 +80,12 @@ export class TaskGeneratorService {
     }
 
     /** Parent-id-anchored finalization probe (Hebrew-substring fallback for legacy rows). */
-    static isCustomerFinalized(tasks) {
+    static isCustomerFinalized(tasks: any[]): boolean {
         return isCustomerFinalized(tasks);
     }
 
     /** Returns 0–100 percent. Subtask-weighted via Registry.calculateWeightedProgress. */
-    static calculateProgress(tasks) {
-        return calculateWeightedProgress(tasks).percent;
+    static calculateProgress(tasks: any[]): number {
+        return calculateWeightedProgress(tasks as any).percent;
     }
 }

@@ -1,18 +1,14 @@
-import React from 'react'
-import { useNavigate } from 'react-router';
+// src/pages/Customers.tsx
+import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import CustomerList from '../comps/CustomerList';
 
-export default function Customers() {
+export default function Customers(): React.ReactElement {
     const navigate = useNavigate();
 
     return (
         <div className="space-y-6">
             <div className="flex justify-center items-center px-6 rounded-xl ">
-                {/* <div>
-                    <h2 className="text-2xl font-bold text-slate-800">ניהול מאגר לקוחות</h2>
-                    <p className="text-slate-500 text-sm">צפייה ועריכה של לקוחות המשרד</p>
-                </div> */}
-
                 {/* כפתור הוספה בולט */}
                 <button
                     onClick={() => navigate('/admin/customers/new')}
@@ -24,9 +20,8 @@ export default function Customers() {
             </div>
 
             <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
-                {/* כאן תבוא הטבלה בהמשך */}
-                <div className="p-20 text-center text-slate-400">
-                   <CustomerList></CustomerList>
+                <div className="p-2 text-center text-slate-400">
+                    <CustomerList />
                 </div>
             </div>
         </div>

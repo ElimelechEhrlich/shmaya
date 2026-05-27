@@ -1,7 +1,9 @@
-import React from 'react'
+// src/pages/Dashboard.tsx
+import React from 'react';
 
-export default function Deshboard() {
-const userName = localStorage.getItem('user_name') || 'אורח';
+export default function Dashboard(): React.ReactElement {
+  // הגדרת טיפוס מפורש למחרוזת הטקסט
+  const userName: string = localStorage.getItem('user_name') || 'אורח';
 
   return (
     <div className="space-y-6">

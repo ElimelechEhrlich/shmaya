@@ -492,6 +492,9 @@ export function isSubtaskBusinessTypeGated(parentId: string, subtaskId: string):
 // Idempotent: applyBusinessRules(applyBusinessRules(c)) === applyBusinessRules(c).
 // This guarantees the useEffect pattern in AddCustomer cannot loop.
 // ──────────────────────────────────────────────────────────────────
+export function hasActiveAuthorities(customer: any): boolean {
+    return !!(customer.isIncomeTaxActive || customer.isVatActive || customer.isInsuranceActive);
+}
 
 export function applyBusinessRules(c: Customer): Customer {
   // Clone every nested object so the cascade never mutates the input — fixes
@@ -504,7 +507,12 @@ export function applyBusinessRules(c: Customer): Customer {
     incomeTaxDetails: { ...c.incomeTaxDetails },
     vatDetails:       { ...c.vatDetails },
     paymentDetails:   { ...c.paymentDetails },
+    isActive: c.isActive,
   };
+
+  if (!hasActiveAuthorities(next)) {
+        next.isActive = false; // או next.isActive = false, תלוי בשם השדה במסד הנתונים שלך
+    }
 
   // 1. Force services off where the business type forbids them
   const btRule = getBusinessTypeRule(next);

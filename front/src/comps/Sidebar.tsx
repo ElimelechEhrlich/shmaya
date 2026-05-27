@@ -1,16 +1,22 @@
+// src/comps/Sidebar.tsx
+import React from 'react';
 import { Link, useLocation } from 'react-router';
 
-export default function Sidebar() {
-const location = useLocation();
-  const isActive = (path) => location.pathname.includes(path) ? 'bg-slate-800 border-l-4 border-blue-400' : '';
+export default function Sidebar(): React.ReactElement {
+  const location = useLocation();
+  
+  // הגדרת טיפוס מפורש לפרמטר וטיפוס חזרה של מחרוזת (string)
+  const isActive = (path: string): string => 
+    location.pathname.includes(path) ? 'bg-slate-800 border-l-4 border-blue-400' : '';
 
   return (
     <aside className="w-64 bg-slate-900 text-white flex flex-col justify-between shrink-0 h-full">
       <div>
         {/* לוגו החברה */}
         <div className="p-8 text-center border-b border-slate-800">
-          <div className="text-3xl font-bold tracking-tighter">LOGO</div>
-          {/* <p className="text-xs text-slate-400 mt-1 uppercase">Accountant CRM</p> */}
+          <div className="text-3xl font-bold tracking-tighter">   
+            <img className="w-25 h-25 mx-auto" src="/shmayaIcon.png" alt="Logo" />
+          </div>
         </div>
 
         {/* ניווט */}
@@ -29,14 +35,6 @@ const location = useLocation();
           </Link>
         </nav>
       </div>
-
-      {/* פרטי חברה בתחתית */}
-      {/* <div className="p-6 border-t border-slate-800 text-xs text-slate-500 space-y-2">
-        <div className="font-bold text-slate-300">החברה שלך בע"מ</div>
-        <p>ח.פ: 510000000</p>
-        <a href="#" className="text-blue-500 hover:underline">תמיכה טכנית</a>
-      </div> */}
     </aside>
   );
 }
-

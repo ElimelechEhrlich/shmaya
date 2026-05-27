@@ -1,9 +1,10 @@
+// src/comps/AddCustomer.tsx
 import React, { useEffect, useState } from 'react';
-import { TaskGeneratorService } from '../services/TaskService.js';
-import { useNavigate } from 'react-router';
-import FormField from '../comps/FormField.jsx';
-import TaskCard from '../comps/TaskCard.jsx';
-import { CustomerService } from '../services/CustomerService.js';
+import { TaskGeneratorService } from '../services/TaskService';
+import { useNavigate } from 'react-router-dom';
+import FormField from '../comps/FormField';
+import TaskCard from '../comps/TaskCard';
+import { CustomerService } from '../services/CustomerService';
 import {
     applyBusinessRules,
     isEmployerType,
@@ -11,12 +12,42 @@ import {
     BUSINESS_TYPE_OPTIONS,
     coerceBool,
     boolToOption,
-} from '../registries/CustomerRegistry.ts';
+} from '../registries/CustomerRegistry';
 
-export default function AddCustomer() {
+// הגדרת המבנה הטיפוסי המלא של הנתונים בטופס
+interface CustomerFormData {
+    customerDetails: { fullName: string; identityId: string; phoneNumber: string; address: string; email: string };
+    businessDetails: {
+        businessName: string; businessID: string; businessType: string; openingDate: string; occupation: string; businessDescription: string; employsWorkers: string; deductionsId: string;
+    };
+    insuranceDetails: { insurancePrepayment: string; workHours: string; newInsuranceCase: boolean; insuranceId: string; insuranceStatus: string };
+    incomeTaxDetails: { repType: string; incomeTaxPrepayment: string; annualTurnover: string; newItCase: boolean };
+    vatDetails: { newVatCase: boolean };
+    paymentDetails: { setupFee: string; monthlyFee: string; directDebit: boolean };
+    isInsuranceActive: boolean;
+    isIncomeTaxActive: boolean;
+    isVatActive: boolean;
+    needsDeductionsFile: boolean;
+    comments: string;
+    isActive: boolean;
+}
+
+interface CardProps {
+    title: string;
+    icon?: string;
+    children: React.ReactNode;
+}
+
+interface ToggleHeaderProps {
+    label: string;
+    checked: boolean;
+    onChange: (checked: boolean) => void;
+}
+
+export default function AddCustomer(): React.ReactElement {
     const navigate = useNavigate();
 
-    const [formData, setFormData] = useState({
+    const [formData, setFormData] = useState<CustomerFormData>({
         customerDetails: { fullName: '', identityId: '', phoneNumber: '', address: '', email: '' },
         businessDetails: {
             businessName: '', businessID: '', businessType: '', openingDate: '', occupation: '', businessDescription: '', employsWorkers: 'no', deductionsId: ''
@@ -25,46 +56,82 @@ export default function AddCustomer() {
         incomeTaxDetails: { repType: 'ראשי', incomeTaxPrepayment: '', annualTurnover: '', newItCase: true },
         vatDetails: { newVatCase: true },
         paymentDetails: { setupFee: '', monthlyFee: '', directDebit: false },
-        isInsuranceActive: false, isIncomeTaxActive: false, isVatActive: false, needsDeductionsFile: false, comments: ''
+        isInsuranceActive: false, isIncomeTaxActive: false, isVatActive: false, needsDeductionsFile: false, comments: '', isActive: true
     });
 
-    const [previewTasks, setPreviewTasks] = useState([]);
+    const [previewTasks, setPreviewTasks] = useState<any[]>([]);
 
-    // Single cascade: every formData change is run through the Registry's
-    // applyBusinessRules so the same rule set governs creation and edit.
+    // אופטימיזציה: איחוד הריצות של חוקי העסק ותצוגת המשימות תחת מעקב יציב אחד
     useEffect(() => {
-        const normalized = applyBusinessRules(formData);
-        if (JSON.stringify(normalized) !== JSON.stringify(formData)) {
+        const normalized = applyBusinessRules(formData as any) as CustomerFormData;
+
+        // השוואה בטוחה כדי למנוע לולאת רינדור אינסופית ב-Vite
+        if (normalized && JSON.stringify(normalized) !== JSON.stringify(formData)) {
             setFormData(normalized);
         }
+
+        setPreviewTasks(TaskGeneratorService.generateForCustomer(normalized || formData));
     }, [formData]);
 
-    useEffect(() => {
-        setPreviewTasks(TaskGeneratorService.generateForCustomer(formData));
-    }, [formData]);
+    // תיקון פונקציית handleChange לתמיכה בשדות רוט (עליונים) ושדות בוליאניים
+    const handleChange = (
+        category: keyof CustomerFormData | 'root', 
+        e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
+    ): void => {
+        const { name, value, type } = e.target;
+        const finalValue = type === 'checkbox' ? (e.target as HTMLInputElement).checked : value;
 
-    const handleChange = (category, e) => {
-        const { name, value } = e.target;
-        setFormData(prev => ({ ...prev, [category]: { ...prev[category], [name]: value } }));
+        if (category === 'root') {
+            setFormData(prev => ({ ...prev, [name]: finalValue }));
+        } else {
+            setFormData(prev => ({
+                ...prev,
+                [category]: {
+                    ...(prev[category] as Record<string, any>),
+                    [name]: finalValue
+                }
+            }));
+        }
     };
 
-    const handleSubmit = async (e) => {
+    const handleSubmit = async (e: React.FormEvent<HTMLFormElement>): Promise<void> => {
         e.preventDefault();
+
+        // אבטחת שדות חובה בשכבת הקליינט לפני פניה ל-Supabase
+        if (!formData.businessDetails.businessName.trim()) {
+            alert('⚠️ חובה למלא את שם העסק!');
+            return;
+        }
+
+        const hasAuthorities = formData.isIncomeTaxActive || formData.isVatActive || formData.isInsuranceActive;
+        let dataToSave = { ...formData };
+        
+        if (!hasAuthorities) {
+            const saveAsInactive = window.confirm('⚠️ לא הגדרת טיפול באף רשות. האם ברצונך לשמור את הלקוח כ"לא פעיל"?');
+            if (!saveAsInactive) {
+                return; // המשתמש התחרט - עוצרים את השמירה ונשארים במסך
+            }
+            dataToSave = {
+                ...dataToSave,
+                isActive: false
+            };
+        }
+        
         try {
-            const result = await CustomerService.saveCustomer(formData, false);
+            const result = await CustomerService.saveCustomer(dataToSave as any, false);
             if (result.success) {
                 alert('הלקוח נוסף ותועד במערכת!');
                 navigate('/admin/customers');
             } else {
                 alert('שגיאה בשמירה: ' + result.error);
             }
-        } catch (error) {
+        } catch (error: any) {
             console.error("Error saving data:", error);
             alert('שגיאה בשמירת הנתונים: ' + error.message);
         }
     };
 
-    const showEmployerFields = isEmployerType(formData);
+    const showEmployerFields = isEmployerType(formData as any);
 
     return (
         <div className="p-6 bg-slate-50 min-h-screen" dir="rtl">
@@ -100,7 +167,7 @@ export default function AddCustomer() {
                                 <FormField label="סוג עסק לייצוג">
                                     <select name="businessType" className="input-style" onChange={(e) => handleChange('businessDetails', e)} required>
                                         <option value="">בחר סוג עסק...</option>
-                                        {BUSINESS_TYPE_OPTIONS.map(opt => (<option key={opt} value={opt}>{opt}</option>))}
+                                        {BUSINESS_TYPE_OPTIONS.map((opt: string) => (<option key={opt} value={opt}>{opt}</option>))}
                                     </select>
                                 </FormField>
                                 <FormField label="משלח יד"><input name="occupation" className="input-style" onChange={(e) => handleChange('businessDetails', e)} /></FormField>
@@ -146,7 +213,7 @@ export default function AddCustomer() {
                                     checked={formData.isIncomeTaxActive}
                                     onChange={(v) => setFormData({ ...formData, isIncomeTaxActive: v })}
                                 />
-                                {isRepresentationAllowed(formData) && (
+                                {isRepresentationAllowed(formData as any) && (
                                     <ToggleHeader
                                         label="טיפול במע״מ"
                                         checked={formData.isVatActive}
@@ -211,7 +278,8 @@ export default function AddCustomer() {
                                                 type="checkbox"
                                                 className="w-5 h-5 cursor-pointer accent-blue-600"
                                                 checked={formData.needsDeductionsFile}
-                                                onChange={(e) => setFormData({ ...formData, needsDeductionsFile: e.target.checked })}
+                                                name="needsDeductionsFile"
+                                                onChange={(e) => handleChange('root', e)} // תיקון: העברה דרך הרוט
                                             />
                                         </div>
                                     )}
@@ -222,16 +290,16 @@ export default function AddCustomer() {
                         <Card title="תשלומים למשרד" icon="💰">
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                 <FormField label="מחיר פתיחת תיק (₪)">
-                                    <input type="number" className="input-style" onChange={(e) => setFormData({ ...formData, paymentDetails: { ...formData.paymentDetails, setupFee: e.target.value } })} />
+                                    <input name="setupFee" type="number" className="input-style" onChange={(e) => handleChange('paymentDetails', e)} />
                                 </FormField>
                                 <FormField label="מחיר חודשי שוטף (₪)">
-                                    <input type="number" className="input-style" onChange={(e) => setFormData({ ...formData, paymentDetails: { ...formData.paymentDetails, monthlyFee: e.target.value, directDebit: Number(e.target.value) > 0 ? formData.paymentDetails.directDebit : false } })} />
+                                    <input name="monthlyFee" type="number" className="input-style" onChange={(e) => handleChange('paymentDetails', e)} />
                                 </FormField>
                                 <div>
                                     <label className="block text-sm font-bold text-slate-700 mb-1 mr-1">הוקם הו״ק?</label>
                                     <div className="flex gap-2 border border-slate-200 rounded-lg items-center p-1.5 bg-slate-50">
-                                        <button type="button" onClick={() => Number(formData.paymentDetails.monthlyFee) > 0 && setFormData({ ...formData, paymentDetails: { ...formData.paymentDetails, directDebit: true } })} className={`flex-1 py-1.5 rounded-md text-sm font-bold transition ${formData.paymentDetails.directDebit ? 'bg-green-600 text-white' : 'bg-white text-slate-400'}`}>כן</button>
-                                        <button type="button" onClick={() => setFormData({ ...formData, paymentDetails: { ...formData.paymentDetails, directDebit: false } })} className={`flex-1 py-1.5 rounded-md text-sm font-bold transition ${!formData.paymentDetails.directDebit ? 'bg-red-600 text-white' : 'bg-white text-slate-400'}`}>לא</button>
+                                        <button type="button" onClick={() => setFormData(prev => ({ ...prev, paymentDetails: { ...prev.paymentDetails, directDebit: true } }))} className={`flex-1 py-1.5 rounded-md text-sm font-bold transition ${formData.paymentDetails.directDebit ? 'bg-green-600 text-white' : 'bg-white text-slate-400'}`}>כן</button>
+                                        <button type="button" onClick={() => setFormData(prev => ({ ...prev, paymentDetails: { ...prev.paymentDetails, directDebit: false } }))} className={`flex-1 py-1.5 rounded-md text-sm font-bold transition ${!formData.paymentDetails.directDebit ? 'bg-red-600 text-white' : 'bg-white text-slate-400'}`}>לא</button>
                                     </div>
                                 </div>
                             </div>
@@ -239,7 +307,7 @@ export default function AddCustomer() {
 
                         <Card title="הערות" icon="📝">
                             <FormField label="הערות נוספות">
-                                <textarea className="input-style h-24" onChange={(e) => setFormData(prev => ({ ...prev, comments: e.target.value }))}></textarea>
+                                <textarea name="comments" className="input-style h-24" onChange={(e) => handleChange('root', e)}></textarea>
                             </FormField>
                         </Card>
 
@@ -257,7 +325,7 @@ export default function AddCustomer() {
                             </div>
                             <div className="space-y-3 max-h-[70vh] overflow-y-auto pl-1">
                                 {previewTasks.length > 0 ? (
-                                    previewTasks.map(task => <TaskCard key={task.id} task={task} currentUser="מוישי" onSubTaskToggle={() => { }} />)
+                                    previewTasks.map((task: any) => <TaskCard key={task.id} task={task} currentUser="מוישי" onSubTaskToggle={() => { }} />)
                                 ) : (
                                     <div className="p-6 border-2 border-dashed border-slate-200 rounded-xl text-center text-slate-400 text-sm">
                                         הזן נתונים כדי לראות את המשימות שייווצרו
@@ -272,8 +340,8 @@ export default function AddCustomer() {
     );
 }
 
-// Card wrapper — consistent styling for every form section.
-const Card = ({ title, icon, children }) => (
+// Card wrapper component
+const Card: React.FC<CardProps> = ({ title, icon, children }) => (
     <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
         <h3 className="text-blue-700 font-black text-[11px] uppercase tracking-[0.2em] mb-5 border-b border-slate-100 pb-2 flex items-center gap-2">
             {icon && <span className="text-base">{icon}</span>}
@@ -283,8 +351,8 @@ const Card = ({ title, icon, children }) => (
     </div>
 );
 
-// Toggle header — styled checkbox + label, used for service activation rows.
-const ToggleHeader = ({ label, checked, onChange }) => (
+// Toggle header component
+const ToggleHeader: React.FC<ToggleHeaderProps> = ({ label, checked, onChange }) => (
     <label className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition ${checked ? 'bg-blue-50 border-blue-200' : 'bg-slate-50 border-slate-200 hover:border-slate-300'}`}>
         <input
             type="checkbox"

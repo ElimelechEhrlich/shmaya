@@ -1,15 +1,21 @@
+// src/comps/Header.tsx
+import React from 'react';
 import { useLocation, useParams } from "react-router";
 
-export default function Header() {;
-const location = useLocation();
-const { id } = useParams();
-  // משיכת השם מה-localStorage (ברירת מחדל: "אורח")
-  const userName = localStorage.getItem('user_name') || 'אורח';
+export default function Header(): React.ReactElement {
+  const location = useLocation();
   
-  const getTitle = () => {
+  // הגדרת טיפוס מפורש לפרמטרים של ה-URL כדי לוודא ש-id מוכר כמחרוזת
+  const { id } = useParams<{ id: string }>();
+  
+  // משיכת השם מה-localStorage (ברירת מחדל: "אורח")
+  const userName: string = localStorage.getItem('user_name') || 'אורח';
+  
+  // הגדרת טיפוס חזרה מפורש של מחרוזת (string) לפונקציית הכותרת
+  const getTitle = (): string => {
     const path = location.pathname;
-    if (path.includes('/customers/')  && !path.includes('/customers/new')) return `פרטי לקוח`;
-    if (path.includes('/tasks/')) return `פרטי משימה: ${id}`;
+    if (path.includes('/customers/') && !path.includes('/customers/new')) return `פרטי לקוח`;
+    if (path.includes('/tasks/')) return `פרטי משימה: ${id || ''}`;
     if (path.includes('dashboard')) return 'לוח בקרה';
     if (path.includes('customers')) return 'לקוחות';
     if (path.includes('tasks')) return 'ניהול משימות';
@@ -33,4 +39,4 @@ const { id } = useParams();
       </div>
     </header>
   );
-};
+}

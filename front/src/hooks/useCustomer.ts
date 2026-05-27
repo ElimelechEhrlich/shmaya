@@ -21,9 +21,7 @@ import {
     type TaskPriority,
 } from '../services/PersistenceAdapter';
 import { LogService } from '../services/LogService';
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore — JS service, stable surface
-import { CustomerService } from '../services/CustomerService.js';
+import { CustomerService } from '../services/CustomerService';
 import {
     applyBusinessRules,
     calculateWeightedProgress,
@@ -129,93 +127,112 @@ export function useCustomer(customerId: string | undefined): UseCustomerResult {
     const save = useCallback(
         async (): Promise<{ success: boolean; error?: string }> => {
             if (!customerId || !editData) return { success: false, error: 'No data to save' };
-            const result = await CustomerService.saveCustomer(editData, true, customerId);
+            
+            const isCurrentlyActive = customer?.isActive;
+            const hasAnyAuthority = !!(editData.isIncomeTaxActive || editData.isVatActive || editData.isInsuranceActive);
+            let updatedData = { ...editData };
+
+            if (isCurrentlyActive && !hasAnyAuthority) {
+                const shouldDeactivate = window.confirm(
+                    '❓ שים לב: כיבית את כל הרשויות בטיפול עבור לקוח זה.\nהאם ברצונך לשמור את השינויים ולהפוך את הלקוח ל"לא פעיל" באופן אוטומטי?'
+                );
+                if (!shouldDeactivate) {
+                    return { success: false, error: 'השמירה בבוטלה על ידי המשתמש.' };
+                }
+                updatedData = {
+                    ...updatedData,
+                    isActive: false
+                };
+            }
+
+            // הפרדת מערך ה-tasks מהאובייקט כדי לשלוח מבנה נקי התואם ל-CustomerFormData של השירות
+            const { tasks: _, ...cleanFormData } = updatedData as any;
+
+            const result = await CustomerService.saveCustomer(cleanFormData, true, customerId);
             if (result.success) {
                 setIsEditing(false);
                 await reload();
             }
             return result;
         },
-        [customerId, editData, reload]
+        [customerId, editData, customer, reload]
     );
 
-    // ── Task mutations (optimistic) ──
+    // ── Task mutations (Optimistic & Normalised Flow) ──
 
     const toggleTaskStatus = useCallback(
         async (taskId: string, currentStatus: 'pending' | 'completed'): Promise<void> => {
-            // Compute cascade locally first.
-            let cascadeResult: { status: 'pending' | 'completed'; subTasks: PersistedSubTask[] } | null = null;
-            const apply = (t: PersistedTask): PersistedTask => {
-                const res = cascadeOnParentToggle({ status: t.status, subTasks: t.subTasks });
-                cascadeResult = res as typeof cascadeResult;
-                return { ...t, status: res.status, subTasks: res.subTasks as PersistedSubTask[] };
-            };
-            setCustomer((s) => withTaskUpdated(s, taskId, apply));
-            setEditData((s) => withTaskUpdated(s, taskId, (t) => ({
-                ...t,
-                status: cascadeResult!.status,
-                subTasks: cascadeResult!.subTasks,
-            })));
+            const targetTask = (editData ?? customer)?.tasks.find(t => t.id === taskId);
+            if (!targetTask) return;
 
-            if (!cascadeResult) return;
-            const { error } = await PersistenceAdapter.updateTask(taskId, {
-                status: cascadeResult.status,
-                subTasks: cascadeResult.subTasks,
-            });
-            if (error) {
-                console.error('[useCustomer.toggleTaskStatus] persist failed:', error.message);
+            const res = cascadeOnParentToggle({ status: targetTask.status, subTasks: targetTask.subTasks as any });
+            const nextStatus = res.status as 'pending' | 'completed';
+            const nextSubTasks = res.subTasks as any[];
+
+            const apply = (t: PersistedTask): PersistedTask => ({ ...t, status: nextStatus, subTasks: nextSubTasks });
+            setCustomer((s) => withTaskUpdated(s, taskId, apply));
+            setEditData((s) => withTaskUpdated(s, taskId, apply));
+
+            // עדכון מפוצל ומנורמל: משנים את סטטוס האב, ומעדכנים את כל הבנים בבת אחת
+            const { error: parentErr } = await PersistenceAdapter.updateTaskStatus(taskId, nextStatus);
+            const { error: subErr } = await PersistenceAdapter.updateTaskSubtasks(taskId, nextSubTasks);
+
+            if (parentErr || subErr) {
+                console.error('[useCustomer.toggleTaskStatus] persist failed');
                 await reload();
                 return;
             }
-            await LogService.recordTaskStatusChange(taskId, currentStatus, cascadeResult.status);
+            await LogService.recordTaskStatusChange(taskId, currentStatus, nextStatus);
         },
-        [reload]
+        [editData, customer, reload]
     );
 
     const setSubtaskCompleted = useCallback(
         async (taskId: string, subtaskId: string, completed: boolean): Promise<void> => {
-            let cascadeResult: { status: 'pending' | 'completed'; subTasks: PersistedSubTask[] } | null = null;
-            let before: PersistedTask | null = null;
-            const apply = (t: PersistedTask): PersistedTask => {
-                before = t;
-                const res = cascadeOnSubtaskSet(
-                    { status: t.status, subTasks: t.subTasks },
-                    subtaskId,
-                    completed
-                );
-                cascadeResult = res as typeof cascadeResult;
-                return { ...t, status: res.status, subTasks: res.subTasks as PersistedSubTask[] };
-            };
-            setCustomer((s) => withTaskUpdated(s, taskId, apply));
-            setEditData((s) => withTaskUpdated(s, taskId, (t) => ({
-                ...t,
-                status: cascadeResult!.status,
-                subTasks: cascadeResult!.subTasks,
-            })));
+            const targetTask = (editData ?? customer)?.tasks.find(t => t.id === taskId);
+            if (!targetTask) return;
 
-            if (!cascadeResult || !before) return;
-            const { error } = await PersistenceAdapter.updateTask(taskId, {
-                status: cascadeResult.status,
-                subTasks: cascadeResult.subTasks,
-            });
-            if (error) {
-                console.error('[useCustomer.setSubtaskCompleted] persist failed:', error.message);
+            const beforeStatus = targetTask.status;
+            const beforeSubTasks = targetTask.subTasks || [];
+
+            const res = cascadeOnSubtaskSet(
+                { status: beforeStatus, subTasks: beforeSubTasks as any },
+                subtaskId,
+                completed
+            );
+            const nextStatus = res.status as 'pending' | 'completed';
+            const nextSubTasks = res.subTasks as any[];
+
+            const apply = (t: PersistedTask): PersistedTask => ({ ...t, status: nextStatus, subTasks: nextSubTasks });
+            setCustomer((s) => withTaskUpdated(s, taskId, apply));
+            setEditData((s) => withTaskUpdated(s, taskId, apply));
+
+            // פניה ישירה לעמודת הסטטוס הבודדת בטבלת sub_tasks
+            const { error: subErr } = await PersistenceAdapter.updateSubtaskStatus(taskId, subtaskId, completed);
+            // אם שינוי הבן גרם לשינוי סטטוס האב (למשל כולם הושלמו), נעדכן גם את האב בטבלה שלו
+            if (beforeStatus !== nextStatus) {
+                await PersistenceAdapter.updateTaskStatus(taskId, nextStatus);
+            }
+
+            if (subErr) {
+                console.error('[useCustomer.setSubtaskCompleted] persist failed:', subErr.message);
                 await reload();
                 return;
             }
+            
             await LogService.recordTaskChange(
                 taskId,
-                { subTasks: before.subTasks, status: before.status } as unknown as Record<string, unknown>,
-                { subTasks: cascadeResult.subTasks, status: cascadeResult.status } as unknown as Record<string, unknown>
+                { subTasks: beforeSubTasks, status: beforeStatus } as unknown as Record<string, unknown>,
+                { subTasks: nextSubTasks, status: nextStatus } as unknown as Record<string, unknown>
             );
         },
-        [reload]
+        [editData, customer, reload]
     );
 
     const toggleSubtask = useCallback(
         async (taskId: string, subtaskId: string): Promise<void> => {
             const existing = (editData ?? customer)?.tasks.find((t) => t.id === taskId);
-            const sub = existing?.subTasks.find((s) => s.id === subtaskId);
+            const sub = existing?.subTasks?.find((s) => s.id === subtaskId);
             await setSubtaskCompleted(taskId, subtaskId, !sub?.completed);
         },
         [editData, customer, setSubtaskCompleted]
@@ -223,18 +240,23 @@ export function useCustomer(customerId: string | undefined): UseCustomerResult {
 
     const updateSubtaskComment = useCallback(
         async (taskId: string, subtaskId: string, comment: string): Promise<void> => {
-            let before: PersistedSubTask[] | null = null;
-            let after: PersistedSubTask[] | null = null;
-            const apply = (t: PersistedTask): PersistedTask => {
-                before = t.subTasks;
-                after = t.subTasks.map((s) => (s.id === subtaskId ? { ...s, comment } : s));
-                return { ...t, subTasks: after };
-            };
-            setCustomer((s) => withTaskUpdated(s, taskId, apply));
-            setEditData((s) => withTaskUpdated(s, taskId, (t) => ({ ...t, subTasks: after! })));
+            const targetTask = (editData ?? customer)?.tasks.find(t => t.id === taskId);
+            if (!targetTask) return;
 
-            if (!after) return;
-            const { error } = await PersistenceAdapter.updateTaskSubtasks(taskId, after);
+            const beforeSubTasks = targetTask.subTasks || [];
+            const nextSubTasks = beforeSubTasks.map((s) => (s.id === subtaskId ? { ...s, comment } : s));
+
+            const apply = (t: PersistedTask): PersistedTask => ({ ...t, subTasks: nextSubTasks });
+            setCustomer((s) => withTaskUpdated(s, taskId, apply));
+            setEditData((s) => withTaskUpdated(s, taskId, apply));
+
+            // מוטציה ממוקדת: משתמשים בפונקציה הטרנזקציונלית החדשה ב-Adapter שמזריקה הערה ישירות לשורה הנכונה
+            const { error } = await PersistenceAdapter.updateSubtask(subtaskId, taskId, {
+                title: beforeSubTasks.find(s => s.id === subtaskId)?.title || '',
+                priority: targetTask.priority,
+                comment: comment
+            });
+
             if (error) {
                 console.error('[useCustomer.updateSubtaskComment] persist failed:', error.message);
                 await reload();
@@ -242,22 +264,23 @@ export function useCustomer(customerId: string | undefined): UseCustomerResult {
             }
             await LogService.recordTaskChange(
                 taskId,
-                { subTasks: before } as unknown as Record<string, unknown>,
-                { subTasks: after } as unknown as Record<string, unknown>
+                { subTasks: beforeSubTasks } as unknown as Record<string, unknown>,
+                { subTasks: nextSubTasks } as unknown as Record<string, unknown>
             );
         },
-        [reload]
+        [editData, customer, reload]
     );
 
     const updateTaskPriority = useCallback(
         async (taskId: string, priority: TaskPriority): Promise<void> => {
-            let before: TaskPriority | undefined;
-            const apply = (t: PersistedTask): PersistedTask => {
-                before = t.priority;
-                return { ...t, priority };
-            };
+            const targetTask = (editData ?? customer)?.tasks.find(t => t.id === taskId);
+            if (!targetTask) return;
+
+            const beforePriority = targetTask.priority;
+
+            const apply = (t: PersistedTask): PersistedTask => ({ ...t, priority });
             setCustomer((s) => withTaskUpdated(s, taskId, apply));
-            setEditData((s) => withTaskUpdated(s, taskId, (t) => ({ ...t, priority })));
+            setEditData((s) => withTaskUpdated(s, taskId, apply));
 
             const { error } = await PersistenceAdapter.updateTaskPriority(taskId, priority);
             if (error) {
@@ -265,19 +288,21 @@ export function useCustomer(customerId: string | undefined): UseCustomerResult {
                 await reload();
                 return;
             }
+
             await LogService.recordTaskChange(
                 taskId,
-                { priority: before } as unknown as Record<string, unknown>,
+                { priority: beforePriority } as unknown as Record<string, unknown>,
                 { priority } as unknown as Record<string, unknown>
             );
         },
-        [reload]
+        [editData, customer, reload]
     );
 
     const updateTask = useCallback(
         async (taskId: string, patch: Partial<PersistedTask>): Promise<void> => {
             const existing = (editData ?? customer)?.tasks.find((t) => t.id === taskId);
-            // Optimistic merge
+            if (!existing) return;
+
             const apply = (t: PersistedTask): PersistedTask => ({ ...t, ...patch });
             setCustomer((s) => withTaskUpdated(s, taskId, apply));
             setEditData((s) => withTaskUpdated(s, taskId, apply));
@@ -288,13 +313,12 @@ export function useCustomer(customerId: string | undefined): UseCustomerResult {
                 await reload();
                 return;
             }
-            if (existing) {
-                await LogService.recordTaskChange(
-                    taskId,
-                    existing as unknown as Record<string, unknown>,
-                    { ...existing, ...patch } as unknown as Record<string, unknown>
-                );
-            }
+
+            await LogService.recordTaskChange(
+                taskId,
+                existing as unknown as Record<string, unknown>,
+                { ...existing, ...patch } as unknown as Record<string, unknown>
+            );
         },
         [editData, customer, reload]
     );
@@ -330,17 +354,17 @@ export function useCustomer(customerId: string | undefined): UseCustomerResult {
     const tasks = editData?.tasks;
 
     const progress = useMemo(
-        () => (tasks ? calculateWeightedProgress(tasks).percent : 0),
+        () => (tasks && tasks.length > 0 ? calculateWeightedProgress(tasks as any).percent : 0),
         [tasks]
     );
 
     const isFinalized = useMemo(
-        () => (tasks ? isCustomerFinalized(tasks) : false),
+        () => (tasks && tasks.length > 0 ? isCustomerFinalized(tasks as any) : false),
         [tasks]
     );
 
     const visibleFields = useMemo(
-        () => (editData ? listVisibleFields(editData) : []),
+        () => (editData ? listVisibleFields(editData as any) : []),
         [editData]
     );
 

@@ -23,18 +23,6 @@ const CUSTOMER_FROM_DB: Record<string, string> = Object.fromEntries(
   Object.entries(CUSTOMER_TO_DB).map(([k, v]) => [v, k])
 );
 
-const TASK_TO_DB: Record<string, string> = {
-  clientId: 'client_id',
-  parentTaskId: 'parent_task_id',
-  // `priority` is the same in both worlds — listed for documentation only.
-  priority: 'priority',
-  // tasks.createdAt is camelCase in the live schema (unlike clients.created_at
-  // and logs.created_at). No rename for createdAt — column name matches.
-};
-const TASK_FROM_DB: Record<string, string> = Object.fromEntries(
-  Object.entries(TASK_TO_DB).map(([k, v]) => [v, k])
-);
-
 const LOG_TO_DB: Record<string, string> = {
   entityType: 'entity_type',
   entityId: 'entity_id',
@@ -48,26 +36,26 @@ const LOG_FROM_DB: Record<string, string> = Object.fromEntries(
 // Persisted shapes
 // ──────────────────────────────────────────────────────────────────
 
-export type TaskPriority = 'low' | 'medium' | 'high' | 'critical';
+export type TaskPriority = 'low' | 'medium' | 'high';
 
 export interface PersistedSubTask {
   id: string;
+  parentTaskId: string;
   title: string;
   completed: boolean;
-  details?: Record<string, unknown>;
-  comment?: string;
+  comment: string | null;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface PersistedTask {
   id: string;
   clientId: string | null;          // NULL = office-wide task
-  parentTaskId: string | null;
   title: string;
-  status: 'pending' | 'completed';
-  restrictedTo: string | null;
-  subTasks: PersistedSubTask[];
   priority: TaskPriority;
+  status: 'pending' | 'completed';
   createdAt?: string;
+  subTasks?: PersistedSubTask[];
 }
 
 export interface CustomerWithTasks extends Customer {
@@ -85,7 +73,7 @@ export interface PersistedSubtaskRow {
   subtaskTitle: string;
   completed: boolean;
   comment: string;
-  details: Record<string, unknown>;
+  details: Record<string, unknown>;  // נשמר למניעת שבירת קומפוננטות ישנות
   parentTaskId: string | null;
   parentTitle: string;
   priority: TaskPriority;
@@ -175,18 +163,12 @@ function stripImmutableCustomer<T extends Partial<Customer>>(c: T): T {
 // ──────────────────────────────────────────────────────────────────
 
 export const PersistenceAdapter = {
-  // — pure shape mappers (exported for tests / edge cases) —
+  // — pure shape mappers —
   toDbCustomer(c: Partial<Customer>): Record<string, unknown> {
     return renameKeys(c, CUSTOMER_TO_DB) as Record<string, unknown>;
   },
   fromDbCustomer(row: Record<string, unknown>): Customer {
     return renameKeys(row, CUSTOMER_FROM_DB) as unknown as Customer;
-  },
-  toDbTask(t: Partial<PersistedTask>): Record<string, unknown> {
-    return renameKeys(t, TASK_TO_DB) as Record<string, unknown>;
-  },
-  fromDbTask(row: Record<string, unknown>): PersistedTask {
-    return renameKeys(row, TASK_FROM_DB) as unknown as PersistedTask;
   },
   fromDbLog(row: Record<string, unknown>): Record<string, unknown> {
     return renameKeys(row, LOG_FROM_DB);
@@ -195,7 +177,7 @@ export const PersistenceAdapter = {
   // ── Customers ──
   async fetchAllCustomers(): Promise<DbResult<Customer[]>> {
     const { data, error } = await supabase
-      .from('clients')
+      .from('customers')
       .select('*')
       .order('created_at', { ascending: false });
     return {
@@ -206,18 +188,32 @@ export const PersistenceAdapter = {
 
   async fetchAllCustomersWithTasks(): Promise<DbResult<CustomerWithTasks[]>> {
     const { data, error } = await supabase
-      .from('clients')
-      .select('*, tasks(*)')
+      .from('customers')
+      .select('*, parent_tasks(*, sub_tasks(*))')
       .order('created_at', { ascending: false });
+    
     if (!data) return { data: null, error };
+    
     return {
-      data: data.map((row) => {
-        const { tasks: rawTasks, ...rawCust } = row as Record<string, unknown> & {
-          tasks?: Record<string, unknown>[];
-        };
+      data: data.map((row: any) => {
+        const { parent_tasks: rawTasks, ...rawCust } = row;
         return {
           ...PersistenceAdapter.fromDbCustomer(rawCust),
-          tasks: (rawTasks ?? []).map((t) => PersistenceAdapter.fromDbTask(t)),
+          tasks: (rawTasks ?? []).map((t: any) => ({
+            id: t.id,
+            clientId: t.client_id,
+            title: t.title,
+            priority: t.priority,
+            status: t.status,
+            createdAt: t.created_at,
+            subTasks: (t.sub_tasks ?? []).map((s: any) => ({
+              id: s.id,
+              parentTaskId: s.parent_task_id,
+              title: s.title,
+              completed: s.is_completed,
+              comment: s.comment
+            }))
+          })),
         };
       }),
       error,
@@ -226,20 +222,34 @@ export const PersistenceAdapter = {
 
   async fetchCustomerWithTasks(id: string): Promise<DbResult<CustomerWithTasks>> {
     const { data, error } = await supabase
-      .from('clients')
-      .select('*, tasks(*)')
+      .from('customers')
+      .select('*, parent_tasks(*, sub_tasks(*))')
       .eq('id', id)
       .single();
+      
     if (!data) return { data: null, error };
-    const { tasks: rawTasks, ...rawCustomer } = data as Record<string, unknown> & {
-      tasks?: Record<string, unknown>[];
-    };
+    const { parent_tasks: rawTasks, ...rawCustomer } = data as any;
+    
     return {
       data: {
         ...PersistenceAdapter.fromDbCustomer(rawCustomer),
         tasks: (rawTasks ?? [])
-          .map((t) => PersistenceAdapter.fromDbTask(t))
-          .sort((a, b) => (a.createdAt ?? '').localeCompare(b.createdAt ?? '')),
+          .map((t: any) => ({
+            id: t.id,
+            clientId: t.client_id,
+            title: t.title,
+            priority: t.priority,
+            status: t.status,
+            createdAt: t.created_at,
+            subTasks: (t.sub_tasks ?? []).map((s: any) => ({
+              id: s.id,
+              parentTaskId: s.parent_task_id,
+              title: s.title,
+              completed: s.is_completed,
+              comment: s.comment
+            }))
+          }))
+          .sort((a: any, b: any) => (a.createdAt ?? '').localeCompare(b.createdAt ?? '')),
       },
       error,
     };
@@ -247,54 +257,70 @@ export const PersistenceAdapter = {
 
   async insertCustomer(c: Partial<Customer>): Promise<DbResult<Customer>> {
     const row = PersistenceAdapter.toDbCustomer(stripImmutableCustomer(c));
-    const { data, error } = await supabase.from('clients').insert([row]).select().single();
+    const { data, error } = await supabase.from('customers').insert([row]).select().single();
     return { data: data ? PersistenceAdapter.fromDbCustomer(data) : null, error };
   },
 
   async updateCustomer(id: string, c: Partial<Customer>): Promise<DbResult<Customer>> {
     const row = PersistenceAdapter.toDbCustomer(stripImmutableCustomer(c));
     const { data, error } = await supabase
-      .from('clients').update(row).eq('id', id).select().single();
+      .from('customers').update(row).eq('id', id).select().single();
     return { data: data ? PersistenceAdapter.fromDbCustomer(data) : null, error };
   },
 
-  /** Hard-delete a customer and all their tasks (FK first). */
+  /** Hard-delete a customer (All related sub-tables and tasks drop automatically due to CASCADE) */
   async deleteCustomer(id: string): Promise<DbResult<null>> {
-    const { error: taskErr } = await supabase.from('tasks').delete().eq('client_id', id);
-    if (taskErr) return { data: null, error: taskErr };
-    const { error } = await supabase.from('clients').delete().eq('id', id);
+    const { error } = await supabase.from('customers').delete().eq('id', id);
     return { data: null, error };
   },
 
   // ── Tasks ──
   async fetchTasksForCustomer(clientId: string): Promise<DbResult<PersistedTask[]>> {
     const { data, error } = await supabase
-      .from('tasks')
-      .select('*')
+      .from('parent_tasks')
+      .select('*, sub_tasks(*)')
       .eq('client_id', clientId)
-      .order('createdAt', { ascending: true });
+      .order('created_at', { ascending: true });
+      
     return {
-      data: data ? data.map((r) => PersistenceAdapter.fromDbTask(r)) : null,
+      data: data ? data.map((t: any) => ({
+        id: t.id,
+        clientId: t.client_id,
+        title: t.title,
+        priority: t.priority,
+        status: t.status,
+        createdAt: t.created_at,
+        subTasks: (t.sub_tasks ?? []).map((s: any) => ({
+          id: s.id,
+          parentTaskId: s.parent_task_id,
+          title: s.title,
+          completed: s.is_completed,
+          comment: s.comment
+        }))
+      })) : null,
       error,
     };
   },
 
   async fetchAllTasksWithCustomer(): Promise<DbResult<PersistedTaskWithCustomer[]>> {
     const { data, error } = await supabase
-      .from('tasks')
-      .select('*, clients(id, customerDetails)')
-      .order('createdAt', { ascending: false });
+      .from('parent_tasks')
+      .select('*, customers(id, full_name)')
+      .order('created_at', { ascending: false });
+      
     if (!data) return { data: null, error };
     return {
-      data: data.map((row) => {
-        const { clients: client, ...rawTask } = row as Record<string, unknown> & {
-          clients?: { id: string; customerDetails?: { fullName?: string } } | null;
-        };
-        const task = PersistenceAdapter.fromDbTask(rawTask);
+      data: data.map((row: any) => {
+        const { customers: customer, ...rawTask } = row;
         return {
-          ...task,
-          customerId: client?.id ?? task.clientId,
-          customerName: client?.customerDetails?.fullName ?? '',
+          id: rawTask.id,
+          clientId: rawTask.client_id,
+          title: rawTask.title,
+          priority: rawTask.priority,
+          status: rawTask.status,
+          createdAt: rawTask.created_at,
+          customerId: customer?.id ?? rawTask.client_id,
+          customerName: customer?.full_name ?? 'משימה משרדית',
         };
       }),
       error,
@@ -302,83 +328,129 @@ export const PersistenceAdapter = {
   },
 
   /**
-   * Flattens tasks × subTasks into a single list. A task with zero subtasks
-   * still gets one row (parent-itself representation).
+   * Flattens parent_tasks × sub_tasks into a single view list for the central table.
    */
   async fetchAllSubtasksView(): Promise<DbResult<PersistedSubtaskRow[]>> {
     const { data, error } = await supabase
-      .from('tasks')
-      .select('*, clients(id, customerDetails)')
-      .order('createdAt', { ascending: false });
-    if (!data) return { data: null, error };
+      .from('sub_tasks')
+      .select(`
+        id,
+        title,
+        is_completed,
+        comment,
+        parent_tasks (
+          id,
+          title,
+          priority,
+          status,
+          client_id,
+          customers (
+            id,
+            full_name
+          )
+        )
+      `)
+      .order('created_at', { foreignTable: 'parent_tasks', ascending: false });
 
-    const rows: PersistedSubtaskRow[] = [];
-    for (const raw of data) {
-      const { clients: client, ...rawTask } = raw as Record<string, unknown> & {
-        clients?: { id: string; customerDetails?: { fullName?: string } } | null;
+    if (error) return { data: null, error };
+    if (!data) return { data: [], error: null };
+
+    const rows: PersistedSubtaskRow[] = data.map((item: any) => {
+      const parent = item.parent_tasks;
+      return {
+        taskId: parent?.id || '',
+        subtaskId: item.id,
+        subtaskTitle: item.title,
+        completed: !!item.is_completed,
+        comment: item.comment || '',
+        details: {}, 
+        parentTaskId: parent?.id || null,
+        parentTitle: parent?.title || '',
+        priority: (parent?.priority || 'medium') as TaskPriority,
+        taskStatus: (parent?.status || 'pending') as 'pending' | 'completed',
+        clientId: parent?.client_id || null,
+        customerName: parent?.customers?.full_name || 'משימה משרדית'
       };
-      const task = PersistenceAdapter.fromDbTask(rawTask);
-      const subs = task.subTasks ?? [];
-      const customerName = client?.customerDetails?.fullName ?? '';
-      const customerIdResolved = client?.id ?? task.clientId ?? null;
+    });
 
-      if (subs.length === 0) {
-        rows.push({
-          taskId: task.id,
-          subtaskId: null,
-          subtaskTitle: task.title,
-          completed: task.status === 'completed',
-          comment: '',
-          details: {},
-          parentTaskId: task.parentTaskId,
-          parentTitle: task.title,
-          priority: task.priority ?? 'medium',
-          taskStatus: task.status,
-          clientId: customerIdResolved,
-          customerName,
-        });
-        continue;
-      }
-      for (const sub of subs) {
-        rows.push({
-          taskId: task.id,
-          subtaskId: sub.id,
-          subtaskTitle: sub.title,
-          completed: !!sub.completed,
-          comment: sub.comment ?? '',
-          details: sub.details ?? {},
-          parentTaskId: task.parentTaskId,
-          parentTitle: task.title,
-          priority: task.priority ?? 'medium',
-          taskStatus: task.status,
-          clientId: customerIdResolved,
-          customerName,
-        });
-      }
-    }
-    return { data: rows, error };
+    return { data: rows, error: null };
   },
 
+  /** Bulk implementation for automated services */
   async insertTasks(tasks: Partial<PersistedTask>[]): Promise<DbResult<null>> {
     if (tasks.length === 0) return { data: null, error: null };
-    const rows = tasks.map((t) => PersistenceAdapter.toDbTask(t));
-    const { error } = await supabase.from('tasks').insert(rows);
-    return { data: null, error };
+    
+    for (const t of tasks) {
+      const { data: parent, error: pErr } = await supabase
+        .from('parent_tasks')
+        .insert({
+          client_id: t.clientId,
+          title: t.title,
+          priority: t.priority || 'medium',
+          status: t.status || 'pending'
+        })
+        .select('id')
+        .single();
+        
+      if (pErr) return { data: null, error: pErr };
+
+      if (t.subTasks && t.subTasks.length > 0) {
+        const subRows = t.subTasks.map((s) => ({
+          parent_task_id: parent.id,
+          title: s.title,
+          is_completed: s.completed || false,
+          comment: s.comment || ''
+        }));
+        const { error: sErr } = await supabase.from('sub_tasks').insert(subRows);
+        if (sErr) return { data: null, error: sErr };
+      }
+    }
+    return { data: null, error: null };
   },
 
-  /** Insert a single task — supports office-wide tasks via clientId === null. */
-  async insertSingleTask(task: Partial<PersistedTask>): Promise<DbResult<PersistedTask>> {
-    const row = PersistenceAdapter.toDbTask(task);
-    const { data, error } = await supabase.from('tasks').insert([row]).select().single();
-    return {
-      data: data ? PersistenceAdapter.fromDbTask(data) : null,
-      error,
-    };
+  /** Insert a single task — fully strict, strongly-typed. */
+  async insertSingleTask(taskData: { 
+    title: string; 
+    clientId: string | null; 
+    priority: TaskPriority; 
+    subTasks: { title: string }[] 
+  }) {
+    try {
+      const { data: parent, error: parentErr } = await supabase
+        .from('parent_tasks')
+        .insert({
+          title: taskData.title,
+          client_id: taskData.clientId,
+          priority: taskData.priority,
+          status: 'pending'
+        })
+        .select('id')
+        .single();
+
+      if (parentErr) throw parentErr;
+
+      if (taskData.subTasks && taskData.subTasks.length > 0) {
+        const subtasksRows = taskData.subTasks.map(sub => ({
+          parent_task_id: parent.id,
+          title: sub.title,
+          is_completed: false,
+          comment: ''
+        }));
+
+        const { error: subErr } = await supabase.from('sub_tasks').insert(subtasksRows);
+        if (subErr) throw subErr;
+      }
+
+      return { success: true, error: null };
+    } catch (err: any) {
+      console.error("Error in insertSingleTask:", err);
+      return { success: false, error: err };
+    }
   },
 
   async deletePendingTasksForCustomer(clientId: string): Promise<DbResult<null>> {
     const { error } = await supabase
-      .from('tasks')
+      .from('parent_tasks')
       .delete()
       .eq('client_id', clientId)
       .eq('status', 'pending');
@@ -387,93 +459,112 @@ export const PersistenceAdapter = {
 
   async deleteTasksByIds(ids: string[]): Promise<DbResult<null>> {
     if (ids.length === 0) return { data: null, error: null };
-    const { error } = await supabase.from('tasks').delete().in('id', ids);
+    const { error } = await supabase.from('parent_tasks').delete().in('id', ids);
     return { data: null, error };
   },
 
   async deleteTask(id: string): Promise<DbResult<null>> {
-    const { error } = await supabase.from('tasks').delete().eq('id', id);
+    const { error } = await supabase.from('parent_tasks').delete().eq('id', id);
     return { data: null, error };
   },
 
   async updateTaskStatus(taskId: string, status: 'pending' | 'completed'): Promise<DbResult<null>> {
-    const { error } = await supabase.from('tasks').update({ status }).eq('id', taskId);
+    const { error } = await supabase.from('parent_tasks').update({ status }).eq('id', taskId);
     return { data: null, error };
   },
 
   async updateTaskPriority(taskId: string, priority: TaskPriority): Promise<DbResult<null>> {
-    const { error } = await supabase.from('tasks').update({ priority }).eq('id', taskId);
+    const { error } = await supabase.from('parent_tasks').update({ priority }).eq('id', taskId);
     return { data: null, error };
   },
 
+  /** Replaces old JSONB multi-update flow with structural upserts */
   async updateTaskSubtasks(
     taskId: string,
     subTasks: PersistedSubTask[]
   ): Promise<DbResult<null>> {
-    const { error } = await supabase.from('tasks').update({ subTasks }).eq('id', taskId);
+    if (subTasks.length === 0) return { data: null, error: null };
+    
+    const rows = subTasks.map(s => ({
+      id: s.id || undefined,
+      parent_task_id: taskId,
+      title: s.title,
+      is_completed: s.completed,
+      comment: s.comment
+    }));
+    
+    const { error } = await supabase.from('sub_tasks').upsert(rows);
     return { data: null, error };
   },
 
-  /** Toggle/set the completed flag of one subtask inside a task's JSONB array. */
+  /** Toggles a structural subtask row status directly */
   async updateSubtaskStatus(
-    taskId: string,
+    _taskId: string, // Keep parameter signature for backward compatibility
     subtaskId: string,
     completed: boolean
   ): Promise<DbResult<null>> {
-    // Fetch current subTasks → mutate → persist. JSONB array updates can't be
-    // partial in plain Supabase JS; we read-modify-write.
-    const { data: existing, error: fetchErr } = await supabase
-      .from('tasks')
-      .select('subTasks')
-      .eq('id', taskId)
-      .single();
-    if (fetchErr) return { data: null, error: fetchErr };
-    const next = ((existing?.subTasks as PersistedSubTask[]) ?? []).map((s) =>
-      s.id === subtaskId ? { ...s, completed } : s
-    );
-    const { error } = await supabase.from('tasks').update({ subTasks: next }).eq('id', taskId);
+    const { error } = await supabase
+      .from('sub_tasks')
+      .update({ is_completed: completed, updated_at: new Date().toISOString() })
+      .eq('id', subtaskId);
     return { data: null, error };
   },
 
-  /** Update a single subtask's title (used by the Tasks-page inline editor). */
+  /** Update a single subtask's title from inline editor */
   async updateSubtaskTitle(
-    taskId: string,
+    _taskId: string,
     subtaskId: string,
     title: string
   ): Promise<DbResult<null>> {
-    const { data: existing, error: fetchErr } = await supabase
-      .from('tasks')
-      .select('subTasks')
-      .eq('id', taskId)
-      .single();
-    if (fetchErr) return { data: null, error: fetchErr };
-    const next = ((existing?.subTasks as PersistedSubTask[]) ?? []).map((s) =>
-      s.id === subtaskId ? { ...s, title } : s
-    );
-    const { error } = await supabase.from('tasks').update({ subTasks: next }).eq('id', taskId);
+    const { error } = await supabase
+      .from('sub_tasks')
+      .update({ title: title.trim(), updated_at: new Date().toISOString() })
+      .eq('id', subtaskId);
     return { data: null, error };
   },
 
-  /** Update a task's top-level title (used by Tasks-page inline editor for parent-only rows). */
+  /** Update an item's title in parent_tasks */
   async updateTaskTitle(taskId: string, title: string): Promise<DbResult<null>> {
-    const { error } = await supabase.from('tasks').update({ title }).eq('id', taskId);
+    const { error } = await supabase.from('parent_tasks').update({ title: title.trim() }).eq('id', taskId);
     return { data: null, error };
+  },
+
+  /** Combined direct transactional subtask + priority editor */
+  async updateSubtask(subtaskId: string, parentTaskId: string, updates: { title: string; priority: string; comment: string }) {
+    try {
+      const { error: subErr } = await supabase
+        .from('sub_tasks')
+        .update({ title: updates.title.trim(), comment: updates.comment.trim(), updated_at: new Date().toISOString() })
+        .eq('id', subtaskId);
+
+      if (subErr) throw subErr;
+
+      const { error: parentErr } = await supabase
+        .from('parent_tasks')
+        .update({ priority: updates.priority })
+        .eq('id', parentTaskId);
+
+      if (parentErr) throw parentErr;
+
+      return { success: true, error: null };
+    } catch (err: any) {
+      console.error("Adapter transactional failure:", err);
+      return { success: false, error: err };
+    }
   },
 
   async updateTask(taskId: string, patch: Partial<PersistedTask>): Promise<DbResult<null>> {
-    const row = PersistenceAdapter.toDbTask(patch);
-    const { error } = await supabase.from('tasks').update(row).eq('id', taskId);
+    const row: Record<string, any> = {};
+    if (patch.title) row.title = patch.title;
+    if (patch.priority) row.priority = patch.priority;
+    if (patch.status) row.status = patch.status;
+    if (patch.clientId) row.client_id = patch.clientId;
+
+    const { error } = await supabase.from('parent_tasks').update(row).eq('id', taskId);
     return { data: null, error };
   },
 
   // ── Logs ──
-  /**
-   * Defensive writer. Normalises entity_id (must be UUID or null) and ensures
-   * required text fields aren't undefined — the previous bug where logs
-   * vanished traced to the `entity_id` column being typed `uuid` and
-   * rejecting non-UUID strings ("system", etc.) emitted by escape-hatch
-   * `recordAction` calls.
-   */
   async insertLog(row: Record<string, unknown>): Promise<DbResult<null>> {
     const safe: Record<string, unknown> = {
       actor: typeof row.actor === 'string' && row.actor ? row.actor : 'unknown',
@@ -485,8 +576,6 @@ export const PersistenceAdapter = {
     const dbRow = renameKeys(safe, LOG_TO_DB);
     const { error } = await supabase.from('logs').insert([dbRow]);
     if (error) {
-      // Surface insert errors loudly — silent log failures were the original
-      // "logs not persisting" symptom.
       console.error('[PersistenceAdapter.insertLog] insert failed:', error.message, dbRow);
     }
     return { data: null, error };
