@@ -7,6 +7,7 @@ import {
     PRIORITY_LEVELS,
     PRIORITY_STYLES,
 } from '../registries/CustomerRegistry';
+import { authService } from '../services/authService';
 
 // הגדרת המבנה של שורת תת-משימה במערכת (מתוך ה-Subtasks View המנורמל)
 interface SubtaskViewRow {
@@ -18,7 +19,7 @@ interface SubtaskViewRow {
     clientId: string | null;
     customerName: string | null;
     completed: boolean;
-    priority: 'low' | 'medium' | 'high';
+    priority: 'low' | 'medium' | 'high' | 'critical'; // שונה לכלול critical
     comment?: string | null;
     taskStatus?: 'pending' | 'completed';
 }
@@ -34,6 +35,7 @@ interface TaskFilters {
     statuses: string[];
     categories: string[];
     clients: string[];
+    priorities: string[]; // 👈 הוספת סינון דחיפות מרובה
     search: string;
 }
 
@@ -50,6 +52,7 @@ interface SubtaskTableRowProps {
     onSaveTitle: (title: string) => void;
     onCustomerClick: () => void;
     onEditClick: () => void;
+    onPriorityChange: (priority: string) => void; // 👈 פרופ חדש לשינוי דחיפות מהיר
 }
 
 interface CreateTaskModalProps {
@@ -59,6 +62,14 @@ interface CreateTaskModalProps {
     onCreated: () => void;
 }
 
+// ✨ משקולות לצורך מיון דחיפות פנימי (מהגבוה לנמוך)
+const PRIORITY_WEIGHTS = {
+    critical: 4,
+    high: 3,
+    medium: 2,
+    low: 1
+};
+
 export default function Tasks(): React.ReactElement {
     const navigate = useNavigate();
     const [rows, setRows] = useState<SubtaskViewRow[]>([]);
@@ -66,14 +77,17 @@ export default function Tasks(): React.ReactElement {
     const [loading, setLoading] = useState<boolean>(true);
     const [editingTask, setEditingTask] = useState<SubtaskViewRow | null>(null);
     const [showCreate, setShowCreate] = useState<boolean>(false);
-
     const [filters, setFilters] = useState<TaskFilters>({
         statuses: [],
         categories: [],
         clients: [],
+        priorities: [], // 👈 איתחול מערך ריק
         search: '',
     });
-
+    const [sortConfig, setSortConfig] = useState<{ sortBy: 'title' | 'priority' | null; direction: 'asc' | 'desc' | null }>({
+        sortBy: null,
+        direction: null
+    });
     const load = useCallback(async (): Promise<void> => {
         setLoading(true);
         const [view, custList] = await Promise.all([
@@ -81,7 +95,6 @@ export default function Tasks(): React.ReactElement {
             PersistenceAdapter.fetchAllCustomers(),
         ]);
         setRows((view.data as SubtaskViewRow[]) ?? []);
-        // המרה לטיפוס המתאים כדי למנוע קריסה בקומפוננטת המודאל
         setCustomers((custList.data as any[]) ?? []);
         setLoading(false);
     }, []);
@@ -89,13 +102,16 @@ export default function Tasks(): React.ReactElement {
     useEffect(() => { load(); }, [load]);
 
     const categories = useMemo((): [string, string][] => {
-        const map = new Map<string, string>();
+        const uniqueTitles = new Set<string>();
         for (const r of rows) {
-            if (r.taskId && !map.has(r.taskId)) {
-                map.set(r.taskId, r.parentTitle || r.taskId);
+            const title = r.parentTitle;
+            if (title && title.trim() !== '') {
+                uniqueTitles.add(title.trim());
             }
         }
-        return Array.from(map.entries()).sort((a, b) => a[1].localeCompare(b[1]));
+        return Array.from(uniqueTitles)
+            .sort((a, b) => a.localeCompare(b))
+            .map(title => [title, title]);
     }, [rows]);
 
     const clientOptions = useMemo((): [string, string][] => {
@@ -109,50 +125,106 @@ export default function Tasks(): React.ReactElement {
         return list;
     }, [rows]);
 
+    const handlePriorityChange = useCallback(async (row: SubtaskViewRow, newPriority: string) => {
+        const prevPriority = row.priority;
+        setRows(prev => prev.map(r =>
+            r.taskId === row.taskId && r.subtaskId === row.subtaskId
+                ? { ...r, priority: newPriority as any }
+                : r
+        ));
+        const { error } = row.subtaskId === null
+            ? await PersistenceAdapter.updateTaskStatus(row.taskId, row.taskStatus || 'pending')
+            : await PersistenceAdapter.updateSubtaskPriority(row.subtaskId, newPriority as any);
+        if (error) {
+            console.error(error.message);
+            setRows(prev => prev.map(r =>
+                r.taskId === row.taskId && r.subtaskId === row.subtaskId
+                    ? { ...r, priority: prevPriority }
+                    : r
+            ));
+        }
+    }, []);
+
     const filtered = useMemo(() => rows.filter(r => {
         const statusKey = r.completed ? 'completed' : 'pending';
         if (filters.statuses.length && !filters.statuses.includes(statusKey)) return false;
-        if (filters.categories.length && r.taskId && !filters.categories.includes(r.taskId)) return false;
+        if (filters.categories.length && !filters.categories.includes(r.parentTitle || '')) return false;
+        const itemPriority = (r.priority || 'medium').toLowerCase();
+        if (filters.priorities.length && !filters.priorities.includes(itemPriority)) return false;
         if (filters.clients.length) {
-            const key = r.clientId ?? '__OFFICE__';
-            if (!filters.clients.includes(key)) return false;
+            if (!filters.clients.includes(r.clientId ?? '__OFFICE__')) return false;
         }
         if (filters.search) {
             const q = filters.search.toLowerCase();
-            const haystack = `${r.subtaskTitle || ''} ${r.parentTitle || ''} ${r.customerName || ''}`.toLowerCase();
-            if (!haystack.includes(q)) return false;
+            if (
+                !(r.subtaskTitle || '').toLowerCase().includes(q) &&
+                !(r.parentTitle || '').toLowerCase().includes(q) &&
+                !(r.customerName || '').toLowerCase().includes(q)
+            ) return false;
         }
         return true;
     }), [rows, filters]);
 
-    // הפעלת שינוי הסטטוס ישירות מול הטבלה הנקייה ב-Adapter
-    const setSubtaskCompleted = useCallback(async (row: SubtaskViewRow, completed: boolean): Promise<void> => {
-        setRows(prev => prev.map(r =>
-            r.taskId === row.taskId && r.subtaskId === row.subtaskId
-                ? { ...r, completed }
-                : r
-        ));
+    const sorted = useMemo(() => {
+        if (!sortConfig.sortBy || !sortConfig.direction) return filtered;
+        const { sortBy, direction } = sortConfig;
+        const isAsc = direction === 'asc';
+        return [...filtered].sort((a, b) => {
+            if (sortBy === 'title') {
+                return isAsc
+                    ? (a.subtaskTitle || '').localeCompare(b.subtaskTitle || '')
+                    : (b.subtaskTitle || '').localeCompare(a.subtaskTitle || '');
+            }
+            if (sortBy === 'priority') {
+                const w: Record<string, number> = { low: 1, medium: 2, high: 3, critical: 4 };
+                const wA = w[(a.priority || 'medium').toLowerCase()] || 2;
+                const wB = w[(b.priority || 'medium').toLowerCase()] || 2;
+                return isAsc ? wA - wB : wB - wA;
+            }
+            return 0;
+        });
+    }, [filtered, sortConfig]);
 
-        if (row.subtaskId === null) {
-            const next = completed ? 'completed' : 'pending';
-            const { error } = await PersistenceAdapter.updateTaskStatus(row.taskId, next);
-            if (error) { console.error(error.message); load(); return; }
-            await LogService.recordTaskStatusChange(row.taskId, completed ? 'pending' : 'completed', next);
+// בתוך src/pages/Tasks.tsx
+
+const setSubtaskCompleted = useCallback(async (row: SubtaskViewRow, completed: boolean): Promise<void> => {
+    if (!authService.canApproveFinal(row.subtaskTitle)) {
+        alert("אין לך הרשאה לשנות את הסטטוס של אישור ניהול סופי!");
+        return;
+    }
+
+    const prevCompleted = row.completed;
+    setRows(prev => prev.map(r =>
+        r.taskId === row.taskId && r.subtaskId === row.subtaskId ? { ...r, completed } : r
+    ));
+
+    if (row.subtaskId === null) {
+        const nextStatus = completed ? 'completed' : 'pending';
+        const { error } = await PersistenceAdapter.updateTaskStatus(row.taskId, nextStatus);
+        if (error) {
+            console.error(error.message);
+            setRows(prev => prev.map(r =>
+                r.taskId === row.taskId && r.subtaskId === row.subtaskId ? { ...r, completed: prevCompleted } : r
+            ));
             return;
         }
-
-        // עדכון סטטוס תת המשימה בטבלה המנורמלת sub_tasks
+        await LogService.recordTaskStatusChange(row.taskId, completed ? 'pending' : 'completed', nextStatus);
+    } else {
         const { error } = await PersistenceAdapter.updateSubtaskStatus(row.taskId, row.subtaskId, completed);
-        if (error) { console.error(error.message); load(); return; }
+        if (error) {
+            console.error(error.message);
+            setRows(prev => prev.map(r =>
+                r.taskId === row.taskId && r.subtaskId === row.subtaskId ? { ...r, completed: prevCompleted } : r
+            ));
+        }
+    }
+}, []);
 
-        await LogService.recordAction('subtask.toggle', 'task', row.taskId, { subtaskId: row.subtaskId, completed });
-    }, [load]);
-
-    // שמירת כותרת מהירה ישירות מהשורה בטבלה
     const saveTitle = useCallback(async (row: SubtaskViewRow, newTitle: string): Promise<void> => {
         const trimmed = newTitle.trim();
         if (!trimmed || trimmed === row.subtaskTitle) return;
 
+        const prevTitle = row.subtaskTitle;
         setRows(prev => prev.map(r =>
             r.taskId === row.taskId && r.subtaskId === row.subtaskId
                 ? { ...r, subtaskTitle: trimmed }
@@ -162,19 +234,44 @@ export default function Tasks(): React.ReactElement {
         const { error } = row.subtaskId === null
             ? await PersistenceAdapter.updateTaskTitle(row.taskId, trimmed)
             : await PersistenceAdapter.updateSubtaskTitle(row.taskId, row.subtaskId, trimmed);
-            
-        if (error) { console.error(error.message); load(); return; }
-        await LogService.recordTaskChange(row.taskId, { title: row.subtaskTitle }, { title: trimmed });
-    }, [load]);
 
-    const resetFilters = (): void => setFilters({ statuses: [], categories: [], clients: [], search: '' });
+        if (error) {
+            console.error(error.message);
+            setRows(prev => prev.map(r =>
+                r.taskId === row.taskId && r.subtaskId === row.subtaskId
+                    ? { ...r, subtaskTitle: prevTitle }
+                    : r
+            ));
+            return;
+        }
+        await LogService.recordTaskChange(row.taskId, { title: prevTitle }, { title: trimmed });
+    }, []);
+
+    const resetFilters = (): void => setFilters({ statuses: [], categories: [], clients: [], priorities: [], search: '' });
+    const handleSort = (field: 'title' | 'priority') => {
+        setSortConfig(prev => {
+            if (prev.sortBy !== field) {
+                return { sortBy: field, direction: 'asc' }; // לחיצה ראשונה: עולה
+            }
+            if (prev.direction === 'asc') {
+                return { sortBy: field, direction: 'desc' }; // לחיצה שנייה: יורד
+            }
+            return { sortBy: null, direction: null }; // לחיצה שלישית: איפוס (ללא מיון)
+        });
+    };
+
+    // פונקציית עזר קטנה שמחזירה את האייקון הנכון לפי מצב המיון הנוכחי של העמודה
+    const getSortIcon = (field: 'title' | 'priority') => {
+        if (sortConfig.sortBy !== field) return ' ⇅';
+        if (sortConfig.direction === 'asc') return ' ↑';
+        return ' ↓';
+    };
 
     return (
         <div className="p-6 min-h-screen" dir="rtl">
             <div className="max-w-7xl mx-auto">
                 <div className="flex justify-between items-center mb-6">
                     <div>
-                        <h1 className="text-3xl font-black text-slate-900">Missions</h1>
                         <h1 className="text-3xl font-black text-slate-900">משימות</h1>
                         <p className="text-sm text-slate-500 mt-1">כל המשימות במערכת, מבט תת-משימה מנורמל</p>
                     </div>
@@ -188,7 +285,7 @@ export default function Tasks(): React.ReactElement {
 
                 {/* Filter bar */}
                 <div className="card-base p-4 mb-6 bg-white rounded-2xl border shadow-sm">
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                    <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
                         <input
                             type="text"
                             placeholder="🔍 חיפוש..."
@@ -214,9 +311,16 @@ export default function Tasks(): React.ReactElement {
                             selected={filters.clients}
                             onChange={(s) => setFilters({ ...filters, clients: s })}
                         />
+                        {/* 👈 הזרקת ה-MultiSelect החדש של הדחיפות בדיוק לפי המבנה שלך */}
+                        <MultiSelect
+                            label="דחיפות"
+                            options={[['low', 'נמוכה'], ['medium', 'בינונית'], ['high', 'גבוהה'], ['critical', 'קריטית']]}
+                            selected={filters.priorities}
+                            onChange={(s) => setFilters({ ...filters, priorities: s })}
+                        />
                     </div>
                     <div className="mt-3 flex justify-between items-center">
-                        <span className="text-xs text-slate-500 font-medium">מציג {filtered.length} מתוך {rows.length} משימות</span>
+                        <span className="text-xs text-slate-500 font-medium">מציג {sorted.length} מתוך {rows.length} משימות</span>
                         <button onClick={resetFilters} className="cursor-pointer text-sm text-blue-600 hover:text-blue-800 font-bold transition">
                             ניקוי סינונים
                         </button>
@@ -226,23 +330,52 @@ export default function Tasks(): React.ReactElement {
                 {/* Table */}
                 <div className="card-base overflow-hidden bg-white rounded-2xl border shadow-sm">
                     {loading ? (
-                        <div className="p-12 text-center font-bold text-slate-400">טוען...</div>
-                    ) : filtered.length === 0 ? (
+                        <table className="w-full text-right">
+                            <thead className="bg-slate-50 border-b border-slate-200">
+                                <tr>{[1,2,3,4,5,6].map(i => (
+                                    <th key={i} className="p-3"><div className="h-3 bg-slate-200 rounded animate-pulse" /></th>
+                                ))}</tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                                {[1,2,3,4,5,6,7,8].map(i => (
+                                    <tr key={i}>{[1,2,3,4,5,6].map(j => (
+                                        <td key={j} className="p-3"><div className="h-5 bg-slate-100 rounded animate-pulse" /></td>
+                                    ))}</tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    ) : sorted.length === 0 ? (
                         <div className="p-12 text-center text-slate-400 italic">לא נמצאו משימות תואמות.</div>
                     ) : (
                         <table className="w-full text-right">
                             <thead className="bg-slate-50 border-b border-slate-200">
                                 <tr>
                                     <th className="p-3 text-xs font-bold text-slate-600 uppercase tracking-wider w-12 text-center">✓</th>
-                                    <th className="p-3 text-xs font-bold text-slate-600 uppercase tracking-wider">משימה</th>
+
+                                    {/* עמודת משימה לחיצה למיון לפי תאריך/כותרת */}
+                                    <th
+                                        onClick={() => handleSort('title')}
+                                        className="p-3 text-xs font-bold text-slate-600 uppercase tracking-wider cursor-pointer hover:bg-slate-100 transition select-none"
+                                    >
+                                        משימה <span className="text-blue-600 font-black">{getSortIcon('title')}</span>
+                                    </th>
+
                                     <th className="p-3 text-xs font-bold text-slate-600 uppercase tracking-wider">לקוח</th>
                                     <th className="p-3 text-xs font-bold text-slate-600 uppercase tracking-wider">קטגוריה</th>
-                                    <th className="p-3 text-xs font-bold text-slate-600 uppercase tracking-wider">עדיפות</th>
+
+                                    {/* עמודת עדיפות לחיצה למיון */}
+                                    <th
+                                        onClick={() => handleSort('priority')}
+                                        className="p-3 text-xs font-bold text-slate-600 uppercase tracking-wider cursor-pointer hover:bg-slate-100 transition select-none"
+                                    >
+                                        עדיפות <span className="text-blue-600 font-black">{getSortIcon('priority')}</span>
+                                    </th>
+
                                     <th className="p-3 text-xs font-bold text-slate-600 uppercase tracking-wider"></th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100">
-                                {filtered.map((row) => (
+                                {sorted.map((row) => (
                                     <SubtaskTableRow
                                         key={`${row.taskId}-${row.subtaskId ?? 'parent'}`}
                                         row={row}
@@ -250,6 +383,7 @@ export default function Tasks(): React.ReactElement {
                                         onSaveTitle={(t) => saveTitle(row, t)}
                                         onCustomerClick={() => row.clientId && navigate(`/admin/customers/${row.clientId}`)}
                                         onEditClick={() => setEditingTask(row)}
+                                        onPriorityChange={(p) => handlePriorityChange(row, p)} // 👈 פרופ חדש מוזרק לשורה
                                     />
                                 ))}
                             </tbody>
@@ -273,7 +407,7 @@ export default function Tasks(): React.ReactElement {
 // Multi-select dropdown
 // ──────────────────────────────────────────────────────────────────
 
-const MultiSelect: React.FC<MultiSelectProps> = ({ label, options, selected, onChange }) => {
+const MultiSelect: React.FC<MultiSelectProps> = React.memo(({ label, options, selected, onChange }) => {
     const [open, setOpen] = useState<boolean>(false);
     const summary = selected.length === 0
         ? 'הכל'
@@ -324,18 +458,19 @@ const MultiSelect: React.FC<MultiSelectProps> = ({ label, options, selected, onC
             )}
         </div>
     );
-};
+});
 
 // ──────────────────────────────────────────────────────────────────
-// Single row component
+// Single row component (Updated with explicit Priority Selector)
 // ──────────────────────────────────────────────────────────────────
 
-const SubtaskTableRow: React.FC<SubtaskTableRowProps> = ({ 
-    row, 
-    onToggle, 
-    onSaveTitle, 
+const SubtaskTableRow: React.FC<SubtaskTableRowProps> = React.memo(({
+    row,
+    onToggle,
+    onSaveTitle,
     onCustomerClick,
-    onEditClick
+    onEditClick,
+    onPriorityChange // 👈 חילוץ הפרופ החדש
 }) => {
     const [editing, setEditing] = useState<boolean>(false);
     const [draft, setDraft] = useState<string>(row.subtaskTitle);
@@ -345,7 +480,9 @@ const SubtaskTableRow: React.FC<SubtaskTableRowProps> = ({
         onSaveTitle(draft);
     };
 
-    const priorityStyle = PRIORITY_STYLES[row.priority || 'medium'];
+    // ✨ שימוש ב-PRIORITY_STYLES מעודכן
+    const currentPriority = row.priority || 'medium';
+    const priorityStyle = PRIORITY_STYLES[currentPriority as 'low' | 'medium' | 'high' | 'critical'] || PRIORITY_STYLES['medium'];
 
     return (
         <tr className={`transition ${row.completed ? 'bg-green-50/40' : 'hover:bg-slate-50'}`}>
@@ -413,11 +550,25 @@ const SubtaskTableRow: React.FC<SubtaskTableRowProps> = ({
                     {row.parentTitle || '—'}
                 </span>
             </td>
+
+            {/* ✨ הפיכת רמת הדחיפות לסלקטור לחיץ וערוך ישירות מתוך השורה (סעיף 1) */}
             <td className="p-3">
-                <span className={`${priorityStyle?.bg || 'bg-slate-50'} ${priorityStyle?.text || 'text-slate-600'} ${priorityStyle?.border || 'border-slate-200'} border px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider`}>
-                    {priorityStyle?.label || 'רגיל'}
-                </span>
+                <div className="relative inline-block">
+                    <select
+                        value={currentPriority}
+                        onChange={(e) => onPriorityChange(e.target.value)}
+                        className={`cursor-pointer text-center font-black uppercase text-[10px] tracking-wider px-2.5 py-0.5 rounded-full border transition appearance-none ${priorityStyle?.bg || 'bg-slate-50'} ${priorityStyle?.text || 'text-slate-600'} ${priorityStyle?.border || 'border-slate-200'}`}
+                        style={{ backgroundImage: 'none' }}
+                    >
+                        {PRIORITY_LEVELS.map((lv: string) => (
+                            <option key={lv} value={lv}>
+                                {PRIORITY_STYLES[lv as 'low' | 'medium' | 'high' | 'critical']?.label || lv}
+                            </option>
+                        ))}
+                    </select>
+                </div>
             </td>
+
             <td className="p-3 text-left">
                 {row.taskStatus === 'completed' && row.subtaskId !== null && (
                     <span className="text-[10px] text-green-700 font-bold">משימת אב הושלמה</span>
@@ -425,26 +576,25 @@ const SubtaskTableRow: React.FC<SubtaskTableRowProps> = ({
             </td>
         </tr>
     );
-};
+});
 
 // ──────────────────────────────────────────────────────────────────
 // Create task modal component (Transactional & Fixed UI Layout)
 // ──────────────────────────────────────────────────────────────────
 
-const CreateTaskModal: React.FC<CreateTaskModalProps> = ({ customers, taskToEdit, onClose, onCreated }) => {
+export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({ customers, taskToEdit, onClose, onCreated }) => {
     const [title, setTitle] = useState<string>(taskToEdit ? taskToEdit.subtaskTitle : '');
     const [isOffice, setIsOffice] = useState<boolean>(taskToEdit ? !taskToEdit.clientId : false);
     const [clientId, setClientId] = useState<string>(taskToEdit?.clientId || '');
     const [priority, setPriority] = useState<string>(taskToEdit?.priority || 'medium');
+    const [isCompleted, setIsCompleted] = useState<boolean>(taskToEdit ? taskToEdit.completed : false);
     const [comment, setComment] = useState<string>(taskToEdit?.comment || '');
-    
     const [siblingSubtasks, setSiblingSubtasks] = useState<any[]>([]);
     const [saving, setSaving] = useState<boolean>(false);
     const [err, setErr] = useState<string>('');
 
-    // אפקט שליפת משימות אחיות מתוך ה-Database המנורמל החדש
     useEffect(() => {
-        if (taskToEdit && taskToEdit.clientId) {
+        if (taskToEdit && taskToEdit.clientId && taskToEdit.taskId) {
             PersistenceAdapter.fetchTasksForCustomer(taskToEdit.clientId).then(({ data }) => {
                 const currentTask = (data || []).find((t: any) => t.id === taskToEdit.taskId);
                 if (currentTask && currentTask.subTasks) {
@@ -455,51 +605,71 @@ const CreateTaskModal: React.FC<CreateTaskModalProps> = ({ customers, taskToEdit
         }
     }, [taskToEdit]);
 
-    const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-        e.preventDefault();
-        setErr('');
-        if (!title.trim()) { setErr('כותרת חובה'); return; }
-        if (!isOffice && !clientId) { setErr('בחר לקוח או סמן משימה משרדית'); return; }
-        setSaving(true);
+    const originalComment = useMemo(() => {
+        if (taskToEdit?.comment) return taskToEdit.comment;
+        if (!isOffice && clientId) {
+            const selectedCust = customers.find(c => c.id === clientId);
+            return selectedCust?.setup_notes || '';
+        }
+        return '';
+    }, [taskToEdit, isOffice, clientId, customers]);
 
-        let result;
+// בתוך handleSubmit בקומפוננטה CreateTaskModal (בתחתית Tasks.tsx)
 
-        if (taskToEdit) {
-            // קריאה ישירה לפונקציית העדכון האטומית והמנורמלת ב-Adapter
-            result = await PersistenceAdapter.updateSubtask(
-                taskToEdit.subtaskId || '',
-                taskToEdit.taskId,
-                {
-                    title: title.trim(),
-                    priority: priority,
-                    comment: comment.trim()
+const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setErr('');
+    if (!title.trim()) { setErr('כותרת חובה'); return; }
+    if (!isOffice && !clientId) { setErr('בחר לקוח או סמן משימה משרדית'); return; }
+
+    // ✨ בדיקת חסימה משופרת: אם המשתמש מנסה להשאיר או לסמן את המשימה כ"בוצע"
+    // והטקסט של המשימה מכיל "אישור ניהול סופי" - נחסום את ה-Submit של הטופס!
+    const isTryingToApprove = isCompleted && title.toLowerCase().includes("אישור ניהול סופי");
+    
+    if (isTryingToApprove && !authService.canApproveFinal(title)) {
+        setErr('אין לך הרשאה לסמן את המשימה הזו כבוצע!');
+        return;
+    }
+
+    setSaving(true);
+    // ... המשך פקודות ה-try/catch של ה-PersistenceAdapter שלך כרגיל ...
+
+        try {
+            if (taskToEdit) {
+                const subtaskResult = await PersistenceAdapter.updateSubtask(
+                    taskToEdit.subtaskId || '',
+                    taskToEdit.taskId,
+                    {
+                        title: title.trim(),
+                        priority: priority,
+                        comment: comment.trim()
+                    }
+                );
+                if (subtaskResult.error) throw new Error(subtaskResult.error.message);
+
+                if (taskToEdit.subtaskId) {
+                    const statusResult = await PersistenceAdapter.updateSubtaskStatus(taskToEdit.taskId, taskToEdit.subtaskId, isCompleted);
+                    if (statusResult.error) throw new Error(statusResult.error.message);
+                } else {
+                    const parentStatusResult = await PersistenceAdapter.updateTaskStatus(taskToEdit.taskId, isCompleted ? 'completed' : 'pending');
+                    if (parentStatusResult.error) throw new Error(parentStatusResult.error.message);
                 }
-            );
-        } else {
-            // מצב יצירת משימה מנורמלת חדשה לחלוטין
-            result = await PersistenceAdapter.insertSingleTask({
-                title: title.trim(),
-                clientId: isOffice ? null : clientId,
-                priority: priority as any,
-                subTasks: []
-            });
+            } else {
+                const insertResult = await PersistenceAdapter.insertSingleTask({
+                    title: title.trim(),
+                    clientId: isOffice ? null : clientId,
+                    subTasks: []
+                } as any);
+                if (insertResult.error) throw insertResult.error;
+            }
+
+            setSaving(false);
+            onCreated();
+        } catch (error: any) {
+            console.error('Error in CreateTaskModal handleSubmit:', error);
+            setErr(error.message || 'שגיאה בשמירת הנתונים במערכת');
+            setSaving(false);
         }
-
-        setSaving(false);
-
-        if (result.error) {
-            setErr(result.error.message || 'שגיאה בשמירת המידע');
-            return;
-        }
-
-        await LogService.recordAction(
-            taskToEdit ? 'task.update' : 'task.create',
-            'task',
-            taskToEdit ? taskToEdit.taskId : '',
-            { title: title.trim(), clientId: isOffice ? null : clientId, priority }
-        );
-
-        onCreated();
     };
 
     return (
@@ -508,17 +678,32 @@ const CreateTaskModal: React.FC<CreateTaskModalProps> = ({ customers, taskToEdit
                 <form onSubmit={handleSubmit}>
                     <div className="p-6 border-b border-slate-200 flex justify-between items-center">
                         <h3 className="text-xl font-black text-slate-900">
-                            {taskToEdit ? 'עריכת תת-משימה' : 'משימה חדשה'}
+                            {taskToEdit ? 'עריכת משימה' : 'משימה חדשה'}
                         </h3>
                         <button type="button" onClick={onClose} className="cursor-pointer text-slate-400 hover:text-slate-700 text-xl">×</button>
                     </div>
 
-                    <div className="p-6 space-y-4">
+                    <div className="p-6 space-y-5">
                         {err && <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3">{err}</div>}
 
-                        {/* שם תת-משימה */}
+                        {taskToEdit && (
+                            <div className={`flex items-center justify-between p-3.5 rounded-xl border transition ${isCompleted ? 'bg-green-50 border-green-200 text-green-800' : 'bg-slate-50 border-slate-200 text-slate-700'}`}>
+                                <div className="flex flex-col">
+                                    <span className="text-xs font-black uppercase tracking-wide">סטטוס משימה</span>
+                                    <span className="text-xs text-slate-400 mt-0.5">{isCompleted ? 'המשימה מסומנת כהושלמה' : 'המשימה ממתינה לטיפול'}</span>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => setIsCompleted(!isCompleted)}
+                                    className={`cursor-pointer px-4 py-1.5 rounded-xl text-xs font-black transition ${isCompleted ? 'bg-green-600 text-white hover:bg-green-700' : 'bg-white text-slate-700 border border-slate-300 hover:bg-slate-100'}`}
+                                >
+                                    {isCompleted ? '✓ בוצע' : 'סמן כבוצע'}
+                                </button>
+                            </div>
+                        )}
+
                         <div>
-                            <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1 tracking-wide">שם תת-המשימה *</label>
+                            <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1 tracking-wide">שם המשימה *</label>
                             <input
                                 value={title}
                                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTitle(e.target.value)}
@@ -528,20 +713,27 @@ const CreateTaskModal: React.FC<CreateTaskModalProps> = ({ customers, taskToEdit
                             />
                         </div>
 
-                        {/* שדה הערות מובנה בטבלה */}
-                        {taskToEdit && taskToEdit.subtaskId !== null && (
+                        {originalComment && (
+                            <div className="bg-blue-50/60 border border-blue-100 rounded-xl p-3.5">
+                                <label className="text-[10px] font-black text-blue-700 uppercase block mb-1 tracking-wide">📋 נתוני ליבה קבועים (מהקמת הלקוח):</label>
+                                <p className="text-xs text-slate-600 font-medium whitespace-pre-wrap leading-relaxed">
+                                    {originalComment}
+                                </p>
+                            </div>
+                        )}
+
+                        {taskToEdit && (
                             <div>
-                                <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1 tracking-wide">הערות ועדכונים לתת-משימה זו</label>
+                                <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1 tracking-wide">הערות ועדכונים למשימה זו</label>
                                 <textarea
                                     value={comment}
                                     onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setComment(e.target.value)}
                                     className="input-style h-20 resize-none py-2"
-                                    placeholder="הוסף הערה פנימית, סטטוס התקדמות או דגשים לשורה זו..."
+                                    placeholder="הוסף הערה פנימית, סטטוס התקדמות או דגשים..."
                                 />
                             </div>
                         )}
 
-                        {/* שיוך לקוח / משרד */}
                         <div>
                             <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1 tracking-wide">משוייך אל</label>
                             {taskToEdit ? (
@@ -560,7 +752,7 @@ const CreateTaskModal: React.FC<CreateTaskModalProps> = ({ customers, taskToEdit
                                             }}
                                             className="cursor-pointer w-5 h-5 accent-blue-600"
                                         />
-                                        <span className="text-sm font-bold text-slate-700">משימה משרדית כללית (ללא לקוח)</span>
+                                        <span className="text-sm font-bold text-slate-700">Mishrad - משימה משרדית כללית</span>
                                     </label>
 
                                     {!isOffice && (
@@ -573,7 +765,7 @@ const CreateTaskModal: React.FC<CreateTaskModalProps> = ({ customers, taskToEdit
                                             <option value="">בחר לקוח...</option>
                                             {customers.map((c: any) => (
                                                 <option key={c.id} value={c.id}>
-                                                    {c.full_name || '—'}
+                                                    {c.customerDetails?.fullName || c.full_name || '—'}
                                                 </option>
                                             ))}
                                         </select>
@@ -582,7 +774,6 @@ const CreateTaskModal: React.FC<CreateTaskModalProps> = ({ customers, taskToEdit
                             )}
                         </div>
 
-                        {/* רמת עדיפות */}
                         <div>
                             <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1 tracking-wide">רמת עדיפות</label>
                             <div className="flex gap-2">
@@ -603,7 +794,6 @@ const CreateTaskModal: React.FC<CreateTaskModalProps> = ({ customers, taskToEdit
                             </div>
                         </div>
 
-                        {/* תצוגת משימות אחיות מאותו אבא */}
                         {taskToEdit && siblingSubtasks.length > 0 && (
                             <div className="pt-3 border-t border-slate-100">
                                 <label className="text-[10px] font-bold text-slate-400 block mb-2">תתי-משימות נוספים תחת קטגוריית: ({taskToEdit.parentTitle})</label>
@@ -624,7 +814,7 @@ const CreateTaskModal: React.FC<CreateTaskModalProps> = ({ customers, taskToEdit
                     <div className="p-6 border-t border-slate-200 flex justify-end gap-3 bg-slate-50 rounded-b-2xl">
                         <button type="button" onClick={onClose} className="cursor-pointer px-5 py-2 rounded-lg text-sm font-bold text-slate-600 hover:bg-slate-100 transition">ביטול</button>
                         <button type="submit" disabled={saving} className="cursor-pointer px-5 py-2 rounded-lg text-sm font-bold bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white transition">
-                            {saving ? 'שומר...' : taskToEdit ? 'שמור שינויים' : 'צור משימה'}
+                            {saving ? 'שומר...' : 'שמור שינויים'}
                         </button>
                     </div>
                 </form>

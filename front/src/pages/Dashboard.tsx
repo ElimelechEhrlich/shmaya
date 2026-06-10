@@ -1,32 +1,46 @@
-// src/pages/Dashboard.tsx
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import { supabase } from '../supabaseClient';
 
-export default function Dashboard(): React.ReactElement {
-  // הגדרת טיפוס מפורש למחרוזת הטקסט
-  const userName: string = localStorage.getItem('user_name') || 'אורח';
+export default function Dashboard() {
+    const [activeCustomers, setActiveCustomers] = useState<number | null>(null);
+    const [pendingTasks, setPendingTasks] = useState<number | null>(null);
+    const [completedTasks, setCompletedTasks] = useState<number | null>(null);
 
-  return (
-    <div className="space-y-6">
-      <div className="bg-white p-8 rounded-xl shadow-sm border border-slate-100">
-        <h2 className="text-2xl font-bold text-slate-800">שלום, {userName}! 👋</h2>
-        <p className="text-slate-500 mt-2">שמחים שחזרת לעבודה. הנה סיכום המשימות שלך להיום.</p>
-      </div>
-      
-      {/* כאן יבואו הווידג'טים של הסטטיסטיקה */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-blue-50 p-6 rounded-lg border border-blue-100">
-          <p className="text-blue-600 font-bold">משימות פתוחות</p>
-          <p className="text-3xl font-black">12</p>
+    useEffect(() => {
+        supabase.from('customers').select('*', { count: 'exact', head: true }).eq('is_active', true)
+            .then(r => setActiveCustomers(r.count ?? 0));
+        supabase.from('sub_tasks').select('*', { count: 'exact', head: true }).eq('is_completed', false)
+            .then(r => setPendingTasks(r.count ?? 0));
+        supabase.from('sub_tasks').select('*', { count: 'exact', head: true }).eq('is_completed', true)
+            .then(r => setCompletedTasks(r.count ?? 0));
+    }, []);
+
+    return (
+        <div className="p-6 max-w-7xl mx-auto" dir="rtl">
+            <h1 className="text-3xl font-black text-slate-900 mb-6">לוח בקרה</h1>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+                    <span className="text-2xl">👥</span>
+                    <h3 className="text-slate-400 text-xs font-bold uppercase tracking-wider mt-2">לקוחות פעילים</h3>
+                    <p className="text-4xl font-black text-slate-900 mt-1">
+                        {activeCustomers ?? <span className="inline-block w-12 h-9 bg-slate-100 rounded animate-pulse" />}
+                    </p>
+                </div>
+                <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+                    <span className="text-2xl">⏳</span>
+                    <h3 className="text-slate-400 text-xs font-bold uppercase tracking-wider mt-2">משימות לטיפול</h3>
+                    <p className="text-4xl font-black text-amber-600 mt-1">
+                        {pendingTasks ?? <span className="inline-block w-12 h-9 bg-slate-100 rounded animate-pulse" />}
+                    </p>
+                </div>
+                <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+                    <span className="text-2xl">✅</span>
+                    <h3 className="text-slate-400 text-xs font-bold uppercase tracking-wider mt-2">משימות שהושלמו</h3>
+                    <p className="text-4xl font-black text-green-600 mt-1">
+                        {completedTasks ?? <span className="inline-block w-12 h-9 bg-slate-100 rounded animate-pulse" />}
+                    </p>
+                </div>
+            </div>
         </div>
-        <div className="bg-green-50 p-6 rounded-lg border border-green-100">
-          <p className="text-green-600 font-bold">לקוחות פעילים</p>
-          <p className="text-3xl font-black">45</p>
-        </div>
-        <div className="bg-amber-50 p-6 rounded-lg border border-amber-100">
-          <p className="text-amber-600 font-bold">משימות דחופות</p>
-          <p className="text-3xl font-black">3</p>
-        </div>
-      </div>
-    </div>
-  );
+    );
 }

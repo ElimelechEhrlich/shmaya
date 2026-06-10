@@ -1,5 +1,5 @@
 // src/comps/CustomerList.tsx
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { PersistenceAdapter } from '../services/PersistenceAdapter';
 import { TaskGeneratorService } from '../services/TaskService';
 import { BUSINESS_TYPE_OPTIONS } from '../registries/CustomerRegistry';
@@ -30,11 +30,7 @@ const CustomerList: React.FC = () => {
     const [loading, setLoading] = useState<boolean>(true);
     const [filters, setFilters] = useState<CustomerFilters>(INITIAL_FILTERS);
 
-    useEffect(() => { 
-        fetchCustomers(); 
-    }, []);
-
-    const fetchCustomers = async (): Promise<void> => {
+    const fetchCustomers = useCallback(async (): Promise<void> => {
         setLoading(true);
         const { data, error } = await PersistenceAdapter.fetchAllCustomersWithTasks();
         if (error) {
@@ -43,22 +39,31 @@ const CustomerList: React.FC = () => {
             setCustomers(data || []);
         }
         setLoading(false);
-    };
+    }, []);
 
-    const filteredCustomers = customers.filter(client => {
-        const isApproved = TaskGeneratorService.isCustomerFinalized(client.tasks || []);
+    useEffect(() => {
+        fetchCustomers();
+    }, [fetchCustomers]);
+
+    // מחושב פעם אחת כשרשימת הלקוחות משתנה — לא מחושב מחדש בכל שינוי סינון
+    const finalizationMap = useMemo(() => {
+        const map = new Map<string, boolean>();
+        customers.forEach(c => map.set(c.id, TaskGeneratorService.isCustomerFinalized(c.tasks || [])));
+        return map;
+    }, [customers]);
+
+    const filteredCustomers = useMemo(() => customers.filter(client => {
+        const isApproved = finalizationMap.get(client.id) ?? false;
         const matchesSearch =
             (client.customerDetails?.fullName || '').includes(filters.search) ||
             (client.businessDetails?.businessID || '').includes(filters.search);
-            
         const matchesType = filters.businessType === '' || client.businessDetails?.businessType === filters.businessType;
         const matchesInsurance = filters.isInsuranceActive === 'all' || String(!!client.isInsuranceActive) === filters.isInsuranceActive;
         const matchesTax = filters.isIncomeTaxActive === 'all' || String(!!client.isIncomeTaxActive) === filters.isIncomeTaxActive;
         const matchesVat = filters.isVatActive === 'all' || String(!!client.isVatActive) === filters.isVatActive;
         const matchesApproved = filters.isFinalApproved === 'all' || String(isApproved) === filters.isFinalApproved;
-        
         return matchesSearch && matchesType && matchesInsurance && matchesTax && matchesVat && matchesApproved;
-    });
+    }), [customers, filters, finalizationMap]);
 
     const exportToExcel = (): void => {
         const headers = ["שם לקוח", "מזהה עסק", "סוג עסק", "ביטוח לאומי", "מס הכנסה", "מע\"מ", "אישור סופי"];
@@ -69,7 +74,7 @@ const CustomerList: React.FC = () => {
             client.isInsuranceActive ? "כן" : "לא",
             client.isIncomeTaxActive ? "כן" : "לא",
             client.isVatActive ? "כן" : "לא",
-            TaskGeneratorService.isCustomerFinalized(client.tasks || []) ? "כן" : "לא",
+            (finalizationMap.get(client.id) ?? false) ? "כן" : "לא",
         ]);
         
         const csvContent = "\uFEFF" + [headers, ...rows].map(e => e.join(",")).join("\n");
@@ -88,7 +93,29 @@ const CustomerList: React.FC = () => {
     };
 
     if (loading) {
-        return <div className="p-12 text-center font-bold text-slate-400">טוען לקוחות...</div>;
+        return (
+            <div className="p-6 min-h-screen" dir="rtl">
+                <div className="max-w-7xl mx-auto">
+                    <div className="h-9 w-48 bg-slate-200 rounded-xl mb-6 animate-pulse" />
+                    <div className="card-base overflow-hidden">
+                        <table className="w-full text-right border-collapse">
+                            <thead className="bg-slate-50 border-b border-slate-200">
+                                <tr>{[1,2,3,4,5].map(i => (
+                                    <th key={i} className="p-4"><div className="h-3 bg-slate-200 rounded animate-pulse" /></th>
+                                ))}</tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                                {[1,2,3,4,5,6,7].map(i => (
+                                    <tr key={i}>{[1,2,3,4,5].map(j => (
+                                        <td key={j} className="p-4"><div className="h-5 bg-slate-100 rounded animate-pulse" /></td>
+                                    ))}</tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        );
     }
 
     return (
@@ -166,7 +193,7 @@ const CustomerList: React.FC = () => {
                         </thead>
                         <tbody className="divide-y divide-slate-100">
                             {filteredCustomers.map((client: any) => {
-                                const isApproved = TaskGeneratorService.isCustomerFinalized(client.tasks || []);
+                                const isApproved = finalizationMap.get(client.id) ?? false;
                                 const isInactive = client.isActive === false;
                                 return (
                                     <tr

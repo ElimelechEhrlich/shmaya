@@ -8,7 +8,7 @@ interface LogEntry {
     id: string;
     createdAt: string | Date;
     actor: string | null;
-    action: string | null;
+    action: string;
     entityType: string | null;
     entityId: string | null;
     payload?: {
@@ -31,9 +31,6 @@ interface LogFilters {
     entityType: string;
 }
 
-interface PayloadCellProps {
-    payload: LogEntry['payload'];
-}
 
 export default function Logs(): React.ReactElement {
     const [logs, setLogs] = useState<LogEntry[]>([]);
@@ -182,7 +179,20 @@ export default function Logs(): React.ReactElement {
 
                 <div className="card-base overflow-hidden">
                     {loading ? (
-                        <div className="p-12 text-center font-bold text-slate-400">טוען...</div>
+                        <table className="w-full text-right">
+                            <thead className="bg-slate-50 border-b border-slate-200">
+                                <tr>{[1,2,3,4,5].map(i => (
+                                    <th key={i} className="p-4"><div className="h-3 bg-slate-200 rounded animate-pulse" /></th>
+                                ))}</tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                                {[1,2,3,4,5,6,7,8,9,10].map(i => (
+                                    <tr key={i}>{[1,2,3,4,5].map(j => (
+                                        <td key={j} className="p-4"><div className="h-4 bg-slate-100 rounded animate-pulse" /></td>
+                                    ))}</tr>
+                                ))}
+                            </tbody>
+                        </table>
                     ) : filtered.length === 0 ? (
                         <div className="p-12 text-center text-slate-400 italic">לא נמצאו פעולות תואמות.</div>
                     ) : (
@@ -198,22 +208,34 @@ export default function Logs(): React.ReactElement {
                             </thead>
                             <tbody className="divide-y divide-slate-100">
                                 {filtered.map(log => (
-                                    <tr key={log.id} className="hover:bg-slate-50 transition">
-                                        <td className="p-4 text-xs font-mono text-slate-500">
+                                    <tr key={log.id} className="hover:bg-gray-50 transition">
+                                        {/* עמודת תאריך מעוצבת לעברית */}
+                                        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-600">
                                             {new Date(log.createdAt).toLocaleString('he-IL')}
                                         </td>
-                                        <td className="p-4 text-sm font-medium text-slate-800">{log.actor}</td>
-                                        <td className="p-4 text-sm text-slate-700">{log.action}</td>
-                                        <td className="p-4">
-                                            <span className="bg-slate-100 text-slate-700 px-2 py-1 rounded text-[10px] font-mono">
-                                                {log.entityType}
-                                            </span>
-                                            <span className="text-[10px] text-slate-400 font-mono block mt-1">
-                                                {log.entityId ? `${log.entityId.slice(0, 8)}…` : '—'}
+                                        {/* עמודת שם המשתמש */}
+                                        <td className="px-4 py-2 whitespace-nowrap text-sm font-medium text-gray-900">
+                                            {log.actor}
+                                        </td>
+                                        {/* עמודת פעולה - שינוי קריטי 1: תרגום סוג הפעולה */}
+                                        <td className="px-4 py-2 whitespace-nowrap text-sm">
+                                            <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">
+                                                {translateActionType(log.action)}
                                             </span>
                                         </td>
+                                        <td className="p-4 whitespace-nowrap">
+                                            {/* תרגום סוג הישות לעברית עם עיצוב נקי */}
+                                            <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded text-xs font-semibold">
+                                                {log.entityType === 'task' ? 'משימה' : log.entityType === 'customer' ? 'לקוח' : 'מערכת'}
+                                            </span>
+
+                                            {/* חילוץ שם אנושי מתוך ה-payload (כמו כותרת המשימה או שם הלקוח) במקום מזהה ה-UUID */}
+                                            {log.entityType !== 'task' && (<span className="text-xs text-slate-500 block mt-1 max-w-[120px] truncate" title={log.payload?.title || log.payload?.name || ''}>
+                                                {log.payload?.title || log.payload?.name || log.payload?.customerDetails?.fullName || '—'}
+                                            </span>)}
+                                        </td>
                                         <td className="p-4 max-w-md">
-                                            <PayloadCell payload={log.payload} />
+                                            <PayloadCell payload={log.payload} action={log.action} />
                                         </td>
                                     </tr>
                                 ))}
@@ -226,40 +248,128 @@ export default function Logs(): React.ReactElement {
     );
 }
 
-const PayloadCell: React.FC<PayloadCellProps> = ({ payload }) => {
+// הדבק את זה בסוף הקובץ, מחוץ לפונקציה של הקומפוננטה
+
+const translateActionType = (action: string): string => {
+    const mapping: Record<string, string> = {
+        'customer.create': 'יצירת לקוח',
+        'customer.update': 'עדכון לקוח',
+        'customer.delete': 'מחיקת לקוח',
+        'task.create': 'משימה חדשה',
+        'task.update': 'עדכון משימה',
+        'task.delete': 'מחיקת משימה',
+        'subtask.update': 'עדכון תת-משימה'
+    };
+    return mapping[action] || action;
+};
+
+const formatLogDetails = (log: { action: string; payload: any }): React.ReactNode => {
+    const { action, payload } = log;
+    if (!payload) return 'אין פרטים';
+
+    // 1. פעולות משימות ותתי-משימות
+    if (action === 'task.update' || action === 'subtask.update') {
+        if (payload.title) return `הכותרת שונתה ל: "${payload.title}"`;
+        if (payload.status) {
+            const statusMap: Record<string, string> = { 'pending': 'בהמתנה', 'in_progress': 'בטיפול', 'completed': 'הושלם' };
+            return `הסטטוס שונה ל: ${statusMap[payload.status] || payload.status}`;
+        }
+        if (payload.subTasks && Array.isArray(payload.subTasks)) {
+            return 'עודכנו תתי-משימות בתיק';
+        }
+    }
+
+    // 2. פעולות לקוחות
+    if (action === 'customer.create') {
+        return `נוצר לקוח חדש: ${payload.customerDetails?.fullName || payload.full_name || ''}`;
+    }
+    if (action === 'customer.update') {
+        return 'עודכנו פרטי הלקוח או תיקי הרשויות';
+    }
+
+    // ברירת מחדל אם המבנה לא מזוהה
+    return payload.title || payload.name || 'עריכת נתונים כללית';
+};
+
+const PayloadCell: React.FC<{ payload: any; action: string }> = ({ payload, action }) => {
     if (!payload) return <span className="text-slate-300">—</span>;
+
+    // א': טיפול ממוקד בשינויי ערכים (changeSet)
     if (payload.changeSet) {
-        const entries = Object.entries(payload.changeSet);
+        // אם מדובר בשינוי של תתי-משימות (כמו בצילום מסך שלך)
+        if (payload.changeSet.subTasks) {
+            const oldSubs = payload.changeSet.subTasks.old || [];
+            const newSubs = payload.changeSet.subTasks.new || [];
+
+            // מציאת תת-המשימה שהסטטוס שלה השתנה
+            const changedSub = newSubs.find((ns: any) => {
+                const os = oldSubs.find((o: any) => o.id === ns.id);
+                return os ? os.completed !== ns.completed : false;
+            });
+
+            if (changedSub) {
+                return (
+                    <div className="text-sm font-medium text-slate-700">
+                        <span className="text-slate-900 font-bold">"{changedSub.title}"</span> ⇐ {' '}
+                        <span className={`px-1.5 py-0.5 rounded text-xs ${changedSub.completed ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'}`}>
+                            {changedSub.completed ? 'בוצעה' : 'הוחזרה למצב פתוח'}
+                        </span>
+                    </div>
+                );
+            }
+            return <span className="text-sm text-slate-600">עודכנו תתי-משימות בתיק</span>;
+        }
+
+        // שינויי שדות רגילים (כותרת, סטטוס, וכו')
+        const entries = Object.entries(payload.changeSet).filter(([, value]: [string, any]) => {
+            if (!value) return false;
+            const oldVal = String(value.old || '').trim();
+            const newVal = String(value.new || '').trim();
+            // מציג רק אם החדש שונה מהישן, ואם הערך החדש הוא לא ריק
+            return oldVal !== newVal && value.new !== undefined && value.new !== null && value.new !== '';
+        });
+        const fieldTranslations: Record<string, string> = {
+            'status': 'סטטוס',
+            'title': 'כותרת',
+            'is_completed': 'הושלם',
+            'full_name': 'שם מלא',
+            'is_active': 'פעיל',
+            'phone_number': 'טלפון',
+            'address': 'כתובת',
+            'email': 'אימייל'
+        };
+
         return (
             <div className="space-y-0.5">
-                {entries.slice(0, 3).map(([path, { old, new: nu }]) => (
-                    <div key={path} className="text-[11px] font-mono">
-                        <span className="text-slate-500">{path}:</span>{' '}
-                        <span className="text-red-600 line-through">{formatValue(old)}</span>{' '}
-                        <span className="text-slate-400">→</span>{' '}
-                        <span className="text-green-700">{formatValue(nu)}</span>
+                {entries.map(([path, value]: [string, any]) => (
+                    <div key={path} className="text-[12px] font-medium text-slate-700 flex items-center gap-1">
+                        <span className="text-slate-500 font-bold">{fieldTranslations[path] || path}:</span>{' '}
+                        <span className="text-red-500 bg-red-50 px-1 rounded line-through text-xs">{formatValue(value?.old)}</span>{' '}
+                        {/* שימוש באות חץ פשוטה בתוך גוף ה-Flex מונע מהדפדפן להפוך אותה */}
+                        <span className="text-slate-400">←</span>{' '}
+                        <span className="text-green-600 bg-green-50 px-1 rounded text-xs">{formatValue(value?.new)}</span>
                     </div>
                 ))}
-                {entries.length > 3 && (
-                    <div className="text-[10px] text-slate-400 italic">+ עוד {entries.length - 3} שינויים</div>
-                )}
             </div>
         );
     }
-    if (payload.after) {
-        const name = payload.after.customerDetails?.fullName || payload.after.id || 'יצירה חדשה';
-        return <span className="text-xs text-slate-700">📌 {name}</span>;
-    }
+
+    // ב': שימוש במפענח המשפטים הכללי
     return (
-        <span className="text-[11px] text-slate-500 font-mono">
-            {JSON.stringify(payload).slice(0, 80)}…
+        <span className="text-sm text-slate-700 font-medium">
+            {formatLogDetails({ action, payload })}
         </span>
     );
 };
 
 const formatValue = (v: any): string => {
-    if (v === null || v === undefined) return '∅';
-    if (typeof v === 'string') return v.length > 18 ? v.slice(0, 18) + '…' : v;
-    if (typeof v === 'object') return JSON.stringify(v).slice(0, 18) + '…';
+    if (v === null || v === undefined) return 'ריק';
+    if (v === true || v === 'true') return 'בוצע';
+    if (v === false || v === 'false') return 'פתוח';
+    if (typeof v === 'string') {
+        const statusMap: Record<string, string> = { 'pending': 'בהמתנה', 'in_progress': 'בטיפול', 'completed': 'הושלם' };
+        if (statusMap[v]) return statusMap[v];
+        return v.length > 25 ? v.slice(0, 25) + '…' : v;
+    }
     return String(v);
 };

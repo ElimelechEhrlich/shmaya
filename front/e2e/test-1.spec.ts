@@ -1,0 +1,66 @@
+import { test, expect } from '@playwright/test';
+
+test('test', async ({ page }) => {
+await page.locator('body').click();
+await page.goto('http://localhost:5173/');
+await page.getByRole('textbox', { name: 'שם משתמש' }).click();
+await page.getByRole('textbox', { name: 'שם משתמש' }).fill('מוישי');
+await page.getByRole('button', { name: 'כניסה למערכת' }).click();
+await page.getByRole('link', { name: 'לקוחות' }).click();
+await page.getByRole('button', { name: '+ לקוח חדש' }).click();
+await page.locator('input[name="fullName"]').click();
+await page.locator('input[name="fullName"]').fill('עיגכעכע');
+await page.locator('input[name="identityId"]').click();
+await page.locator('input[name="identityId"]').fill('יגכעי');
+await page.locator('input[name="identityId"]').click();
+await page.locator('input[name="identityId"]').fill('יגכעיגיע');
+await page.locator('input[name="phoneNumber"]').click();
+await page.locator('input[name="phoneNumber"]').fill('כעיגכעיג');
+await page.locator('input[name="address"]').click();
+await page.locator('input[name="address"]').fill('גכיעכעי');
+await page.locator('input[name="email"]').click();
+await page.locator('input[name="email"]').fill('געיגכע');
+await page.locator('input[name="businessName"]').click();
+await page.locator('input[name="businessName"]').fill('גכיעיג');
+await page.locator('input[name="businessID"]').click();
+await page.locator('input[name="businessID"]').fill('גכיעגכיע');
+await page.locator('input[name="openingDate"]').fill('2026-05-01');
+await page.getByRole('combobox').selectOption('זעיר');
+await page.getByRole('combobox').selectOption('מורשה');
+await page.locator('input[name="occupation"]').click();
+await page.locator('input[name="occupation"]').fill('גכאטארטכג');
+await page.locator('textarea[name="businessDescription"]').click();
+await page.locator('textarea[name="businessDescription"]').fill('יעגכיגכי');
+await page.getByRole('checkbox', { name: 'טיפול בביטוח לאומי' }).check();
+await page.locator('select[name="newInsuranceCase"]').click();
+await page.locator('option[value="true"]').click();
+await page.getByRole('checkbox', { name: 'טיפול במב הכנסה' }).check();
+await page.locator('select[name="newItCase"]').click();
+await page.locator('option[value="true"]').click();
+await page.locator('select[name="repType"]').click();
+await page.locator('option[value="ראשי"]').click();
+await page.getByRole('checkbox', { name: 'טיפול במע״מ' }).check();
+// await page.getByRole('select', { name: 'newItCase' }).check();
+await page.locator('select[name="newVatCase"]').click();
+await page.locator('option[value="true"]').click();
+
+await page.locator('input[name="insurancePrepayment"]').click();
+await page.locator('input[name="insurancePrepayment"]').fill('כגיכעי');
+await page.locator('input[name="workHours"]').click();
+await page.locator('input[name="workHours"]').fill('גיעכגיע');
+await page.getByText('טיפול במס הכנסה').click();
+await page.locator('input[name="incomeTaxPrepayment"]').click();
+await page.locator('input[name="incomeTaxPrepayment"]').fill('כגיעעכיגכגכ');
+await page.locator('input[name="annualTurnover"]').click();
+await page.locator('input[name="annualTurnover"]').fill('יעכיע');
+await page.locator('select[name="employsWorkers"]').selectOption('yes');
+await page.locator('input[name="needsDeductionsFile"]').uncheck();
+await page.locator('input[name="setupFee"]').click();
+await page.locator('input[name="setupFee"]').fill('10000');
+await page.locator('input[name="monthlyFee"]').click();
+await page.locator('input[name="monthlyFee"]').fill('100');
+await page.getByRole('button', { name: 'לא' }).click();
+await page.locator('textarea[name="comments"]').click();
+await page.locator('textarea[name="comments"]').fill('קראטא')
+await page.getByRole('button', { name: 'שמור לקוח והפעל אוטומציית משימות' }).click();
+})

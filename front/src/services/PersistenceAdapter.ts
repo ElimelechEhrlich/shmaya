@@ -1,42 +1,25 @@
 // src/services/PersistenceAdapter.ts
 //
-// THE only module that knows about snake_case DB column names (`client_id`,
-// `parent_task_id`, `created_at`, `entity_type`, `entity_id`, `is_active`).
-// Every component, hook, or service that touches Supabase MUST go through
-// this adapter — direct `supabase.from(...)` calls outside this file are bugs.
-//
-// Reads return camelCase Customer/Task objects. Writes accept camelCase and
-// translate back to the DB schema.
+// Actual live schema (normalized, multi-table):
+//   customers      – flat columns: full_name, identity_id, phone_number, address, email, is_active, comments
+//   business_details   – 1:1 with customers via customer_id PK
+//   income_tax_cases   – 1:1 (optional) via customer_id PK
+//   vat_cases          – 1:1 (optional) via customer_id PK
+//   insurance_cases    – 1:1 (optional) via customer_id PK
+//   payment_details    – 1:1 via customer_id PK
+//   parent_tasks       – 1:many via customer_id FK
+//   sub_tasks          – 1:many via parent_task_id FK (now holds priority!)
+//   logs               – standalone
 
 import { supabase } from '../supabaseClient.js';
-import { type Customer } from '../registries/CustomerRegistry';
-
-// ──────────────────────────────────────────────────────────────────
-// Field maps
-// ──────────────────────────────────────────────────────────────────
-
-const CUSTOMER_TO_DB: Record<string, string> = {
-  createdAt: 'created_at',
-  isActive: 'is_active',
-};
-const CUSTOMER_FROM_DB: Record<string, string> = Object.fromEntries(
-  Object.entries(CUSTOMER_TO_DB).map(([k, v]) => [v, k])
-);
-
-const LOG_TO_DB: Record<string, string> = {
-  entityType: 'entity_type',
-  entityId: 'entity_id',
-  createdAt: 'created_at',
-};
-const LOG_FROM_DB: Record<string, string> = Object.fromEntries(
-  Object.entries(LOG_TO_DB).map(([k, v]) => [v, k])
-);
+import type { Customer } from '../registries/CustomerRegistry';
+import { authService } from './authService.js';
 
 // ──────────────────────────────────────────────────────────────────
 // Persisted shapes
 // ──────────────────────────────────────────────────────────────────
 
-export type TaskPriority = 'low' | 'medium' | 'high';
+export type SubTaskPriority = 'low' | 'medium' | 'high' | 'critical';
 
 export interface PersistedSubTask {
   id: string;
@@ -44,15 +27,15 @@ export interface PersistedSubTask {
   title: string;
   completed: boolean;
   comment: string | null;
+  priority: SubTaskPriority;
   createdAt?: string;
   updatedAt?: string;
 }
 
 export interface PersistedTask {
   id: string;
-  clientId: string | null;          // NULL = office-wide task
+  clientId: string | null;        // maps to parent_tasks.customer_id
   title: string;
-  priority: TaskPriority;
   status: 'pending' | 'completed';
   createdAt?: string;
   subTasks?: PersistedSubTask[];
@@ -69,14 +52,14 @@ export interface PersistedTaskWithCustomer extends PersistedTask {
 
 export interface PersistedSubtaskRow {
   taskId: string;
-  subtaskId: string | null;          // null when this row represents a parent without subtasks
+  subtaskId: string | null;
   subtaskTitle: string;
   completed: boolean;
   comment: string;
-  details: Record<string, unknown>;  // נשמר למניעת שבירת קומפוננטות ישנות
+  details: Record<string, unknown>;
   parentTaskId: string | null;
   parentTitle: string;
-  priority: TaskPriority;
+  priority: SubTaskPriority; // ✨ תיקון אות גדולה בטייפ
   taskStatus: 'pending' | 'completed';
   clientId: string | null;
   customerName: string;
@@ -104,84 +87,104 @@ export interface DbResult<T> {
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const isUuid = (v: unknown): boolean => typeof v === 'string' && UUID_RE.test(v);
 
-function getByPath(obj: unknown, path: string): unknown {
-  return path.split('.').reduce<unknown>(
-    (acc, seg) => (acc == null ? undefined : (acc as Record<string, unknown>)[seg]),
-    obj
-  );
-}
+function dbRowToCustomer(row: any): Customer {
+  const bd = row.business_details;
+  const it = row.income_tax_cases;
+  const vat = row.vat_cases;
+  const ins = row.insurance_cases;
+  const pay = row.payment_details;
 
-function setByPath(obj: Record<string, unknown>, path: string, value: unknown): void {
-  const segs = path.split('.');
-  let cursor: Record<string, unknown> = obj;
-  for (let i = 0; i < segs.length - 1; i++) {
-    const seg = segs[i];
-    const existing = cursor[seg];
-    const next = (existing && typeof existing === 'object'
-      ? { ...(existing as Record<string, unknown>) }
-      : {}) as Record<string, unknown>;
-    cursor[seg] = next;
-    cursor = next;
-  }
-  cursor[segs[segs.length - 1]] = value;
-}
+  return {
+    id: row.id,
+    createdAt: row.created_at,
+    isActive: row.is_active,
+    comments: row.comments || '',
 
-function deleteByPath(obj: Record<string, unknown>, path: string): void {
-  const segs = path.split('.');
-  let cursor: Record<string, unknown> = obj;
-  for (let i = 0; i < segs.length - 1; i++) {
-    const next = cursor[segs[i]];
-    if (!next || typeof next !== 'object') return;
-    cursor = next as Record<string, unknown>;
-  }
-  delete cursor[segs[segs.length - 1]];
-}
+    customerDetails: {
+      fullName: row.full_name || '',
+      identityId: row.identity_id || '',
+      phoneNumber: row.phone_number || '',
+      address: row.address || '',
+      email: row.email || '',
+    },
+    businessDetails: {
+      businessName: bd?.business_name || '',
+      businessID: bd?.business_id || '',
+      businessType: (bd?.business_type || '') as any,
+      openingDate: bd?.opening_date || '',
+      occupation: bd?.occupation || '',
+      businessDescription: bd?.business_description || '',
+      employsWorkers: (bd?.employs_workers || 'no') as any,
+      deductionsId: bd?.deductions_id || '',
+    },
+    insuranceDetails: {
+      insurancePrepayment: ins?.insurance_prepayment || '',
+      workHours: ins?.work_hours || '',
+      newInsuranceCase: ins?.is_new_case ?? true,
+      insuranceId: '',
+      insuranceStatus: '',
+    },
+    incomeTaxDetails: {
+      repType: (it?.rep_type || 'ראשי') as any,
+      incomeTaxPrepayment: it?.income_tax_prepayment || '',
+      annualTurnover: it?.annual_turnover || '',
+      newItCase: it?.is_new_case ?? true,
+    },
+    vatDetails: {
+      newVatCase: vat?.is_new_case ?? true,
+    },
+    paymentDetails: {
+      setupFee: String(pay?.setup_fee ?? 0),
+      monthlyFee: String(pay?.monthly_fee ?? 0),
+      directDebit: pay?.direct_debit ?? false,
+    },
 
-function renameKeys<T>(input: T, map: Record<string, string>): T {
-  if (input == null || typeof input !== 'object') return input;
-  const out = structuredClone(input) as Record<string, unknown>;
-  for (const [from, to] of Object.entries(map)) {
-    if (from === to) continue;
-    const value = getByPath(out, from);
-    if (value !== undefined) {
-      setByPath(out, to, value);
-      deleteByPath(out, from);
-    }
-  }
-  return out as T;
-}
-
-function stripImmutableCustomer<T extends Partial<Customer>>(c: T): T {
-  const { id: _id, createdAt: _createdAt, tasks: _tasks, ...rest } = c as T & {
-    id?: unknown; createdAt?: unknown; tasks?: unknown;
+    isInsuranceActive: !!ins,
+    isIncomeTaxActive: !!it,
+    isVatActive: !!vat,
+    needsDeductionsFile: bd?.needs_deductions_file ?? false,
   };
-  return rest as T;
 }
+
+function mapTaskRow(t: any): PersistedTask {
+  return {
+    id: t.id,
+    clientId: t.customer_id, 
+    title: t.title,
+    status: t.status,
+    createdAt: t.created_at,
+    // ✨ תיקון: שליפת ה-priority ישירות מתוך שורת תת המשימה הספציפית ב-DB
+    subTasks: (t.sub_tasks ?? []).map((s: any) => ({
+      id: s.id,
+      parentTaskId: t.id,
+      title: s.title,
+      completed: !!s.is_completed,
+      comment: s.comment ?? null,
+      priority: (s.priority || 'medium') as SubTaskPriority, 
+      createdAt: s.created_at,
+      updatedAt: s.updated_at,
+    })),
+  };
+}
+
+const FULL_CUSTOMER_SELECT =
+  '*, business_details(*), income_tax_cases(*), vat_cases(*), insurance_cases(*), payment_details(*), parent_tasks(*, sub_tasks(*))';
 
 // ──────────────────────────────────────────────────────────────────
 // Public adapter
 // ──────────────────────────────────────────────────────────────────
 
 export const PersistenceAdapter = {
-  // — pure shape mappers —
-  toDbCustomer(c: Partial<Customer>): Record<string, unknown> {
-    return renameKeys(c, CUSTOMER_TO_DB) as Record<string, unknown>;
-  },
-  fromDbCustomer(row: Record<string, unknown>): Customer {
-    return renameKeys(row, CUSTOMER_FROM_DB) as unknown as Customer;
-  },
-  fromDbLog(row: Record<string, unknown>): Record<string, unknown> {
-    return renameKeys(row, LOG_FROM_DB);
-  },
 
-  // ── Customers ──
+  // ── Customers (read) ──
+
   async fetchAllCustomers(): Promise<DbResult<Customer[]>> {
     const { data, error } = await supabase
       .from('customers')
-      .select('*')
+      .select('*, business_details(*), income_tax_cases(*), vat_cases(*), insurance_cases(*), payment_details(*)')
       .order('created_at', { ascending: false });
     return {
-      data: data ? data.map((r) => PersistenceAdapter.fromDbCustomer(r)) : null,
+      data: data ? data.map(dbRowToCustomer) : null,
       error,
     };
   },
@@ -189,33 +192,16 @@ export const PersistenceAdapter = {
   async fetchAllCustomersWithTasks(): Promise<DbResult<CustomerWithTasks[]>> {
     const { data, error } = await supabase
       .from('customers')
-      .select('*, parent_tasks(*, sub_tasks(*))')
+      .select(FULL_CUSTOMER_SELECT)
       .order('created_at', { ascending: false });
-    
+
     if (!data) return { data: null, error };
-    
+
     return {
-      data: data.map((row: any) => {
-        const { parent_tasks: rawTasks, ...rawCust } = row;
-        return {
-          ...PersistenceAdapter.fromDbCustomer(rawCust),
-          tasks: (rawTasks ?? []).map((t: any) => ({
-            id: t.id,
-            clientId: t.client_id,
-            title: t.title,
-            priority: t.priority,
-            status: t.status,
-            createdAt: t.created_at,
-            subTasks: (t.sub_tasks ?? []).map((s: any) => ({
-              id: s.id,
-              parentTaskId: s.parent_task_id,
-              title: s.title,
-              completed: s.is_completed,
-              comment: s.comment
-            }))
-          })),
-        };
-      }),
+      data: data.map((row: any) => ({
+        ...dbRowToCustomer(row),
+        tasks: (row.parent_tasks ?? []).map(mapTaskRow),
+      })),
       error,
     };
   },
@@ -223,81 +209,154 @@ export const PersistenceAdapter = {
   async fetchCustomerWithTasks(id: string): Promise<DbResult<CustomerWithTasks>> {
     const { data, error } = await supabase
       .from('customers')
-      .select('*, parent_tasks(*, sub_tasks(*))')
+      .select(FULL_CUSTOMER_SELECT)
       .eq('id', id)
       .single();
-      
+
     if (!data) return { data: null, error };
-    const { parent_tasks: rawTasks, ...rawCustomer } = data as any;
-    
+
     return {
       data: {
-        ...PersistenceAdapter.fromDbCustomer(rawCustomer),
-        tasks: (rawTasks ?? [])
-          .map((t: any) => ({
-            id: t.id,
-            clientId: t.client_id,
-            title: t.title,
-            priority: t.priority,
-            status: t.status,
-            createdAt: t.created_at,
-            subTasks: (t.sub_tasks ?? []).map((s: any) => ({
-              id: s.id,
-              parentTaskId: s.parent_task_id,
-              title: s.title,
-              completed: s.is_completed,
-              comment: s.comment
-            }))
-          }))
+        ...dbRowToCustomer(data),
+        tasks: (data.parent_tasks ?? [])
+          .map(mapTaskRow)
           .sort((a: any, b: any) => (a.createdAt ?? '').localeCompare(b.createdAt ?? '')),
       },
       error,
     };
   },
 
+  // ── Customers (write) ──
+
   async insertCustomer(c: Partial<Customer>): Promise<DbResult<Customer>> {
-    const row = PersistenceAdapter.toDbCustomer(stripImmutableCustomer(c));
-    const { data, error } = await supabase.from('customers').insert([row]).select().single();
-    return { data: data ? PersistenceAdapter.fromDbCustomer(data) : null, error };
+    const { data: inserted, error: custErr } = await supabase
+      .from('customers')
+      .insert({
+        full_name: c.customerDetails?.fullName ?? '',
+        identity_id: c.customerDetails?.identityId ?? '',
+        phone_number: c.customerDetails?.phoneNumber ?? '',
+        address: c.customerDetails?.address ?? '',
+        email: c.customerDetails?.email ?? '',
+        is_active: c.isActive ?? true,
+        comments: c.comments ?? '',
+      })
+      .select('id')
+      .single();
+
+    if (custErr) return { data: null, error: custErr };
+    const id = inserted.id;
+
+    const errs = await PersistenceAdapter._writeDetailTables(id, c, false);
+    if (errs) return { data: null, error: { message: errs } };
+
+    return { data: { id } as unknown as Customer, error: null };
   },
 
   async updateCustomer(id: string, c: Partial<Customer>): Promise<DbResult<Customer>> {
-    const row = PersistenceAdapter.toDbCustomer(stripImmutableCustomer(c));
-    const { data, error } = await supabase
-      .from('customers').update(row).eq('id', id).select().single();
-    return { data: data ? PersistenceAdapter.fromDbCustomer(data) : null, error };
+    const flatRow: Record<string, unknown> = {};
+    if (c.customerDetails) {
+      flatRow.full_name = c.customerDetails.fullName;
+      flatRow.identity_id = c.customerDetails.identityId;
+      flatRow.phone_number = c.customerDetails.phoneNumber;
+      flatRow.address = c.customerDetails.address;
+      flatRow.email = c.customerDetails.email;
+    }
+    if (c.isActive !== undefined) flatRow.is_active = c.isActive;
+    if (c.comments !== undefined) flatRow.comments = c.comments;
+
+    if (Object.keys(flatRow).length > 0) {
+      const { error } = await supabase.from('customers').update(flatRow).eq('id', id);
+      if (error) return { data: null, error };
+    }
+
+    const errs = await PersistenceAdapter._writeDetailTables(id, c, true);
+    if (errs) return { data: null, error: { message: errs } };
+
+    return { data: { id } as unknown as Customer, error: null };
   },
 
-  /** Hard-delete a customer (All related sub-tables and tasks drop automatically due to CASCADE) */
   async deleteCustomer(id: string): Promise<DbResult<null>> {
     const { error } = await supabase.from('customers').delete().eq('id', id);
     return { data: null, error };
   },
 
+  async _writeDetailTables(customerId: string, c: Partial<Customer>, isEdit: boolean): Promise<string | null> {
+    const ops: Promise<{ error: any }>[] = [];
+
+    if (c.businessDetails) {
+      ops.push(supabase.from('business_details').upsert({
+        customer_id: customerId,
+        business_name: c.businessDetails.businessName,
+        business_id: c.businessDetails.businessID,
+        business_type: c.businessDetails.businessType,
+        opening_date: c.businessDetails.openingDate || null,
+        occupation: c.businessDetails.occupation,
+        business_description: c.businessDetails.businessDescription,
+        employs_workers: c.businessDetails.employsWorkers,
+        needs_deductions_file: c.needsDeductionsFile ?? false,
+        deductions_id: c.businessDetails.deductionsId,
+      }));
+    }
+
+    if (c.isIncomeTaxActive === true && c.incomeTaxDetails) {
+      ops.push(supabase.from('income_tax_cases').upsert({
+        customer_id: customerId,
+        rep_type: c.incomeTaxDetails.repType,
+        income_tax_prepayment: c.incomeTaxDetails.incomeTaxPrepayment,
+        annual_turnover: c.incomeTaxDetails.annualTurnover,
+        is_new_case: c.incomeTaxDetails.newItCase,
+      }));
+    } else if (c.isIncomeTaxActive === false && isEdit) {
+      ops.push(supabase.from('income_tax_cases').delete().eq('customer_id', customerId));
+    }
+
+    if (c.isVatActive === true && c.vatDetails) {
+      ops.push(supabase.from('vat_cases').upsert({
+        customer_id: customerId,
+        is_new_case: c.vatDetails.newVatCase,
+      }));
+    } else if (c.isVatActive === false && isEdit) {
+      ops.push(supabase.from('vat_cases').delete().eq('customer_id', customerId));
+    }
+
+    if (c.isInsuranceActive === true && c.insuranceDetails) {
+      ops.push(supabase.from('insurance_cases').upsert({
+        customer_id: customerId,
+        insurance_prepayment: c.insuranceDetails.insurancePrepayment || 0,
+        work_hours: c.insuranceDetails.workHours || 0,
+        is_new_case: c.insuranceDetails.newInsuranceCase ?? true,
+      }));
+    } else if (c.isInsuranceActive === false && isEdit) {
+      ops.push(supabase.from('insurance_cases').delete().eq('customer_id', customerId));
+    }
+
+    if (c.paymentDetails) {
+      ops.push(supabase.from('payment_details').upsert({
+        customer_id: customerId,
+        setup_fee: Number(c.paymentDetails.setupFee) || 0,
+        monthly_fee: Number(c.paymentDetails.monthlyFee) || 0,
+        direct_debit: c.paymentDetails.directDebit,
+      }));
+    }
+
+    if (ops.length === 0) return null;
+
+    const results = await Promise.all(ops);
+    const firstError = results.find(r => r.error)?.error;
+    return firstError ? firstError.message : null;
+  },
+
   // ── Tasks ──
+
   async fetchTasksForCustomer(clientId: string): Promise<DbResult<PersistedTask[]>> {
     const { data, error } = await supabase
       .from('parent_tasks')
       .select('*, sub_tasks(*)')
-      .eq('client_id', clientId)
+      .eq('customer_id', clientId)
       .order('created_at', { ascending: true });
-      
+
     return {
-      data: data ? data.map((t: any) => ({
-        id: t.id,
-        clientId: t.client_id,
-        title: t.title,
-        priority: t.priority,
-        status: t.status,
-        createdAt: t.created_at,
-        subTasks: (t.sub_tasks ?? []).map((s: any) => ({
-          id: s.id,
-          parentTaskId: s.parent_task_id,
-          title: s.title,
-          completed: s.is_completed,
-          comment: s.comment
-        }))
-      })) : null,
+      data: data ? data.map(mapTaskRow) : null,
       error,
     };
   },
@@ -307,19 +366,14 @@ export const PersistenceAdapter = {
       .from('parent_tasks')
       .select('*, customers(id, full_name)')
       .order('created_at', { ascending: false });
-      
+
     if (!data) return { data: null, error };
     return {
       data: data.map((row: any) => {
         const { customers: customer, ...rawTask } = row;
         return {
-          id: rawTask.id,
-          clientId: rawTask.client_id,
-          title: rawTask.title,
-          priority: rawTask.priority,
-          status: rawTask.status,
-          createdAt: rawTask.created_at,
-          customerId: customer?.id ?? rawTask.client_id,
+          ...mapTaskRow(rawTask),
+          customerId: customer?.id ?? rawTask.customer_id,
           customerName: customer?.full_name ?? 'משימה משרדית',
         };
       }),
@@ -327,71 +381,51 @@ export const PersistenceAdapter = {
     };
   },
 
-  /**
-   * Flattens parent_tasks × sub_tasks into a single view list for the central table.
-   */
   async fetchAllSubtasksView(): Promise<DbResult<PersistedSubtaskRow[]>> {
     const { data, error } = await supabase
       .from('sub_tasks')
-      .select(`
-        id,
-        title,
-        is_completed,
-        comment,
-        parent_tasks (
-          id,
-          title,
-          priority,
-          status,
-          client_id,
-          customers (
-            id,
-            full_name
-          )
-        )
-      `)
-      .order('created_at', { foreignTable: 'parent_tasks', ascending: false });
+      .select('*, parent_tasks(id, title, status, customer_id, customers(id, full_name))')
+      .order('created_at', { ascending: false });
 
     if (error) return { data: null, error };
     if (!data) return { data: [], error: null };
 
     const rows: PersistedSubtaskRow[] = data.map((item: any) => {
       const parent = item.parent_tasks;
+      const customer = parent?.customers;
       return {
         taskId: parent?.id || '',
         subtaskId: item.id,
         subtaskTitle: item.title,
         completed: !!item.is_completed,
         comment: item.comment || '',
-        details: {}, 
+        details: {},
         parentTaskId: parent?.id || null,
         parentTitle: parent?.title || '',
-        priority: (parent?.priority || 'medium') as TaskPriority,
+        priority: (item.priority || 'medium') as SubTaskPriority, // ✨ שלוף מתוך תת-המשימה
         taskStatus: (parent?.status || 'pending') as 'pending' | 'completed',
-        clientId: parent?.client_id || null,
-        customerName: parent?.customers?.full_name || 'משימה משרדית'
+        clientId: parent?.customer_id || null,
+        customerName: customer?.full_name || 'משימה משרדית',
       };
     });
 
     return { data: rows, error: null };
   },
 
-  /** Bulk implementation for automated services */
   async insertTasks(tasks: Partial<PersistedTask>[]): Promise<DbResult<null>> {
     if (tasks.length === 0) return { data: null, error: null };
-    
+
     for (const t of tasks) {
       const { data: parent, error: pErr } = await supabase
         .from('parent_tasks')
         .insert({
-          client_id: t.clientId,
+          customer_id: t.clientId,
           title: t.title,
-          priority: t.priority || 'medium',
-          status: t.status || 'pending'
+          status: t.status || 'pending',
         })
         .select('id')
         .single();
-        
+
       if (pErr) return { data: null, error: pErr };
 
       if (t.subTasks && t.subTasks.length > 0) {
@@ -399,7 +433,8 @@ export const PersistenceAdapter = {
           parent_task_id: parent.id,
           title: s.title,
           is_completed: s.completed || false,
-          comment: s.comment || ''
+          comment: s.comment || '',
+          priority: s.priority || 'medium'
         }));
         const { error: sErr } = await supabase.from('sub_tasks').insert(subRows);
         if (sErr) return { data: null, error: sErr };
@@ -408,42 +443,39 @@ export const PersistenceAdapter = {
     return { data: null, error: null };
   },
 
-  /** Insert a single task — fully strict, strongly-typed. */
-  async insertSingleTask(taskData: { 
-    title: string; 
-    clientId: string | null; 
-    priority: TaskPriority; 
-    subTasks: { title: string }[] 
+  async insertSingleTask(taskData: {
+    title: string;
+    clientId: string | null;
+    subTasks: { title: string }[];
   }) {
     try {
       const { data: parent, error: parentErr } = await supabase
         .from('parent_tasks')
         .insert({
           title: taskData.title,
-          client_id: taskData.clientId,
-          priority: taskData.priority,
-          status: 'pending'
+          customer_id: taskData.clientId,   
+          status: 'pending',
         })
         .select('id')
         .single();
 
       if (parentErr) throw parentErr;
 
-      if (taskData.subTasks && taskData.subTasks.length > 0) {
-        const subtasksRows = taskData.subTasks.map(sub => ({
+      if (taskData.subTasks?.length > 0) {
+        const subtasksRows = taskData.subTasks.map((sub) => ({
           parent_task_id: parent.id,
           title: sub.title,
           is_completed: false,
-          comment: ''
+          comment: '',
+          priority: 'medium'
         }));
-
         const { error: subErr } = await supabase.from('sub_tasks').insert(subtasksRows);
         if (subErr) throw subErr;
       }
 
       return { success: true, error: null };
     } catch (err: any) {
-      console.error("Error in insertSingleTask:", err);
+      console.error('Error in insertSingleTask:', err);
       return { success: false, error: err };
     }
   },
@@ -452,7 +484,7 @@ export const PersistenceAdapter = {
     const { error } = await supabase
       .from('parent_tasks')
       .delete()
-      .eq('client_id', clientId)
+      .eq('customer_id', clientId)
       .eq('status', 'pending');
     return { data: null, error };
   },
@@ -468,49 +500,115 @@ export const PersistenceAdapter = {
     return { data: null, error };
   },
 
-  async updateTaskStatus(taskId: string, status: 'pending' | 'completed'): Promise<DbResult<null>> {
+async updateTaskStatus(taskId: string, status: 'pending' | 'completed'): Promise<DbResult<null>> {
+    // ✨ חסימת אב המשימה במידה והוא מכיל תת-משימה של אישור ניהול סופי
+    if (status === 'completed') {
+      const { data: subTasks } = await supabase
+        .from('sub_tasks')
+        .select('title')
+        .eq('parent_task_id', taskId);
+
+      const hasFinalApproval = subTasks?.some(sub => sub.title?.toLowerCase().includes("אישור ניהול סופי"));
+
+      if (hasFinalApproval && !authService.canApproveFinal("אישור ניהול סופי")) {
+        const errorMsg = "לא ניתן לסמן משימה זו כבוצע כיוון שהיא מכילה את 'אישור ניהול סופי' שטרם אושר!";
+        alert(errorMsg);
+        return { data: null, error: { message: errorMsg } as any };
+      }
+    }
+
     const { error } = await supabase.from('parent_tasks').update({ status }).eq('id', taskId);
     return { data: null, error };
   },
 
-  async updateTaskPriority(taskId: string, priority: TaskPriority): Promise<DbResult<null>> {
-    const { error } = await supabase.from('parent_tasks').update({ priority }).eq('id', taskId);
+  // ✨ סעיף 2 + 6: מימוש פונקציית עדכון הסטטוס הגורפת עם חסימת הרשאות קשיחה ליוחנן ושמוליק
+  async updateSubtasksStatusByParent(customerId: string, parentTaskId: string, completed: boolean): Promise<DbResult<null>> {
+    
+    if (completed) {
+      // 1. נבדוק קודם כל האם בין כל תתי-המשימות של האב הזה יש תת-משימה של "אישור ניהול סופי"
+      const { data: subTasks } = await supabase
+        .from('sub_tasks')
+        .select('title')
+        .eq('parent_task_id', parentTaskId);
+
+      if (subTasks) {
+        // אם נמצאה לפחות תת-משימה אחת שהיא אישור ניהול סופי והיוזר הוא יוחנן/שמוליק - נחסום את כל הפעולה הגורפת!
+        const hasFinalApproval = subTasks.some(sub => sub.title?.includes("אישור ניהול סופי"));
+        
+        if (hasFinalApproval && !authService.canApproveFinal("אישור ניהול סופי")) {
+          const errorMsg = "הפעולה נחסמה: התיק מכיל 'אישור ניהול סופי' ואין לך הרשאה לאשר אותו!";
+          alert(errorMsg);
+          return { data: null, error: { message: errorMsg } as any };
+        }
+      }
+    }
+
+    // 2. רק אם הכל תקין והמשתמש מורשה (או שאין שם אישור סופי) - נבצע את העדכון ב-DB
+    const { error } = await supabase
+      .from('sub_tasks')
+      .update({ 
+        is_completed: completed, 
+        updated_at: new Date().toISOString(),
+        updated_by: authService.getCurrentUser() // שיוך הפעולה ליוזר המחובר (מוישי/יוחנן/שמוליק)
+      })
+      .eq('parent_task_id', parentTaskId);
+
     return { data: null, error };
   },
 
-  /** Replaces old JSONB multi-update flow with structural upserts */
-  async updateTaskSubtasks(
-    taskId: string,
-    subTasks: PersistedSubTask[]
-  ): Promise<DbResult<null>> {
+  // ✨ סעיף 1: שינוי דחיפות ברמת תת המשימה בטבלה sub_tasks
+  async updateSubtaskPriority(subTaskId: string, priority: SubTaskPriority): Promise<DbResult<null>> {
+    const { error } = await supabase.from('sub_tasks').update({ priority }).eq('id', subTaskId);
+    return { data: null, error };
+  },
+
+  async updateTaskSubtasks(taskId: string, subTasks: PersistedSubTask[]): Promise<DbResult<null>> {
     if (subTasks.length === 0) return { data: null, error: null };
-    
-    const rows = subTasks.map(s => ({
+
+    const rows = subTasks.map((s) => ({
       id: s.id || undefined,
       parent_task_id: taskId,
       title: s.title,
       is_completed: s.completed,
-      comment: s.comment
+      comment: s.comment,
+      priority: s.priority || 'medium'
     }));
-    
+
     const { error } = await supabase.from('sub_tasks').upsert(rows);
     return { data: null, error };
   },
 
-  /** Toggles a structural subtask row status directly */
-  async updateSubtaskStatus(
-    _taskId: string, // Keep parameter signature for backward compatibility
+async updateSubtaskStatus(
+    _taskId: string,
     subtaskId: string,
     completed: boolean
   ): Promise<DbResult<null>> {
+    // הפונקציה פשוטה, חדה ומניחה ש-subtaskId תמיד קיים ותקין (כי ה-UI מגן עליה)
+    if (completed) {
+      const { data: subtask } = await supabase
+        .from('sub_tasks')
+        .select('title')
+        .eq('id', subtaskId)
+        .single(); // חוזר ל-single בטוח כי המזהה חובה
+
+      if (subtask && !authService.canApproveFinal(subtask.title)) {
+        const errorMsg = "אין לך הרשאה לשנות את הסטטוס של אישור ניהול סופי!";
+        alert(errorMsg);
+        return { data: null, error: { message: errorMsg } as any };
+      }
+    }
+
     const { error } = await supabase
       .from('sub_tasks')
-      .update({ is_completed: completed, updated_at: new Date().toISOString() })
+      .update({ 
+        is_completed: completed, 
+        updated_at: new Date().toISOString(),
+        updated_by: authService.getCurrentUser() 
+      })
       .eq('id', subtaskId);
+
     return { data: null, error };
   },
-
-  /** Update a single subtask's title from inline editor */
   async updateSubtaskTitle(
     _taskId: string,
     subtaskId: string,
@@ -523,32 +621,35 @@ export const PersistenceAdapter = {
     return { data: null, error };
   },
 
-  /** Update an item's title in parent_tasks */
   async updateTaskTitle(taskId: string, title: string): Promise<DbResult<null>> {
     const { error } = await supabase.from('parent_tasks').update({ title: title.trim() }).eq('id', taskId);
     return { data: null, error };
   },
 
-  /** Combined direct transactional subtask + priority editor */
-  async updateSubtask(subtaskId: string, parentTaskId: string, updates: { title: string; priority: string; comment: string }) {
+async updateSubtask(subtaskId: string, _parentTaskId: string, updates: { title: string; priority: string; comment: string }) {
     try {
+      // ✨ מניעת עריכה או עקיפה של אישור ניהול סופי מתוך חלון העריכה
+      if (updates.title.toLowerCase().includes("אישור ניהול סופי") && !authService.canApproveFinal(updates.title)) {
+        const errorMsg = "אין לך הרשאה לערוך או לשנות את אישור ניהול סופי!";
+        alert(errorMsg);
+        return { success: false, error: { message: errorMsg } };
+      }
+
       const { error: subErr } = await supabase
         .from('sub_tasks')
-        .update({ title: updates.title.trim(), comment: updates.comment.trim(), updated_at: new Date().toISOString() })
+        .update({ 
+          priority: updates.priority, 
+          title: updates.title.trim(), 
+          comment: updates.comment.trim(), 
+          updated_at: new Date().toISOString(),
+          updated_by: authService.getCurrentUser() 
+        })
         .eq('id', subtaskId);
-
       if (subErr) throw subErr;
-
-      const { error: parentErr } = await supabase
-        .from('parent_tasks')
-        .update({ priority: updates.priority })
-        .eq('id', parentTaskId);
-
-      if (parentErr) throw parentErr;
 
       return { success: true, error: null };
     } catch (err: any) {
-      console.error("Adapter transactional failure:", err);
+      console.error('Adapter transactional failure:', err);
       return { success: false, error: err };
     }
   },
@@ -556,24 +657,23 @@ export const PersistenceAdapter = {
   async updateTask(taskId: string, patch: Partial<PersistedTask>): Promise<DbResult<null>> {
     const row: Record<string, any> = {};
     if (patch.title) row.title = patch.title;
-    if (patch.priority) row.priority = patch.priority;
     if (patch.status) row.status = patch.status;
-    if (patch.clientId) row.client_id = patch.clientId;
+    if (patch.clientId) row.customer_id = patch.clientId;
 
     const { error } = await supabase.from('parent_tasks').update(row).eq('id', taskId);
     return { data: null, error };
   },
 
   // ── Logs ──
+
   async insertLog(row: Record<string, unknown>): Promise<DbResult<null>> {
-    const safe: Record<string, unknown> = {
+    const dbRow = {
       actor: typeof row.actor === 'string' && row.actor ? row.actor : 'unknown',
       action: typeof row.action === 'string' && row.action ? row.action : 'unknown',
-      entityType: typeof row.entityType === 'string' && row.entityType ? row.entityType : 'system',
-      entityId: isUuid(row.entityId) ? row.entityId : null,
+      entity_type: typeof row.entityType === 'string' && row.entityType ? row.entityType : 'system',
+      entity_id: isUuid(row.entityId) ? row.entityId : null,
       payload: (row.payload && typeof row.payload === 'object') ? row.payload : {},
     };
-    const dbRow = renameKeys(safe, LOG_TO_DB);
     const { error } = await supabase.from('logs').insert([dbRow]);
     if (error) {
       console.error('[PersistenceAdapter.insertLog] insert failed:', error.message, dbRow);
@@ -590,7 +690,15 @@ export const PersistenceAdapter = {
     if (error) console.error('[PersistenceAdapter.fetchAllLogs] error:', error.message);
     if (!data) return { data: null, error };
     return {
-      data: data.map((r) => PersistenceAdapter.fromDbLog(r) as unknown as PersistedLog),
+      data: data.map((r: any) => ({
+        id: r.id,
+        createdAt: r.created_at,
+        actor: r.actor,
+        action: r.action,
+        entityType: r.entity_type,
+        entityId: r.entity_id,
+        payload: r.payload,
+      })),
       error,
     };
   },

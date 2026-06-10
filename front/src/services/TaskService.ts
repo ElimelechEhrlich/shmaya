@@ -30,6 +30,7 @@ export interface GeneratedSubTask {
     completed: boolean;
     details: Record<string, any>;
     comment: string;
+    priority: 'low' | 'medium' | 'high' | 'critical'
 }
 
 // הגדרת המבנה של משימה ראשית מיוצרת
@@ -38,7 +39,6 @@ export interface GeneratedTask {
     parentTaskId: string;
     title: string;
     restrictedTo: string[] | null;
-    priority: 'low' | 'medium' | 'high' | 'critical' | string;
     subTasks: GeneratedSubTask[];
 }
 
@@ -59,7 +59,6 @@ export class TaskGeneratorService {
                 parentTaskId: parentTask.id,
                 title: parentTask.title,
                 restrictedTo: parentTask.restrictedTo || null,
-                priority: parentTask.priority || 'medium',
                 subTasks: parentTask.subTasks
                     .filter((sub: any) => {
                         if (sub.condition) return sub.condition(customerData);
@@ -75,6 +74,7 @@ export class TaskGeneratorService {
                         completed: false,
                         details: sub.getDetails ? sub.getDetails(customerData) : {},
                         comment: '',
+                        priority: sub.priority || 'medium', // יורש עדיפות מתת-המשימה, או מהמשימה האב, או ברירת מחדל
                     })),
             }));
     }

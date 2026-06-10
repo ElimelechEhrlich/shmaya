@@ -6,7 +6,6 @@ import FormField from '../comps/FormField';
 import TaskCard from '../comps/TaskCard';
 import { CustomerService } from '../services/CustomerService';
 import {
-    applyBusinessRules,
     isEmployerType,
     isRepresentationAllowed,
     BUSINESS_TYPE_OPTIONS,
@@ -14,7 +13,6 @@ import {
     boolToOption,
 } from '../registries/CustomerRegistry';
 
-// הגדרת המבנה הטיפוסי המלא של הנתונים בטופס
 interface CustomerFormData {
     customerDetails: { fullName: string; identityId: string; phoneNumber: string; address: string; email: string };
     businessDetails: {
@@ -61,19 +59,11 @@ export default function AddCustomer(): React.ReactElement {
 
     const [previewTasks, setPreviewTasks] = useState<any[]>([]);
 
-    // אופטימיזציה: איחוד הריצות של חוקי העסק ותצוגת המשימות תחת מעקב יציב אחד
+    // תצוגה מקדימה של משימות בלבד - ללא הפעלת לולאת שינוי הסטייט של הלקוח
     useEffect(() => {
-        const normalized = applyBusinessRules(formData as any) as CustomerFormData;
-
-        // השוואה בטוחה כדי למנוע לולאת רינדור אינסופית ב-Vite
-        if (normalized && JSON.stringify(normalized) !== JSON.stringify(formData)) {
-            setFormData(normalized);
-        }
-
-        setPreviewTasks(TaskGeneratorService.generateForCustomer(normalized || formData));
+        setPreviewTasks(TaskGeneratorService.generateForCustomer(formData as any));
     }, [formData]);
 
-    // תיקון פונקציית handleChange לתמיכה בשדות רוט (עליונים) ושדות בוליאניים
     const handleChange = (
         category: keyof CustomerFormData | 'root', 
         e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
@@ -82,22 +72,33 @@ export default function AddCustomer(): React.ReactElement {
         const finalValue = type === 'checkbox' ? (e.target as HTMLInputElement).checked : value;
 
         if (category === 'root') {
-            setFormData(prev => ({ ...prev, [name]: finalValue }));
+            setFormData(prev => {
+                const updated = { ...prev, [name]: finalValue };
+                return updated;
+            });
         } else {
-            setFormData(prev => ({
-                ...prev,
-                [category]: {
-                    ...(prev[category] as Record<string, any>),
-                    [name]: finalValue
+            setFormData(prev => {
+                const updated = {
+                    ...prev,
+                    [category]: {
+                        ...(prev[category] as Record<string, any>),
+                        [name]: finalValue
+                    }
+                };
+
+                // חוק עסק קל ומבוקר בשכבת הקומפוננטה: אם שונה סטטוס העסקת עובדים
+                if (category === 'businessDetails' && name === 'employsWorkers') {
+                    updated.needsDeductionsFile = finalValue === 'yes';
                 }
-            }));
+
+                return updated;
+            });
         }
     };
 
     const handleSubmit = async (e: React.FormEvent<HTMLFormElement>): Promise<void> => {
         e.preventDefault();
 
-        // אבטחת שדות חובה בשכבת הקליינט לפני פניה ל-Supabase
         if (!formData.businessDetails.businessName.trim()) {
             alert('⚠️ חובה למלא את שם העסק!');
             return;
@@ -108,13 +109,8 @@ export default function AddCustomer(): React.ReactElement {
         
         if (!hasAuthorities) {
             const saveAsInactive = window.confirm('⚠️ לא הגדרת טיפול באף רשות. האם ברצונך לשמור את הלקוח כ"לא פעיל"?');
-            if (!saveAsInactive) {
-                return; // המשתמש התחרט - עוצרים את השמירה ונשארים במסך
-            }
-            dataToSave = {
-                ...dataToSave,
-                isActive: false
-            };
+            if (!saveAsInactive) return;
+            dataToSave = { ...dataToSave, isActive: false };
         }
         
         try {
@@ -279,7 +275,7 @@ export default function AddCustomer(): React.ReactElement {
                                                 className="w-5 h-5 cursor-pointer accent-blue-600"
                                                 checked={formData.needsDeductionsFile}
                                                 name="needsDeductionsFile"
-                                                onChange={(e) => handleChange('root', e)} // תיקון: העברה דרך הרוט
+                                                onChange={(e) => handleChange('root', e)}
                                             />
                                         </div>
                                     )}
@@ -340,7 +336,6 @@ export default function AddCustomer(): React.ReactElement {
     );
 }
 
-// Card wrapper component
 const Card: React.FC<CardProps> = ({ title, icon, children }) => (
     <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
         <h3 className="text-blue-700 font-black text-[11px] uppercase tracking-[0.2em] mb-5 border-b border-slate-100 pb-2 flex items-center gap-2">
@@ -351,7 +346,6 @@ const Card: React.FC<CardProps> = ({ title, icon, children }) => (
     </div>
 );
 
-// Toggle header component
 const ToggleHeader: React.FC<ToggleHeaderProps> = ({ label, checked, onChange }) => (
     <label className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition ${checked ? 'bg-blue-50 border-blue-200' : 'bg-slate-50 border-slate-200 hover:border-slate-300'}`}>
         <input

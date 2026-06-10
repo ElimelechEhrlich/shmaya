@@ -13,12 +13,13 @@
 //   On DB error we log to console and call reload() to resync.
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { authService } from '../services/authService.js';
 import {
     PersistenceAdapter,
     type CustomerWithTasks,
     type PersistedTask,
     type PersistedSubTask,
-    type TaskPriority,
+    type SubTaskPriority,
 } from '../services/PersistenceAdapter';
 import { LogService } from '../services/LogService';
 import { CustomerService } from '../services/CustomerService';
@@ -27,7 +28,6 @@ import {
     calculateWeightedProgress,
     isCustomerFinalized,
     listVisibleFields,
-    cascadeOnParentToggle,
     cascadeOnSubtaskSet,
     type Customer,
 } from '../registries/CustomerRegistry';
@@ -36,12 +36,12 @@ export interface UseCustomerActions {
     updateField: (category: string | null, field: string, value: unknown) => void;
     setEditMode: (editing: boolean) => void;
     save: () => Promise<{ success: boolean; error?: string }>;
-    toggleTaskStatus: (taskId: string, currentStatus: 'pending' | 'completed') => Promise<void>;
+    toggleTaskStatus: (parentTaskId: string, currentStatus: 'pending' | 'completed') => Promise<void>;
     updateTask: (taskId: string, patch: Partial<PersistedTask>) => Promise<void>;
     setSubtaskCompleted: (taskId: string, subtaskId: string, completed: boolean) => Promise<void>;
     toggleSubtask: (taskId: string, subtaskId: string) => Promise<void>;
     updateSubtaskComment: (taskId: string, subtaskId: string, comment: string) => Promise<void>;
-    updateTaskPriority: (taskId: string, priority: TaskPriority) => Promise<void>;
+    updateSubTaskPriority: (taskId: string, subtaskId: string, priority: SubTaskPriority) => Promise<void>;
     deactivate: () => Promise<{ success: boolean; error?: string }>;
     reactivate: () => Promise<{ success: boolean; error?: string }>;
     remove: () => Promise<{ success: boolean; error?: string }>;
@@ -59,7 +59,6 @@ export interface UseCustomerResult {
     actions: UseCustomerActions;
 }
 
-// Updater that touches a single task inside the tasks array, preserving order.
 function withTaskUpdated(
     state: CustomerWithTasks | null,
     taskId: string,
@@ -68,6 +67,7 @@ function withTaskUpdated(
     if (!state) return state;
     return {
         ...state,
+        // השוואה נקייה ומדויקת לפי ה-id של ישות האב המיוצגת במערך
         tasks: state.tasks.map((t) => (t.id === taskId ? transform(t) : t)),
     };
 }
@@ -79,22 +79,24 @@ export function useCustomer(customerId: string | undefined): UseCustomerResult {
     const [isEditing, setIsEditing] = useState<boolean>(false);
 
     const reload = useCallback(async () => {
-        if (!customerId) {
-            setLoading(false);
-            return;
-        }
+        if (!customerId) { setLoading(false); return; }
         setLoading(true);
         const { data, error } = await PersistenceAdapter.fetchCustomerWithTasks(customerId);
-        if (!error && data) {
-            setCustomer(data);
-            setEditData(data);
-        }
+        if (!error && data) { setCustomer(data); setEditData(data); }
         setLoading(false);
     }, [customerId]);
 
     useEffect(() => {
-        reload();
-    }, [reload]);
+        if (!customerId) { setLoading(false); return; }
+        let cancelled = false;
+        setLoading(true);
+        PersistenceAdapter.fetchCustomerWithTasks(customerId).then(({ data, error }) => {
+            if (cancelled) return;
+            if (!error && data) { setCustomer(data); setEditData(data); }
+            setLoading(false);
+        });
+        return () => { cancelled = true; };
+    }, [customerId]);
 
     const updateField = useCallback(
         (category: string | null, field: string, value: unknown) => {
@@ -103,8 +105,7 @@ export function useCustomer(customerId: string | undefined): UseCustomerResult {
                 const next: Record<string, unknown> = { ...prev };
                 if (category) {
                     const prevCategory =
-                        (prev as unknown as Record<string, Record<string, unknown> | undefined>)[category]
-                        ?? {};
+                        (prev as unknown as Record<string, Record<string, unknown> | undefined>)[category] ?? {};
                     next[category] = { ...prevCategory, [field]: value };
                 } else {
                     next[field] = value;
@@ -127,7 +128,7 @@ export function useCustomer(customerId: string | undefined): UseCustomerResult {
     const save = useCallback(
         async (): Promise<{ success: boolean; error?: string }> => {
             if (!customerId || !editData) return { success: false, error: 'No data to save' };
-            
+
             const isCurrentlyActive = customer?.isActive;
             const hasAnyAuthority = !!(editData.isIncomeTaxActive || editData.isVatActive || editData.isInsuranceActive);
             let updatedData = { ...editData };
@@ -139,15 +140,10 @@ export function useCustomer(customerId: string | undefined): UseCustomerResult {
                 if (!shouldDeactivate) {
                     return { success: false, error: 'השמירה בבוטלה על ידי המשתמש.' };
                 }
-                updatedData = {
-                    ...updatedData,
-                    isActive: false
-                };
+                updatedData = { ...updatedData, isActive: false };
             }
 
-            // הפרדת מערך ה-tasks מהאובייקט כדי לשלוח מבנה נקי התואם ל-CustomerFormData של השירות
             const { tasks: _, ...cleanFormData } = updatedData as any;
-
             const result = await CustomerService.saveCustomer(cleanFormData, true, customerId);
             if (result.success) {
                 setIsEditing(false);
@@ -158,33 +154,47 @@ export function useCustomer(customerId: string | undefined): UseCustomerResult {
         [customerId, editData, customer, reload]
     );
 
-    // ── Task mutations (Optimistic & Normalised Flow) ──
-
+    // ── ✨ סעיף 2: עדכון גורף אטומי עבור אב המשימה (Cascade Parent Toggle) ──
     const toggleTaskStatus = useCallback(
-        async (taskId: string, currentStatus: 'pending' | 'completed'): Promise<void> => {
-            const targetTask = (editData ?? customer)?.tasks.find(t => t.id === taskId);
-            if (!targetTask) return;
+        async (parentTaskId: string, currentStatus: 'pending' | 'completed'): Promise<void> => {
+            if (!customerId) return;
+            const nextStatus = currentStatus === 'completed' ? 'pending' : 'completed';
+            const isCompletedBoolean = nextStatus === 'completed';
 
-            const res = cascadeOnParentToggle({ status: targetTask.status, subTasks: targetTask.subTasks as any });
-            const nextStatus = res.status as 'pending' | 'completed';
-            const nextSubTasks = res.subTasks as any[];
+            if (isCompletedBoolean) {
+                const targetTask = (customer ?? editData)?.tasks.find(t => t.id === parentTaskId);
+                if (targetTask?.subTasks?.some(s => !authService.canApproveFinal(s.title))) {
+                    alert("הפעולה נחסמה: המשימה מכילה 'אישור ניהול סופי' ואין לך הרשאה לאשר אותו!");
+                    return;
+                }
+            }
 
-            const apply = (t: PersistedTask): PersistedTask => ({ ...t, status: nextStatus, subTasks: nextSubTasks });
-            setCustomer((s) => withTaskUpdated(s, taskId, apply));
-            setEditData((s) => withTaskUpdated(s, taskId, apply));
+            // 1. עדכון אופטימי מהיר ומיידי בסטייט המקומי (למניעת כל איטיות ברינדור)
+            const applyCascade = (t: PersistedTask): PersistedTask => ({
+                ...t,
+                status: nextStatus,
+                subTasks: (t.subTasks || []).map((st) => ({ ...st, completed: isCompletedBoolean }))
+            });
 
-            // עדכון מפוצל ומנורמל: משנים את סטטוס האב, ומעדכנים את כל הבנים בבת אחת
-            const { error: parentErr } = await PersistenceAdapter.updateTaskStatus(taskId, nextStatus);
-            const { error: subErr } = await PersistenceAdapter.updateTaskSubtasks(taskId, nextSubTasks);
+            setCustomer((s) => withTaskUpdated(s, parentTaskId, applyCascade));
+            setEditData((s) => withTaskUpdated(s, parentTaskId, applyCascade));
 
-            if (parentErr || subErr) {
-                console.error('[useCustomer.toggleTaskStatus] persist failed');
+            // 2. עדכון גורף ישיר ב-Supabase רק עבור תתי-המשימות של הלקוח המשויכות לאותו אב
+            const { error } = await PersistenceAdapter.updateSubtasksStatusByParent(
+                customerId,
+                parentTaskId,
+                isCompletedBoolean
+            );
+
+            if (error) {
+                console.error('[useCustomer.toggleTaskStatus] Cascade update failed:', error.message);
                 await reload();
                 return;
             }
-            await LogService.recordTaskStatusChange(taskId, currentStatus, nextStatus);
+
+            await LogService.recordTaskStatusChange(parentTaskId, currentStatus, nextStatus);
         },
-        [editData, customer, reload]
+        [customerId, reload, customer, editData]
     );
 
     const setSubtaskCompleted = useCallback(
@@ -194,6 +204,12 @@ export function useCustomer(customerId: string | undefined): UseCustomerResult {
 
             const beforeStatus = targetTask.status;
             const beforeSubTasks = targetTask.subTasks || [];
+
+            const targetSub = beforeSubTasks.find(s => s.id === subtaskId);
+            if (completed && targetSub && !authService.canApproveFinal(targetSub.title)) {
+                alert("אין לך הרשאה לסמן 'אישור ניהול סופי' כבוצע!");
+                return;
+            }
 
             const res = cascadeOnSubtaskSet(
                 { status: beforeStatus, subTasks: beforeSubTasks as any },
@@ -207,19 +223,14 @@ export function useCustomer(customerId: string | undefined): UseCustomerResult {
             setCustomer((s) => withTaskUpdated(s, taskId, apply));
             setEditData((s) => withTaskUpdated(s, taskId, apply));
 
-            // פניה ישירה לעמודת הסטטוס הבודדת בטבלת sub_tasks
             const { error: subErr } = await PersistenceAdapter.updateSubtaskStatus(taskId, subtaskId, completed);
-            // אם שינוי הבן גרם לשינוי סטטוס האב (למשל כולם הושלמו), נעדכן גם את האב בטבלה שלו
-            if (beforeStatus !== nextStatus) {
-                await PersistenceAdapter.updateTaskStatus(taskId, nextStatus);
-            }
 
             if (subErr) {
                 console.error('[useCustomer.setSubtaskCompleted] persist failed:', subErr.message);
                 await reload();
                 return;
             }
-            
+
             await LogService.recordTaskChange(
                 taskId,
                 { subTasks: beforeSubTasks, status: beforeStatus } as unknown as Record<string, unknown>,
@@ -250,10 +261,10 @@ export function useCustomer(customerId: string | undefined): UseCustomerResult {
             setCustomer((s) => withTaskUpdated(s, taskId, apply));
             setEditData((s) => withTaskUpdated(s, taskId, apply));
 
-            // מוטציה ממוקדת: משתמשים בפונקציה הטרנזקציונלית החדשה ב-Adapter שמזריקה הערה ישירות לשורה הנכונה
             const { error } = await PersistenceAdapter.updateSubtask(subtaskId, taskId, {
                 title: beforeSubTasks.find(s => s.id === subtaskId)?.title || '',
-                priority: targetTask.priority,
+                // שליפת העדיפות מתוך תת-המשימה הספציפית שעוברת עריכה, ולא מאובייקט האב הכללי
+                priority: beforeSubTasks.find(s => s.id === subtaskId)?.priority || 'medium',
                 comment: comment
             });
 
@@ -271,28 +282,33 @@ export function useCustomer(customerId: string | undefined): UseCustomerResult {
         [editData, customer, reload]
     );
 
-    const updateTaskPriority = useCallback(
-        async (taskId: string, priority: TaskPriority): Promise<void> => {
+    // ✨ תיקון: עדכון רמת הדחיפות ישירות לתוך השדה הפנימי של תת המשימה
+    const updateSubTaskPriority = useCallback(
+        async (taskId: string, subtaskId: string, priority: SubTaskPriority): Promise<void> => {
             const targetTask = (editData ?? customer)?.tasks.find(t => t.id === taskId);
             if (!targetTask) return;
 
-            const beforePriority = targetTask.priority;
+            const beforeSubTasks = targetTask.subTasks || [];
+            const nextSubTasks = beforeSubTasks.map((s) => (s.id === subtaskId ? { ...s, priority } : s));
 
-            const apply = (t: PersistedTask): PersistedTask => ({ ...t, priority });
+            // 1. עדכון אופטימי מהיר ב-State של React
+            const apply = (t: PersistedTask): PersistedTask => ({ ...t, subTasks: nextSubTasks });
             setCustomer((s) => withTaskUpdated(s, taskId, apply));
             setEditData((s) => withTaskUpdated(s, taskId, apply));
 
-            const { error } = await PersistenceAdapter.updateTaskPriority(taskId, priority);
+            // 2. שמירה ברקע ב-Supabase עם שם הפונקציה המדויק (t קטנה!)
+            const { error } = await PersistenceAdapter.updateSubtaskPriority(subtaskId, priority);
+
             if (error) {
-                console.error('[useCustomer.updateTaskPriority] persist failed:', error.message);
-                await reload();
+                console.error('[useCustomer.updateSubTaskPriority] persist failed:', error.message);
+                await reload(); // רענון מאולץ רק במקרה של שגיאת רשת
                 return;
             }
 
             await LogService.recordTaskChange(
                 taskId,
-                { priority: beforePriority } as unknown as Record<string, unknown>,
-                { priority } as unknown as Record<string, unknown>
+                { subTasks: beforeSubTasks } as unknown as Record<string, unknown>,
+                { subTasks: nextSubTasks } as unknown as Record<string, unknown>
             );
         },
         [editData, customer, reload]
@@ -368,6 +384,22 @@ export function useCustomer(customerId: string | undefined): UseCustomerResult {
         [editData]
     );
 
+    const actions = useMemo(() => ({
+        updateField,
+        setEditMode,
+        save,
+        toggleTaskStatus,
+        updateTask,
+        setSubtaskCompleted,
+        toggleSubtask,
+        updateSubtaskComment,
+        updateSubTaskPriority, // ✨ הפניה לפונקציה המעודכנת
+        deactivate,
+        reactivate,
+        remove,
+        reload,
+    }), [updateField, setEditMode, save, toggleTaskStatus, updateTask, setSubtaskCompleted, toggleSubtask, updateSubtaskComment, updateSubTaskPriority, deactivate, reactivate, remove, reload]);
+
     return {
         customer,
         editData,
@@ -376,20 +408,6 @@ export function useCustomer(customerId: string | undefined): UseCustomerResult {
         progress,
         isFinalized,
         visibleFields,
-        actions: {
-            updateField,
-            setEditMode,
-            save,
-            toggleTaskStatus,
-            updateTask,
-            setSubtaskCompleted,
-            toggleSubtask,
-            updateSubtaskComment,
-            updateTaskPriority,
-            deactivate,
-            reactivate,
-            remove,
-            reload,
-        },
+        actions,
     };
 }

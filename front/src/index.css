@@ -25,3 +25,15 @@ body {
     @apply bg-white rounded-2xl shadow-sm border border-slate-200;
   }
 }
+
+
+/* הוסף את השורות האלו בתחתית קובץ ה-CSS הראשי שלך */
+
+button, 
+select, 
+input[type="checkbox"], 
+input[type="radio"],
+a,
+[onClick] {
+    cursor: pointer !important;
+}
