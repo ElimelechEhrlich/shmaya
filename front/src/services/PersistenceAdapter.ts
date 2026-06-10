@@ -281,7 +281,7 @@ export const PersistenceAdapter = {
   },
 
   async _writeDetailTables(customerId: string, c: Partial<Customer>, isEdit: boolean): Promise<string | null> {
-    const ops: Promise<{ error: any }>[] = [];
+    const ops: any[] = [];
 
     if (c.businessDetails) {
       ops.push(supabase.from('business_details').upsert({
@@ -341,8 +341,8 @@ export const PersistenceAdapter = {
 
     if (ops.length === 0) return null;
 
-    const results = await Promise.all(ops);
-    const firstError = results.find(r => r.error)?.error;
+    const results = await Promise.all(ops as Promise<{ error: any }>[]);
+    const firstError = results.find((r: any) => r.error)?.error;
     return firstError ? firstError.message : null;
   },
 
