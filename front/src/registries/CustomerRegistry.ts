@@ -285,119 +285,6 @@ export const SERVICES: Record<ServiceKey, ServiceDefinition> = {
 };
 
 // ──────────────────────────────────────────────────────────────────
-// 5. Field rules (visibility + required)
-// ──────────────────────────────────────────────────────────────────
-
-type Predicate = (c: Customer) => boolean;
-const always: Predicate = () => true;
-const never: Predicate = () => false;
-
-interface FieldRule {
-  visibleWhen?: Predicate;
-  requiredWhen?: Predicate;
-}
-
-const FIELD_RULES: Record<string, FieldRule> = {
-  // — customer details —
-  'customerDetails.fullName':    { visibleWhen: always, requiredWhen: always },
-  'customerDetails.identityId':  { visibleWhen: always, requiredWhen: always },
-  'customerDetails.phoneNumber': { visibleWhen: always, requiredWhen: always },
-  'customerDetails.address':     { visibleWhen: always, requiredWhen: never  },
-  'customerDetails.email':       { visibleWhen: always, requiredWhen: always },
-
-  // — business details —
-  'businessDetails.businessName':        { visibleWhen: always, requiredWhen: always },
-  'businessDetails.businessID':          { visibleWhen: always, requiredWhen: always },
-  'businessDetails.businessType':        { visibleWhen: always, requiredWhen: always },
-  'businessDetails.openingDate':         { visibleWhen: always, requiredWhen: always },
-  'businessDetails.occupation':          { visibleWhen: always, requiredWhen: never  },
-  'businessDetails.businessDescription': { visibleWhen: always, requiredWhen: never  },
-  'businessDetails.employsWorkers': {
-    visibleWhen: (c) => isEmployerType(c),
-    requiredWhen: (c) => isEmployerType(c),
-  },
-  'businessDetails.deductionsId': {
-    visibleWhen: (c) => c.needsDeductionsFile,
-    requiredWhen: (c) => c.needsDeductionsFile,
-  },
-
-  // — service toggles —
-  isIncomeTaxActive:  { visibleWhen: always, requiredWhen: never },
-  isInsuranceActive:  { visibleWhen: always, requiredWhen: never },
-  isVatActive: {
-    visibleWhen: (c) => isRepresentationAllowed(c),
-    requiredWhen: never,
-  },
-
-  // — insurance details —
-  'insuranceDetails.newInsuranceCase': {
-    visibleWhen: (c) => c.isInsuranceActive,
-    requiredWhen: (c) => c.isInsuranceActive,
-  },
-  'insuranceDetails.insurancePrepayment': {
-    visibleWhen: (c) => c.isInsuranceActive,
-    requiredWhen: never,
-  },
-  'insuranceDetails.workHours': {
-    visibleWhen: (c) => c.isInsuranceActive,
-    requiredWhen: never,
-  },
-  'insuranceDetails.insuranceId': {
-    visibleWhen: (c) => c.isInsuranceActive,
-    requiredWhen: never,
-  },
-  'insuranceDetails.insuranceStatus': {
-    visibleWhen: (c) =>
-      c.isInsuranceActive && Boolean(c.insuranceDetails?.newInsuranceCase),
-    requiredWhen: never,
-  },
-
-  // — income tax details —
-  'incomeTaxDetails.repType': {
-    visibleWhen: (c) => c.isIncomeTaxActive,
-    requiredWhen: (c) => c.isIncomeTaxActive,
-  },
-  'incomeTaxDetails.incomeTaxPrepayment': {
-    visibleWhen: (c) => c.isIncomeTaxActive,
-    requiredWhen: never,
-  },
-  'incomeTaxDetails.annualTurnover': {
-    visibleWhen: (c) => c.isIncomeTaxActive,
-    requiredWhen: never,
-  },
-  'incomeTaxDetails.newItCase': {
-    visibleWhen: (c) => c.isIncomeTaxActive,
-    requiredWhen: (c) => c.isIncomeTaxActive,
-  },
-
-  // — vat details (under representation) —
-  'vatDetails.newVatCase': {
-    visibleWhen: (c) => c.isVatActive,
-    requiredWhen: (c) => c.isVatActive,
-  },
-
-  // — payment —
-  'paymentDetails.setupFee':   { visibleWhen: always, requiredWhen: never },
-  'paymentDetails.monthlyFee': { visibleWhen: always, requiredWhen: never },
-  'paymentDetails.directDebit': {
-    visibleWhen: (c) => Number(c.paymentDetails?.monthlyFee) > 0,
-    requiredWhen: never,
-  },
-
-  // — derived —
-  needsDeductionsFile: {
-    visibleWhen: (c) =>
-      isEmployerType(c) && c.businessDetails?.employsWorkers === 'yes',
-    requiredWhen: never,
-  },
-
-  comments: { visibleWhen: always, requiredWhen: never },
-};
-
-/** All field paths declared in FIELD_RULES, in declaration order. */
-export const ALL_FIELDS: readonly string[] = Object.keys(FIELD_RULES);
-
-// ──────────────────────────────────────────────────────────────────
 // 6. Public predicates
 // ──────────────────────────────────────────────────────────────────
 
@@ -415,23 +302,6 @@ export function isRepresentationAllowed(c: Customer): boolean {
   return getBusinessTypeRule(c)?.representationAllowed ?? true;
 }
 
-export function isAttributeVisible(c: Customer, field: string): boolean {
-  const rule = FIELD_RULES[field];
-  if (!rule?.visibleWhen) return true;
-  return rule.visibleWhen(c);
-}
-
-export function isAttributeRequired(c: Customer, field: string): boolean {
-  if (!isAttributeVisible(c, field)) return false;
-  const rule = FIELD_RULES[field];
-  if (!rule?.requiredWhen) return false;
-  return rule.requiredWhen(c);
-}
-
-/** Filters ALL_FIELDS to those visible for the given customer. */
-export function listVisibleFields(c: Customer): string[] {
-  return ALL_FIELDS.filter((f) => isAttributeVisible(c, f));
-}
 
 // ──────────────────────────────────────────────────────────────────
 // 6b. Task-emission predicates
@@ -510,16 +380,17 @@ export function applyBusinessRules(c: Customer): Customer {
     isActive: c.isActive,
   };
 
-  if (!hasActiveAuthorities(next)) {
-        next.isActive = false; // או next.isActive = false, תלוי בשם השדה במסד הנתונים שלך
-    }
-
   // 1. Force services off where the business type forbids them
   const btRule = getBusinessTypeRule(next);
   if (btRule) {
     for (const svc of btRule.forcesServicesOff) {
       next[SERVICES[svc].activeFlag] = false;
     }
+  }
+
+  // 2. After forced-off cascade, deactivate the customer if no authority remains
+  if (!hasActiveAuthorities(next)) {
+    next.isActive = false;
   }
 
   // 2. Employer cascade — symmetric (true ↔ false)
@@ -685,7 +556,7 @@ export const FINAL_APPROVAL_PARENT_ID = 'FINAL_APPROVAL';
 
 interface CascadeInput {
     status: 'pending' | 'completed';
-    subTasks?: { id: string; completed: boolean; [k: string]: unknown }[];
+    subTasks?: { id: string; completed: boolean }[];
 }
 
 export interface CascadeResult {
@@ -760,29 +631,44 @@ export interface IdempotentSyncPlan {
  */
 export function planIdempotentSync(
     generated: MergeableTask[],
-    existing: { id: string; parentTaskId?: string | null; status: 'pending' | 'completed'; subTasks?: MergeableTask['subTasks'] }[]
+    existing: { id: string; title: string; parentTaskId?: string | null; status: 'pending' | 'completed'; subTasks?: MergeableTask['subTasks'] }[]
 ): IdempotentSyncPlan {
     const existingByParent = new Map<string, typeof existing[number]>();
+    const existingByTitle = new Map<string, typeof existing[number]>();
     for (const e of existing) {
         if (e.parentTaskId) existingByParent.set(e.parentTaskId, e);
+        existingByTitle.set(e.title, e);
     }
     const generatedParentIds = new Set<string>();
+    const generatedTitles = new Set<string>();
 
     const toInsert: MergeableTask[] = [];
     const toUpdate: IdempotentSyncPlan['toUpdate'] = [];
 
     for (const g of generated) {
-        if (!g.parentTaskId) {
-            toInsert.push(g);
-            continue;
-        }
-        generatedParentIds.add(g.parentTaskId);
-        const match = existingByParent.get(g.parentTaskId);
+        const match = g.parentTaskId ? existingByParent.get(g.parentTaskId) : undefined;
+        if (g.parentTaskId) generatedParentIds.add(g.parentTaskId);
+        generatedTitles.add(g.title);
+
         if (!match) {
+            const titleMatch = existingByTitle.get(g.title);
+            if (titleMatch) {
+                toUpdate.push({
+                    id: titleMatch.id,
+                    subTasks: g.subTasks.map((newSub) => {
+                        const oldByid = new Map((titleMatch.subTasks ?? []).map((s) => [s.id, s]));
+                        const old = oldByid.get(newSub.id);
+                        return old
+                            ? { ...newSub, completed: !!old.completed, comment: old.comment ?? '' }
+                            : { ...newSub, completed: false, comment: '' };
+                    })
+                });
+                continue;
+            }
             toInsert.push(g);
             continue;
         }
-        // Preserve existing subtask state (completion + comment) for matching ids.
+
         const oldByid = new Map((match.subTasks ?? []).map((s) => [s.id, s]));
         const mergedSubs = g.subTasks.map((newSub) => {
             const old = oldByid.get(newSub.id);
@@ -796,7 +682,10 @@ export function planIdempotentSync(
     // Pending existing tasks whose parentTaskId is no longer generated → delete.
     const toDeletePendingIds: string[] = [];
     for (const e of existing) {
-        if (e.status === 'pending' && e.parentTaskId && !generatedParentIds.has(e.parentTaskId)) {
+        if (e.status !== 'pending') continue;
+        const existingKey = e.parentTaskId ?? e.title;
+        if (!existingKey) continue;
+        if (!generatedParentIds.has(existingKey) && !generatedTitles.has(existingKey)) {
             toDeletePendingIds.push(e.id);
         }
     }

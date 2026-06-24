@@ -1,9 +1,9 @@
 // src/comps/CustomerList.tsx
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
-import { PersistenceAdapter } from '../services/PersistenceAdapter';
+import { OFFICE_CUSTOMER_ID, PersistenceAdapter } from '../services/PersistenceAdapter';
 import { TaskGeneratorService } from '../services/TaskService';
 import { BUSINESS_TYPE_OPTIONS } from '../registries/CustomerRegistry';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 
 // הגדרת המבנה של פילטרים באפליקציה
 interface CustomerFilters {
@@ -67,7 +67,7 @@ const CustomerList: React.FC = () => {
 
     const exportToExcel = (): void => {
         const headers = ["שם לקוח", "מזהה עסק", "סוג עסק", "ביטוח לאומי", "מס הכנסה", "מע\"מ", "אישור סופי"];
-        const rows = filteredCustomers.map(client => [
+        const rows = filteredCustomers.filter(c => c.id !== OFFICE_CUSTOMER_ID).map(client => [
             client.customerDetails?.fullName || '',
             client.businessDetails?.businessID || '',
             client.businessDetails?.businessType || '',
@@ -172,7 +172,7 @@ const CustomerList: React.FC = () => {
                         </select>
                     </div>
                     <div className="mt-3 flex justify-between items-center">
-                        <span className="text-xs text-slate-500 font-medium">מציג {filteredCustomers.length} מתוך {customers.length} לקוחות</span>
+                        <span className="text-xs text-slate-500 font-medium">מציג {filteredCustomers.filter(c => c.id !== OFFICE_CUSTOMER_ID).length} מתוך {customers.length} לקוחות</span>
                         <button onClick={resetFilters} className="cursor-pointer text-sm text-blue-600 hover:text-blue-800 font-bold transition">
                             ניקוי סינונים
                         </button>
@@ -184,15 +184,15 @@ const CustomerList: React.FC = () => {
                     <table className="w-full text-right border-collapse">
                         <thead className="bg-slate-50 border-b border-slate-200">
                             <tr>
-                                <th className="p-4 text-xs font-bold text-slate-600 uppercase tracking-wider text-center">מזהה עסק</th>
                                 <th className="p-4 text-xs font-bold text-slate-600 uppercase tracking-wider text-center">שם לקוח</th>
+                                <th className="p-4 text-xs font-bold text-slate-600 uppercase tracking-wider text-center">מזהה עסק</th>
                                 <th className="p-4 text-xs font-bold text-slate-600 uppercase tracking-wider text-center">סוג עסק</th>
                                 <th className="p-4 text-xs font-bold text-slate-600 uppercase tracking-wider text-center">רשויות</th>
                                 <th className="p-4 text-xs font-bold text-slate-600 uppercase tracking-wider text-center">סטטוס</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
-                            {filteredCustomers.map((client: any) => {
+                            {filteredCustomers.filter(c => c.id !== OFFICE_CUSTOMER_ID).map((client: any) => {
                                 const isApproved = finalizationMap.get(client.id) ?? false;
                                 const isInactive = client.isActive === false;
                                 return (
@@ -222,7 +222,7 @@ const CustomerList: React.FC = () => {
                             })}
                         </tbody>
                     </table>
-                    {filteredCustomers.length === 0 && (
+                    {filteredCustomers.filter(c => c.id !== OFFICE_CUSTOMER_ID).length === 0 && (
                         <div className="p-12 text-center text-slate-400 italic">לא נמצאו לקוחות התואמים את הסינון.</div>
                     )}
                 </div>

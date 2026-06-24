@@ -1,7 +1,7 @@
 // src/comps/CustomerCard.tsx
 
 import React, { useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router';
 import { useCustomer } from '../hooks/useCustomer';
 import {
     isEmployerType as registryIsEmployerType,
@@ -54,9 +54,6 @@ const CustomerCard: React.FC = () => {
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
 
-    // ✨ סעיף 6: שליפת המשתמש המחובר הנוכחי מתוך הזיכרון
-    const currentUser = localStorage.getItem('currentUser') || 'מוישי';
-
     const {
         customer,
         editData,
@@ -68,9 +65,12 @@ const CustomerCard: React.FC = () => {
 
     const [confirmDelete, setConfirmDelete] = useState<boolean>(false);
     const [editingTask, setEditingTask] = useState<any | null>(null);
+    const [isSaving, setIsSaving] = useState<boolean>(false);
 
     const handleSave = async () => {
+        setIsSaving(true);
         const result = await actions.save();
+        setIsSaving(false);
         if (result.success) alert("הנתונים נשמרו וסונכרנו בהצלחה!");
         else alert("שגיאה בשמירה: " + result.error);
     };
@@ -158,9 +158,10 @@ const CustomerCard: React.FC = () => {
                         )}
                         <button
                             onClick={isEditing ? handleSave : () => actions.setEditMode(true)}
-                            className={`cursor-pointer px-8 py-2.5 rounded-xl font-black text-sm shadow-md transition ${isEditing ? 'bg-green-600 text-white hover:bg-green-700' : 'bg-slate-900 text-white hover:bg-slate-800'}`}
+                            disabled={isSaving}
+                            className={`cursor-pointer px-8 py-2.5 rounded-xl font-black text-sm shadow-md transition ${isEditing ? 'bg-green-600 text-white hover:bg-green-700' : 'bg-slate-900 text-white hover:bg-slate-800'} ${isSaving ? 'opacity-60 cursor-not-allowed hover:bg-green-600 hover:bg-slate-900' : ''}`}
                         >
-                            {isEditing ? '💾 שמור וסנכרן' : '✏️ עריכה'}
+                            {isSaving ? 'שומר...' : isEditing ? '💾 שמור וסנכרן' : '✏️ עריכה'}
                         </button>
                     </div>
                 </div>

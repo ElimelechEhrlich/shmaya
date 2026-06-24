@@ -87,57 +87,92 @@ All mutations in the hook are **optimistic** — local state updates synchronous
 
 ## Database — migrations + schema
 
-Two pending migration files (apply in order):
-- `db/migrations/0001_registry_alignment.sql` — adds `tasks.parent_task_id` + index + Hebrew-substring backfill, creates `logs` table.
-- `db/migrations/0002_priority_and_office_tasks.sql` — adds `tasks.priority`, makes `tasks.client_id` nullable (office-wide tasks), adds `clients.is_active`.
+Migrations applied (in order):
+- `db/migrations/0001_registry_alignment.sql` — adds `registry_key` to `parent_tasks` + index + backfill, creates `logs` table.
+- `db/migrations/0002_priority_and_office_tasks.sql` — adds `priority` to `parent_tasks`, makes `customer_id` nullable (office-wide tasks).
+- `db/migrations/0003_add_parent_task_registry_key.sql` — ensures `registry_key` column + backfill by title.
+- `db/migrations/0004_flatten_customer_details.sql` — adds all detail columns directly to `customers`.
+- `db/migrations/0005_backfill_customer_columns.sql` — copies data from legacy detail tables → `customers` columns.
+- `db/migrations/0006_fix_fee_column_types.sql` — changes `setup_fee` / `monthly_fee` from `text` to `numeric`.
+- `db/migrations/0007_drop_legacy_detail_tables.sql` — drops the five legacy 1:1 detail tables (applied 2026-06-23).
 
 ### Live schema (reference only — not for execution)
 
 ```sql
-CREATE TABLE public.clients (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  customerDetails jsonb,
-  representationFor ARRAY,                -- dead field (audit), safe to drop
-  businessDetails jsonb,
-  insuranceDetails jsonb,
-  incomeTaxDetails jsonb,
-  vatDetails jsonb,
-  paymentDetails jsonb,
-  isInsuranceActive boolean DEFAULT false,
-  isIncomeTaxActive boolean DEFAULT false,
-  isVatActive boolean DEFAULT false,
-  needsDeductionsFile boolean DEFAULT false,
-  is_active boolean NOT NULL DEFAULT true,  -- soft deactivation
-  comments text,
-  created_at timestamp with time zone DEFAULT now(),
-  CONSTRAINT clients_pkey PRIMARY KEY (id)
+CREATE TABLE public.customers (
+  id                     uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+  full_name              text        NOT NULL,
+  is_active              boolean     NOT NULL DEFAULT true,
+  comments               text,
+  created_at             timestamptz DEFAULT now(),
+  -- business details
+  business_name          text,
+  business_id            text,
+  business_type          text,
+  opening_date           date,
+  occupation             text,
+  business_description   text,
+  employs_workers        text,
+  needs_deductions_file  boolean     DEFAULT false,
+  deductions_id          text,
+  -- income-tax
+  income_tax_rep_type    text,
+  income_tax_prepayment  text,
+  annual_turnover        text,
+  income_tax_is_new_case boolean     DEFAULT false,
+  is_income_tax_active   boolean     DEFAULT false,
+  -- VAT
+  vat_is_new_case        boolean     DEFAULT false,
+  is_vat_active          boolean     DEFAULT false,
+  -- insurance
+  insurance_prepayment   text,
+  work_hours             text,
+  insurance_is_new_case  boolean     DEFAULT false,
+  insurance_id           text,
+  insurance_status       text,
+  is_insurance_active    boolean     DEFAULT false,
+  -- payment
+  setup_fee              numeric     DEFAULT 0,
+  monthly_fee            numeric     DEFAULT 0,
+  direct_debit           boolean     DEFAULT false
 );
 
-CREATE TABLE public.tasks (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  client_id uuid,                          -- NULL = office-wide task
-  createdAt timestamp with time zone DEFAULT now(),
-  title text NOT NULL,
-  status text DEFAULT 'pending'::text,     -- 'pending' | 'completed'
-  restrictedTo text,
-  subTasks jsonb DEFAULT '[]'::jsonb,      -- [{ id, title, completed, details?, comment? }]
-  parent_task_id text,                     -- stable Registry id (ADMIN_SETUP, INSURANCE, INCOME_TAX, VAT, DIRECT_DEBIT, FINAL_APPROVAL)
-  priority text NOT NULL DEFAULT 'medium', -- 'low' | 'medium' | 'high' | 'critical'
-  CONSTRAINT tasks_pkey PRIMARY KEY (id),
-  CONSTRAINT tasks_client_id_fkey FOREIGN KEY (client_id) REFERENCES public.clients(id)
+-- sentinel row: id = '00000000-0000-0000-0000-000000000000' → office-wide tasks
+
+CREATE TABLE public.parent_tasks (
+  id           uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+  customer_id  uuid        REFERENCES customers(id),  -- NULL = office-wide task
+  title        text        NOT NULL,
+  status       text        DEFAULT 'pending',          -- 'pending' | 'completed'
+  restricted_to text,
+  registry_key text,                                   -- stable key: ADMIN_SETUP | INSURANCE | INCOME_TAX | VAT | DIRECT_DEBIT | FINAL_APPROVAL
+  priority     text        NOT NULL DEFAULT 'medium',  -- 'low' | 'medium' | 'high' | 'critical'
+  created_at   timestamptz DEFAULT now()
+);
+
+CREATE TABLE public.sub_tasks (
+  id              uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+  parent_task_id  uuid        NOT NULL REFERENCES parent_tasks(id),
+  title           text        NOT NULL,
+  completed       boolean     NOT NULL DEFAULT false,
+  priority        text        NOT NULL DEFAULT 'medium',
+  comment         text        DEFAULT '',
+  updated_at      timestamptz,
+  updated_by      text
 );
 
 CREATE TABLE public.logs (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  created_at timestamp with time zone NOT NULL DEFAULT now(),
-  actor text NOT NULL,
-  action text NOT NULL,
-  entity_type text NOT NULL,               -- 'customer' | 'task' | 'system'
-  entity_id uuid,                          -- nullable; UUID-validated by adapter
-  payload jsonb NOT NULL DEFAULT '{}'::jsonb,
-  CONSTRAINT logs_pkey PRIMARY KEY (id)
+  id           uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+  created_at   timestamptz NOT NULL DEFAULT now(),
+  actor        text        NOT NULL,
+  action       text        NOT NULL,
+  entity_type  text        NOT NULL,   -- 'customer' | 'task' | 'system'
+  entity_id    uuid,
+  payload      jsonb       NOT NULL DEFAULT '{}'
 );
 ```
+
+**Dropped tables (0007, 2026-06-23):** `business_details`, `income_tax_cases`, `vat_cases`, `insurance_cases`, `payment_details` — all data was backfilled to `customers` in migration 0005 before the drop.
 
 RLS reminder: a Supabase table created via the dashboard defaults to RLS-enabled with zero policies, which silently blocks all writes from the anon key. If logs aren't persisting, that's the first thing to check.
 

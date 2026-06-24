@@ -1,7 +1,7 @@
 // src/pages/Tasks.tsx
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { PersistenceAdapter } from '../services/PersistenceAdapter';
+import { useNavigate } from 'react-router';
+import { OFFICE_CUSTOMER_ID, PersistenceAdapter } from '../services/PersistenceAdapter';
 import { LogService } from '../services/LogService';
 import {
     PRIORITY_LEVELS,
@@ -10,7 +10,7 @@ import {
 import { authService } from '../services/authService';
 
 // הגדרת המבנה של שורת תת-משימה במערכת (מתוך ה-Subtasks View המנורמל)
-interface SubtaskViewRow {
+export interface SubtaskViewRow {
     taskId: string;
     subtaskId: string | null;
     subtaskTitle: string;
@@ -52,7 +52,8 @@ interface SubtaskTableRowProps {
     onSaveTitle: (title: string) => void;
     onCustomerClick: () => void;
     onEditClick: () => void;
-    onPriorityChange: (priority: string) => void; // 👈 פרופ חדש לשינוי דחיפות מהיר
+    onOpenPage: () => void;
+    onPriorityChange: (priority: string) => void;
 }
 
 interface CreateTaskModalProps {
@@ -69,6 +70,7 @@ const PRIORITY_WEIGHTS = {
     medium: 2,
     low: 1
 };
+
 
 export default function Tasks(): React.ReactElement {
     const navigate = useNavigate();
@@ -88,14 +90,21 @@ export default function Tasks(): React.ReactElement {
         sortBy: null,
         direction: null
     });
-    const load = useCallback(async (): Promise<void> => {
+    const load = useCallback(async () => {
         setLoading(true);
-        const [view, custList] = await Promise.all([
+        const [subtasksResult, customersResult] = await Promise.all([
             PersistenceAdapter.fetchAllSubtasksView(),
             PersistenceAdapter.fetchAllCustomers(),
         ]);
-        setRows((view.data as SubtaskViewRow[]) ?? []);
-        setCustomers((custList.data as any[]) ?? []);
+        if (subtasksResult.error) {
+            console.error(subtasksResult.error.message);
+        } else if (subtasksResult.data) {
+            const uniqueRows = subtasksResult.data.filter((row, index, self) =>
+                index === self.findIndex((r) => r.subtaskId === row.subtaskId)
+            );
+            setRows(uniqueRows);
+        }
+        setCustomers((customersResult.data as any[]) ?? []);
         setLoading(false);
     }, []);
 
@@ -193,32 +202,45 @@ const setSubtaskCompleted = useCallback(async (row: SubtaskViewRow, completed: b
         return;
     }
 
-    const prevCompleted = row.completed;
     setRows(prev => prev.map(r =>
-        r.taskId === row.taskId && r.subtaskId === row.subtaskId ? { ...r, completed } : r
+        r.subtaskId === row.subtaskId ? { ...r, completed } : r
     ));
 
-    if (row.subtaskId === null) {
-        const nextStatus = completed ? 'completed' : 'pending';
-        const { error } = await PersistenceAdapter.updateTaskStatus(row.taskId, nextStatus);
-        if (error) {
-            console.error(error.message);
-            setRows(prev => prev.map(r =>
-                r.taskId === row.taskId && r.subtaskId === row.subtaskId ? { ...r, completed: prevCompleted } : r
-            ));
-            return;
-        }
-        await LogService.recordTaskStatusChange(row.taskId, completed ? 'pending' : 'completed', nextStatus);
-    } else {
-        const { error } = await PersistenceAdapter.updateSubtaskStatus(row.taskId, row.subtaskId, completed);
-        if (error) {
-            console.error(error.message);
-            setRows(prev => prev.map(r =>
-                r.taskId === row.taskId && r.subtaskId === row.subtaskId ? { ...r, completed: prevCompleted } : r
-            ));
-        }
+// שליחה ישירה לאדפטר - ה-subtaskId מובטח להיות UUID חוקי ותקין
+    const { error } = await PersistenceAdapter.updateSubtaskStatus(row.taskId, row.subtaskId!, completed);
+    
+    if (error) { 
+        console.error(error.message); 
+        load(); // טעינה מחדש של המצב האמיתי במקרה של כישלון
     }
-}, []);
+    
+        // const prevCompleted = row.completed;
+        //// setRows(prev => prev.map(r =>
+        //     r.taskId === row.taskId && r.subtaskId === row.subtaskId ? { ...r, completed } : r
+        // ));
+}, [load]);
+
+    // if (row.subtaskId === null) {
+    //     const nextStatus = completed ? 'completed' : 'pending';
+    //     const { error } = await PersistenceAdapter.updateTaskStatus(row.taskId, nextStatus);
+    //     if (error) {
+    //         console.error(error.message);
+    //         setRows(prev => prev.map(r =>
+    //             r.taskId === row.taskId && r.subtaskId === row.subtaskId ? { ...r, completed: prevCompleted } : r
+    //         ));
+    //         return;
+    //     }
+        // await LogService.recordTaskStatusChange(row.taskId, completed ? 'pending' : 'completed', nextStatus);
+//     } else {
+//         const { error } = await PersistenceAdapter.updateSubtaskStatus(row.taskId, row.subtaskId, completed);
+//         if (error) {
+//             console.error(error.message);
+//             setRows(prev => prev.map(r =>
+//                 r.taskId === row.taskId && r.subtaskId === row.subtaskId ? { ...r, completed: prevCompleted } : r
+//             ));
+//         }
+//     }
+// }, []);
 
     const saveTitle = useCallback(async (row: SubtaskViewRow, newTitle: string): Promise<void> => {
         const trimmed = newTitle.trim();
@@ -383,7 +405,8 @@ const setSubtaskCompleted = useCallback(async (row: SubtaskViewRow, completed: b
                                         onSaveTitle={(t) => saveTitle(row, t)}
                                         onCustomerClick={() => row.clientId && navigate(`/admin/customers/${row.clientId}`)}
                                         onEditClick={() => setEditingTask(row)}
-                                        onPriorityChange={(p) => handlePriorityChange(row, p)} // 👈 פרופ חדש מוזרק לשורה
+                                        onOpenPage={() => navigate(`/admin/tasks/${row.taskId}`)}
+                                        onPriorityChange={(p) => handlePriorityChange(row, p)}
                                     />
                                 ))}
                             </tbody>
@@ -470,7 +493,8 @@ const SubtaskTableRow: React.FC<SubtaskTableRowProps> = React.memo(({
     onSaveTitle,
     onCustomerClick,
     onEditClick,
-    onPriorityChange // 👈 חילוץ הפרופ החדש
+    onOpenPage,
+    onPriorityChange,
 }) => {
     const [editing, setEditing] = useState<boolean>(false);
     const [draft, setDraft] = useState<string>(row.subtaskTitle);
@@ -524,6 +548,14 @@ const SubtaskTableRow: React.FC<SubtaskTableRowProps> = React.memo(({
                             className="cursor-pointer text-slate-300 hover:text-blue-600 text-sm font-bold px-1"
                         >
                             ✎
+                        </button>
+                        <button
+                            type="button"
+                            onClick={onOpenPage}
+                            title="פתח בדף נפרד"
+                            className="cursor-pointer text-slate-300 hover:text-violet-600 text-sm px-1"
+                        >
+                            ⧉
                         </button>
                     </div>
                 )}
@@ -609,7 +641,7 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({ customers, tas
         if (taskToEdit?.comment) return taskToEdit.comment;
         if (!isOffice && clientId) {
             const selectedCust = customers.find(c => c.id === clientId);
-            return selectedCust?.setup_notes || '';
+            return selectedCust?.comments || '';
         }
         return '';
     }, [taskToEdit, isOffice, clientId, customers]);
@@ -657,9 +689,10 @@ const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
             } else {
                 const insertResult = await PersistenceAdapter.insertSingleTask({
                     title: title.trim(),
-                    clientId: isOffice ? null : clientId,
+                    clientId: isOffice ? OFFICE_CUSTOMER_ID : clientId,
                     subTasks: []
                 } as any);
+                
                 if (insertResult.error) throw insertResult.error;
             }
 

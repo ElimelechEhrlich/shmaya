@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from '../supabaseClient';
+import { PersistenceAdapter } from '../services/PersistenceAdapter';
 
 export default function Dashboard() {
     const [activeCustomers, setActiveCustomers] = useState<number | null>(null);
@@ -7,12 +7,12 @@ export default function Dashboard() {
     const [completedTasks, setCompletedTasks] = useState<number | null>(null);
 
     useEffect(() => {
-        supabase.from('customers').select('*', { count: 'exact', head: true }).eq('is_active', true)
-            .then(r => setActiveCustomers(r.count ?? 0));
-        supabase.from('sub_tasks').select('*', { count: 'exact', head: true }).eq('is_completed', false)
-            .then(r => setPendingTasks(r.count ?? 0));
-        supabase.from('sub_tasks').select('*', { count: 'exact', head: true }).eq('is_completed', true)
-            .then(r => setCompletedTasks(r.count ?? 0));
+        PersistenceAdapter.fetchActiveCustomerCount()
+            .then(r => setActiveCustomers(r.data ?? 0));
+        PersistenceAdapter.fetchPendingSubtaskCount()
+            .then(r => setPendingTasks(r.data ?? 0));
+        PersistenceAdapter.fetchCompletedSubtaskCount()
+            .then(r => setCompletedTasks(r.data ?? 0));
     }, []);
 
     return (

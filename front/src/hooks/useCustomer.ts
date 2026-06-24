@@ -27,7 +27,6 @@ import {
     applyBusinessRules,
     calculateWeightedProgress,
     isCustomerFinalized,
-    listVisibleFields,
     cascadeOnSubtaskSet,
     type Customer,
 } from '../registries/CustomerRegistry';
@@ -379,11 +378,6 @@ export function useCustomer(customerId: string | undefined): UseCustomerResult {
         [tasks]
     );
 
-    const visibleFields = useMemo(
-        () => (editData ? listVisibleFields(editData as any) : []),
-        [editData]
-    );
-
     const actions = useMemo(() => ({
         updateField,
         setEditMode,
@@ -407,7 +401,6 @@ export function useCustomer(customerId: string | undefined): UseCustomerResult {
         isEditing,
         progress,
         isFinalized,
-        visibleFields,
         actions,
     };
 }

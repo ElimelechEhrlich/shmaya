@@ -258,26 +258,34 @@ The generator (`TaskGeneratorService.generateForCustomer`) does:
 
 ---
 
-## 7. Database — current vs proposed
+## 7. Database — live schema
 
-### 7.1 Live tables (unchanged on the wire)
+All migrations 0001–0007 have been applied. The schema is stable.
 
-| Table | Columns |
+### 7.1 Live tables
+
+| Table | Key columns |
 |---|---|
-| `clients` | `id`, `created_at`, `customerDetails`, `businessDetails`, `insuranceDetails`, `incomeTaxDetails`, `vatDetails`, `paymentDetails`, `isInsuranceActive`, `isIncomeTaxActive`, `isVatActive`, `needsDeductionsFile`, `comments` |
-| `tasks` | `id`, `client_id`, `title`, `status`, `restrictedTo`, `subTasks`, `created_at` *(legacy `details`, `category` columns may exist but are unused)* |
-| `logs` | *Does not exist yet* — created by `db/migrations/0001` §2 |
+| `customers` | `id` (uuid PK), `full_name`, `is_active`, `comments`, `created_at`; flat detail columns for business, income-tax, VAT, insurance, and payment (see CLAUDE.md for full list). Sentinel row `id = '00000000-0000-0000-0000-000000000000'` represents office-wide tasks. |
+| `parent_tasks` | `id`, `customer_id` (FK → customers, nullable for office tasks), `title`, `status` (`pending`/`completed`), `registry_key` (stable Registry id: `ADMIN_SETUP` / `INSURANCE` / `INCOME_TAX` / `VAT` / `DIRECT_DEBIT` / `FINAL_APPROVAL`), `priority`, `restricted_to`, `created_at` |
+| `sub_tasks` | `id`, `parent_task_id` (FK → parent_tasks), `title`, `completed`, `priority`, `comment`, `updated_at`, `updated_by` |
+| `logs` | `id`, `created_at`, `actor`, `action`, `entity_type`, `entity_id`, `payload` (jsonb) |
 
-Auth: still anon-key client-side. **No Supabase auth, no known RLS.** The `actor` field in logs comes from `localStorage.user_name`. This is the highest-priority untouched item — see §8.
+**Dropped (migration 0007, 2026-06-23):** `business_details`, `income_tax_cases`, `vat_cases`, `insurance_cases`, `payment_details`. Data was backfilled to `customers` in migration 0005 before the drop.
 
-### 7.2 Pending migration: `db/migrations/0001_registry_alignment.sql`
+### 7.2 Migration history
 
-Four sections; sections 1 and 2 are required for the new infrastructure:
+| File | What it does |
+|---|---|
+| `0001_registry_alignment.sql` | Adds `registry_key` to `parent_tasks` + index + Hebrew backfill; creates `logs` table |
+| `0002_priority_and_office_tasks.sql` | Adds `priority` to `parent_tasks`; makes `customer_id` nullable |
+| `0003_add_parent_task_registry_key.sql` | Re-ensures `registry_key` column + backfill by title |
+| `0004_flatten_customer_details.sql` | Adds all detail columns directly to `customers` |
+| `0005_backfill_customer_columns.sql` | Copies data from legacy detail tables → `customers` columns |
+| `0006_fix_fee_column_types.sql` | Changes `setup_fee` / `monthly_fee` text → numeric |
+| `0007_drop_legacy_detail_tables.sql` | Drops the five legacy 1:1 detail tables |
 
-1. **Adds `tasks.parentTaskId text` + index + one-time Hebrew-substring backfill.** Until this runs, newly-generated tasks emit `parentTaskId` to a non-existent column (Supabase silently drops it), and `isCustomerFinalized` falls back to the substring match.
-2. **Creates the `logs` table** with the schema in §4. Until this runs, every `LogService` call console-errors.
-3. **Drop candidates (commented out):** `clients.representationFor`, `clients.isFinalApproved`, `tasks.category`, `tasks.details` — all phantom or orphaned.
-4. **Phase-2 underscore rename (NOT in this migration):** documents the eventual rename of `client_id → clientId` and `created_at → createdAt`, after which the `TASK_TO_DB` / `CUSTOMER_TO_DB` maps in `PersistenceAdapter` can be emptied.
+Auth: still anon-key client-side. **No Supabase auth, no known RLS.** The `actor` field in logs comes from `localStorage.user_name`.
 
 ---
 
@@ -350,7 +358,7 @@ Services (linear dependencies, no cycles):
 
 These are intentionally deferred — flagged here so future work can pick them up.
 
-1. **`db/migrations/0001` has not been applied yet.** Until it runs, (a) every `LogService` call console-errors silently, (b) the `parentTaskId` column written by `TaskGeneratorService` is dropped by Supabase, (c) `isCustomerFinalized` uses the Hebrew-substring fallback for every row.
+1. **All migrations (0001–0007) have been applied.** `logs` table exists; `registry_key` column exists; legacy detail tables have been dropped.
 2. **Logs UI is still mock data.** `src/pages/Logs.jsx` renders a hardcoded array. The wiring through `PersistenceAdapter` + a logs-fetch method is unwritten.
 3. **No Supabase auth + no known RLS.** Anon key is in the browser bundle; access control is `localStorage.is_authenticated === 'true'` against the literal username `'מוישי'`. The `LogService.actor` field is whatever the client claims.
 4. **Phase-2 underscore rename not done.** `client_id` and `created_at` survive in the DB. The Adapter bridges; the rename map is the only thing that needs to change once those columns are renamed.

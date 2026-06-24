@@ -1,15 +1,16 @@
 // src/services/PersistenceAdapter.ts
 //
-// Actual live schema (normalized, multi-table):
-//   customers      – flat columns: full_name, identity_id, phone_number, address, email, is_active, comments
+// Actual live schema:
+//   customers      – flat customer fields and the new direct detail columns.
+//   parent_tasks   – 1:many via customer_id FK
+//   sub_tasks      – 1:many via parent_task_id FK (now holds priority!)
+//   logs           – standalone
+// Legacy detail tables remain for the moment as a migration backup:
 //   business_details   – 1:1 with customers via customer_id PK
 //   income_tax_cases   – 1:1 (optional) via customer_id PK
 //   vat_cases          – 1:1 (optional) via customer_id PK
 //   insurance_cases    – 1:1 (optional) via customer_id PK
 //   payment_details    – 1:1 via customer_id PK
-//   parent_tasks       – 1:many via customer_id FK
-//   sub_tasks          – 1:many via parent_task_id FK (now holds priority!)
-//   logs               – standalone
 
 import { supabase } from '../supabaseClient.js';
 import type { Customer } from '../registries/CustomerRegistry';
@@ -18,7 +19,7 @@ import { authService } from './authService.js';
 // ──────────────────────────────────────────────────────────────────
 // Persisted shapes
 // ──────────────────────────────────────────────────────────────────
-
+export const OFFICE_CUSTOMER_ID = '00000000-0000-0000-0000-000000000000';
 export type SubTaskPriority = 'low' | 'medium' | 'high' | 'critical';
 
 export interface PersistedSubTask {
@@ -35,6 +36,7 @@ export interface PersistedSubTask {
 export interface PersistedTask {
   id: string;
   clientId: string | null;        // maps to parent_tasks.customer_id
+  parentTaskId: string | null;    // maps to parent_tasks.registry_key
   title: string;
   status: 'pending' | 'completed';
   createdAt?: string;
@@ -88,12 +90,6 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 const isUuid = (v: unknown): boolean => typeof v === 'string' && UUID_RE.test(v);
 
 function dbRowToCustomer(row: any): Customer {
-  const bd = row.business_details;
-  const it = row.income_tax_cases;
-  const vat = row.vat_cases;
-  const ins = row.insurance_cases;
-  const pay = row.payment_details;
-
   return {
     id: row.id,
     createdAt: row.created_at,
@@ -108,48 +104,49 @@ function dbRowToCustomer(row: any): Customer {
       email: row.email || '',
     },
     businessDetails: {
-      businessName: bd?.business_name || '',
-      businessID: bd?.business_id || '',
-      businessType: (bd?.business_type || '') as any,
-      openingDate: bd?.opening_date || '',
-      occupation: bd?.occupation || '',
-      businessDescription: bd?.business_description || '',
-      employsWorkers: (bd?.employs_workers || 'no') as any,
-      deductionsId: bd?.deductions_id || '',
+      businessName: row.business_name || '',
+      businessID: row.business_id || '',
+      businessType: (row.business_type || '') as any,
+      openingDate: row.opening_date || '',
+      occupation: row.occupation || '',
+      businessDescription: row.business_description || '',
+      employsWorkers: (row.employs_workers || 'no') as any,
+      deductionsId: row.deductions_id || '',
     },
     insuranceDetails: {
-      insurancePrepayment: ins?.insurance_prepayment || '',
-      workHours: ins?.work_hours || '',
-      newInsuranceCase: ins?.is_new_case ?? true,
-      insuranceId: '',
-      insuranceStatus: '',
+      insurancePrepayment: row.insurance_prepayment || '',
+      workHours: row.work_hours || '',
+      newInsuranceCase: row.insurance_is_new_case ?? true,
+      insuranceId: row.insurance_id || '',
+      insuranceStatus: row.insurance_status || '',
     },
     incomeTaxDetails: {
-      repType: (it?.rep_type || 'ראשי') as any,
-      incomeTaxPrepayment: it?.income_tax_prepayment || '',
-      annualTurnover: it?.annual_turnover || '',
-      newItCase: it?.is_new_case ?? true,
+      repType: (row.income_tax_rep_type || 'ראשי') as any,
+      incomeTaxPrepayment: row.income_tax_prepayment || '',
+      annualTurnover: row.annual_turnover || '',
+      newItCase: row.income_tax_is_new_case ?? true,
     },
     vatDetails: {
-      newVatCase: vat?.is_new_case ?? true,
+      newVatCase: row.vat_is_new_case ?? true,
     },
     paymentDetails: {
-      setupFee: String(pay?.setup_fee ?? 0),
-      monthlyFee: String(pay?.monthly_fee ?? 0),
-      directDebit: pay?.direct_debit ?? false,
+      setupFee: String(row.setup_fee ?? 0),
+      monthlyFee: String(row.monthly_fee ?? 0),
+      directDebit: row.direct_debit ?? false,
     },
 
-    isInsuranceActive: !!ins,
-    isIncomeTaxActive: !!it,
-    isVatActive: !!vat,
-    needsDeductionsFile: bd?.needs_deductions_file ?? false,
+    isInsuranceActive: !!row.is_insurance_active,
+    isIncomeTaxActive: !!row.is_income_tax_active,
+    isVatActive: !!row.is_vat_active,
+    needsDeductionsFile: row.needs_deductions_file ?? false,
   };
 }
 
 function mapTaskRow(t: any): PersistedTask {
   return {
     id: t.id,
-    clientId: t.customer_id, 
+    clientId: t.customer_id,
+    parentTaskId: t.registry_key ?? t.parent_task_id ?? null,
     title: t.title,
     status: t.status,
     createdAt: t.created_at,
@@ -160,15 +157,14 @@ function mapTaskRow(t: any): PersistedTask {
       title: s.title,
       completed: !!s.is_completed,
       comment: s.comment ?? null,
-      priority: (s.priority || 'medium') as SubTaskPriority, 
+      priority: (s.priority || 'medium') as SubTaskPriority,
       createdAt: s.created_at,
       updatedAt: s.updated_at,
     })),
   };
 }
 
-const FULL_CUSTOMER_SELECT =
-  '*, business_details(*), income_tax_cases(*), vat_cases(*), insurance_cases(*), payment_details(*), parent_tasks(*, sub_tasks(*))';
+const FULL_CUSTOMER_SELECT = '*, parent_tasks(*, sub_tasks(*))';
 
 // ──────────────────────────────────────────────────────────────────
 // Public adapter
@@ -181,8 +177,10 @@ export const PersistenceAdapter = {
   async fetchAllCustomers(): Promise<DbResult<Customer[]>> {
     const { data, error } = await supabase
       .from('customers')
-      .select('*, business_details(*), income_tax_cases(*), vat_cases(*), insurance_cases(*), payment_details(*)')
+      .select('*')
+      .neq('id', OFFICE_CUSTOMER_ID)
       .order('created_at', { ascending: false });
+
     return {
       data: data ? data.map(dbRowToCustomer) : null,
       error,
@@ -193,6 +191,7 @@ export const PersistenceAdapter = {
     const { data, error } = await supabase
       .from('customers')
       .select(FULL_CUSTOMER_SELECT)
+      .neq('id', OFFICE_CUSTOMER_ID)
       .order('created_at', { ascending: false });
 
     if (!data) return { data: null, error };
@@ -229,31 +228,54 @@ export const PersistenceAdapter = {
   // ── Customers (write) ──
 
   async insertCustomer(c: Partial<Customer>): Promise<DbResult<Customer>> {
-    const { data: inserted, error: custErr } = await supabase
+    const row: Record<string, unknown> = {
+      full_name: c.customerDetails?.fullName ?? '',
+      identity_id: c.customerDetails?.identityId ?? '',
+      phone_number: c.customerDetails?.phoneNumber ?? '',
+      address: c.customerDetails?.address ?? '',
+      email: c.customerDetails?.email ?? '',
+      is_active: c.isActive ?? true,
+      comments: c.comments ?? '',
+      business_name: c.businessDetails?.businessName ?? '',
+      business_id: c.businessDetails?.businessID ?? '',
+      business_type: c.businessDetails?.businessType ?? '',
+      opening_date: c.businessDetails?.openingDate || null,
+      occupation: c.businessDetails?.occupation ?? '',
+      business_description: c.businessDetails?.businessDescription ?? '',
+      employs_workers: c.businessDetails?.employsWorkers ?? 'no',
+      needs_deductions_file: c.needsDeductionsFile ?? false,
+      deductions_id: c.businessDetails?.deductionsId ?? '',
+      income_tax_rep_type: c.incomeTaxDetails?.repType ?? null,
+      income_tax_prepayment: c.incomeTaxDetails?.incomeTaxPrepayment ?? '',
+      annual_turnover: c.incomeTaxDetails?.annualTurnover ?? '',
+      income_tax_is_new_case: c.incomeTaxDetails?.newItCase ?? true,
+      vat_is_new_case: c.vatDetails?.newVatCase ?? true,
+      insurance_prepayment: c.insuranceDetails?.insurancePrepayment ?? '',
+      work_hours: c.insuranceDetails?.workHours ?? '',
+      insurance_is_new_case: c.insuranceDetails?.newInsuranceCase ?? true,
+      insurance_id: c.insuranceDetails?.insuranceId ?? '',
+      insurance_status: c.insuranceDetails?.insuranceStatus ?? '',
+      setup_fee: Number(c.paymentDetails?.setupFee) || 0,
+      monthly_fee: Number(c.paymentDetails?.monthlyFee) || 0,
+      direct_debit: c.paymentDetails?.directDebit ?? false,
+      is_income_tax_active: c.isIncomeTaxActive ?? false,
+      is_vat_active: c.isVatActive ?? false,
+      is_insurance_active: c.isInsuranceActive ?? false,
+    };
+
+    const { data: inserted, error } = await supabase
       .from('customers')
-      .insert({
-        full_name: c.customerDetails?.fullName ?? '',
-        identity_id: c.customerDetails?.identityId ?? '',
-        phone_number: c.customerDetails?.phoneNumber ?? '',
-        address: c.customerDetails?.address ?? '',
-        email: c.customerDetails?.email ?? '',
-        is_active: c.isActive ?? true,
-        comments: c.comments ?? '',
-      })
-      .select('id')
+      .insert(row)
+      .select('*')
       .single();
 
-    if (custErr) return { data: null, error: custErr };
-    const id = inserted.id;
-
-    const errs = await PersistenceAdapter._writeDetailTables(id, c, false);
-    if (errs) return { data: null, error: { message: errs } };
-
-    return { data: { id } as unknown as Customer, error: null };
+    if (error) return { data: null, error };
+    return { data: dbRowToCustomer(inserted), error: null };
   },
 
   async updateCustomer(id: string, c: Partial<Customer>): Promise<DbResult<Customer>> {
     const flatRow: Record<string, unknown> = {};
+
     if (c.customerDetails) {
       flatRow.full_name = c.customerDetails.fullName;
       flatRow.identity_id = c.customerDetails.identityId;
@@ -261,89 +283,68 @@ export const PersistenceAdapter = {
       flatRow.address = c.customerDetails.address;
       flatRow.email = c.customerDetails.email;
     }
-    if (c.isActive !== undefined) flatRow.is_active = c.isActive;
-    if (c.comments !== undefined) flatRow.comments = c.comments;
 
-    if (Object.keys(flatRow).length > 0) {
-      const { error } = await supabase.from('customers').update(flatRow).eq('id', id);
-      if (error) return { data: null, error };
+    if (c.businessDetails) {
+      flatRow.business_name = c.businessDetails.businessName;
+      flatRow.business_id = c.businessDetails.businessID;
+      flatRow.business_type = c.businessDetails.businessType;
+      flatRow.opening_date = c.businessDetails.openingDate || null;
+      flatRow.occupation = c.businessDetails.occupation;
+      flatRow.business_description = c.businessDetails.businessDescription;
+      flatRow.employs_workers = c.businessDetails.employsWorkers;
+      flatRow.deductions_id = c.businessDetails.deductionsId;
     }
 
-    const errs = await PersistenceAdapter._writeDetailTables(id, c, true);
-    if (errs) return { data: null, error: { message: errs } };
+    if (c.incomeTaxDetails) {
+      flatRow.income_tax_rep_type = c.incomeTaxDetails.repType;
+      flatRow.income_tax_prepayment = c.incomeTaxDetails.incomeTaxPrepayment;
+      flatRow.annual_turnover = c.incomeTaxDetails.annualTurnover;
+      flatRow.income_tax_is_new_case = c.incomeTaxDetails.newItCase;
+    }
 
-    return { data: { id } as unknown as Customer, error: null };
+    if (c.vatDetails) {
+      flatRow.vat_is_new_case = c.vatDetails.newVatCase;
+    }
+
+    if (c.insuranceDetails) {
+      flatRow.insurance_prepayment = c.insuranceDetails.insurancePrepayment;
+      flatRow.work_hours = c.insuranceDetails.workHours;
+      flatRow.insurance_is_new_case = c.insuranceDetails.newInsuranceCase;
+      flatRow.insurance_id = c.insuranceDetails.insuranceId;
+      flatRow.insurance_status = c.insuranceDetails.insuranceStatus;
+    }
+
+    if (c.paymentDetails) {
+      flatRow.setup_fee = Number(c.paymentDetails.setupFee) || 0;
+      flatRow.monthly_fee = Number(c.paymentDetails.monthlyFee) || 0;
+      flatRow.direct_debit = c.paymentDetails.directDebit;
+    }
+
+    if (c.isIncomeTaxActive !== undefined) flatRow.is_income_tax_active = c.isIncomeTaxActive;
+    if (c.isVatActive !== undefined) flatRow.is_vat_active = c.isVatActive;
+    if (c.isInsuranceActive !== undefined) flatRow.is_insurance_active = c.isInsuranceActive;
+    if (c.needsDeductionsFile !== undefined) flatRow.needs_deductions_file = c.needsDeductionsFile;
+    if (c.comments !== undefined) flatRow.comments = c.comments;
+    if (c.isActive !== undefined) flatRow.is_active = c.isActive;
+
+    if (Object.keys(flatRow).length === 0) {
+      return { data: { id } as unknown as Customer, error: null };
+    }
+
+    const { data: updated, error } = await supabase
+      .from('customers')
+      .update(flatRow)
+      .eq('id', id)
+      .select('*')
+      .single();
+
+    if (error) return { data: null, error };
+    return { data: dbRowToCustomer(updated), error: null };
   },
 
   async deleteCustomer(id: string): Promise<DbResult<null>> {
     const { error } = await supabase.from('customers').delete().eq('id', id);
     return { data: null, error };
-  },
-
-  async _writeDetailTables(customerId: string, c: Partial<Customer>, isEdit: boolean): Promise<string | null> {
-    const ops: any[] = [];
-
-    if (c.businessDetails) {
-      ops.push(supabase.from('business_details').upsert({
-        customer_id: customerId,
-        business_name: c.businessDetails.businessName,
-        business_id: c.businessDetails.businessID,
-        business_type: c.businessDetails.businessType,
-        opening_date: c.businessDetails.openingDate || null,
-        occupation: c.businessDetails.occupation,
-        business_description: c.businessDetails.businessDescription,
-        employs_workers: c.businessDetails.employsWorkers,
-        needs_deductions_file: c.needsDeductionsFile ?? false,
-        deductions_id: c.businessDetails.deductionsId,
-      }));
-    }
-
-    if (c.isIncomeTaxActive === true && c.incomeTaxDetails) {
-      ops.push(supabase.from('income_tax_cases').upsert({
-        customer_id: customerId,
-        rep_type: c.incomeTaxDetails.repType,
-        income_tax_prepayment: c.incomeTaxDetails.incomeTaxPrepayment,
-        annual_turnover: c.incomeTaxDetails.annualTurnover,
-        is_new_case: c.incomeTaxDetails.newItCase,
-      }));
-    } else if (c.isIncomeTaxActive === false && isEdit) {
-      ops.push(supabase.from('income_tax_cases').delete().eq('customer_id', customerId));
-    }
-
-    if (c.isVatActive === true && c.vatDetails) {
-      ops.push(supabase.from('vat_cases').upsert({
-        customer_id: customerId,
-        is_new_case: c.vatDetails.newVatCase,
-      }));
-    } else if (c.isVatActive === false && isEdit) {
-      ops.push(supabase.from('vat_cases').delete().eq('customer_id', customerId));
-    }
-
-    if (c.isInsuranceActive === true && c.insuranceDetails) {
-      ops.push(supabase.from('insurance_cases').upsert({
-        customer_id: customerId,
-        insurance_prepayment: c.insuranceDetails.insurancePrepayment || 0,
-        work_hours: c.insuranceDetails.workHours || 0,
-        is_new_case: c.insuranceDetails.newInsuranceCase ?? true,
-      }));
-    } else if (c.isInsuranceActive === false && isEdit) {
-      ops.push(supabase.from('insurance_cases').delete().eq('customer_id', customerId));
-    }
-
-    if (c.paymentDetails) {
-      ops.push(supabase.from('payment_details').upsert({
-        customer_id: customerId,
-        setup_fee: Number(c.paymentDetails.setupFee) || 0,
-        monthly_fee: Number(c.paymentDetails.monthlyFee) || 0,
-        direct_debit: c.paymentDetails.directDebit,
-      }));
-    }
-
-    if (ops.length === 0) return null;
-
-    const results = await Promise.all(ops as Promise<{ error: any }>[]);
-    const firstError = results.find((r: any) => r.error)?.error;
-    return firstError ? firstError.message : null;
   },
 
   // ── Tasks ──
@@ -378,6 +379,32 @@ export const PersistenceAdapter = {
         };
       }),
       error,
+    };
+  },
+
+  async fetchTaskById(taskId: string): Promise<DbResult<PersistedTaskWithCustomer>> {
+    const { data, error } = await supabase
+      .from('parent_tasks')
+      .select('*, customers(id, full_name), sub_tasks(*)')
+      .eq('id', taskId)
+      .maybeSingle();
+
+    if (error) {
+      return { data: null, error };
+    }
+    if (!data) {
+      return { data: null, error: null };
+    }
+    const { customers: customer, ...rawTask } = data as any;
+    return {
+      data: {
+        ...mapTaskRow(rawTask),
+        customerId: customer?.id ?? rawTask.customer_id,
+        customerName: ((customer?.id === OFFICE_CUSTOMER_ID || !customer)
+          ? 'משימה משרדית'
+          : customer.full_name)
+      },
+      error: null,
     };
   },
 
@@ -416,13 +443,17 @@ export const PersistenceAdapter = {
     if (tasks.length === 0) return { data: null, error: null };
 
     for (const t of tasks) {
+      const parentRow: Record<string, unknown> = {
+        customer_id: t.clientId,
+        title: t.title,
+        status: t.status || 'pending',
+      };
+      if (t.parentTaskId) {
+        parentRow.registry_key = t.parentTaskId;
+      }
       const { data: parent, error: pErr } = await supabase
         .from('parent_tasks')
-        .insert({
-          customer_id: t.clientId,
-          title: t.title,
-          status: t.status || 'pending',
-        })
+        .insert(parentRow)
         .select('id')
         .single();
 
@@ -446,32 +477,45 @@ export const PersistenceAdapter = {
   async insertSingleTask(taskData: {
     title: string;
     clientId: string | null;
+    registryKey?: string | null;
     subTasks: { title: string }[];
   }) {
     try {
+      const finalClientId = taskData.clientId || OFFICE_CUSTOMER_ID;
+      const parentInsert: Record<string, unknown> = {
+        title: taskData.title,
+        customer_id: finalClientId,
+        status: 'pending',
+      };
+      if (taskData.registryKey) {
+        parentInsert.registry_key = taskData.registryKey;
+      }
       const { data: parent, error: parentErr } = await supabase
         .from('parent_tasks')
-        .insert({
-          title: taskData.title,
-          customer_id: taskData.clientId,   
-          status: 'pending',
-        })
+        .insert(parentInsert)
         .select('id')
         .single();
 
       if (parentErr) throw parentErr;
 
-      if (taskData.subTasks?.length > 0) {
-        const subtasksRows = taskData.subTasks.map((sub) => ({
+      const subtasksRows = taskData.subTasks && taskData.subTasks.length > 0
+        ? taskData.subTasks.map((sub) => ({
           parent_task_id: parent.id,
-          title: sub.title,
+          title: sub.title.trim(),
           is_completed: false,
           comment: '',
           priority: 'medium'
-        }));
-        const { error: subErr } = await supabase.from('sub_tasks').insert(subtasksRows);
-        if (subErr) throw subErr;
-      }
+        }))
+        : [{
+          parent_task_id: parent.id,
+          title: taskData.title.trim(), // תת-משימה יחידה עם שם המשימה הראשית
+          is_completed: false,
+          comment: '',
+          priority: 'medium'
+        }];
+      const { error: subErr } = await supabase.from('sub_tasks').insert(subtasksRows);
+      if (subErr) throw subErr;
+
 
       return { success: true, error: null };
     } catch (err: any) {
@@ -500,7 +544,7 @@ export const PersistenceAdapter = {
     return { data: null, error };
   },
 
-async updateTaskStatus(taskId: string, status: 'pending' | 'completed'): Promise<DbResult<null>> {
+  async updateTaskStatus(taskId: string, status: 'pending' | 'completed'): Promise<DbResult<null>> {
     // ✨ חסימת אב המשימה במידה והוא מכיל תת-משימה של אישור ניהול סופי
     if (status === 'completed') {
       const { data: subTasks } = await supabase
@@ -511,9 +555,7 @@ async updateTaskStatus(taskId: string, status: 'pending' | 'completed'): Promise
       const hasFinalApproval = subTasks?.some(sub => sub.title?.toLowerCase().includes("אישור ניהול סופי"));
 
       if (hasFinalApproval && !authService.canApproveFinal("אישור ניהול סופי")) {
-        const errorMsg = "לא ניתן לסמן משימה זו כבוצע כיוון שהיא מכילה את 'אישור ניהול סופי' שטרם אושר!";
-        alert(errorMsg);
-        return { data: null, error: { message: errorMsg } as any };
+        return { data: null, error: { message: "לא ניתן לסמן משימה זו כבוצע כיוון שהיא מכילה את 'אישור ניהול סופי' שטרם אושר!" } };
       }
     }
 
@@ -523,7 +565,7 @@ async updateTaskStatus(taskId: string, status: 'pending' | 'completed'): Promise
 
   // ✨ סעיף 2 + 6: מימוש פונקציית עדכון הסטטוס הגורפת עם חסימת הרשאות קשיחה ליוחנן ושמוליק
   async updateSubtasksStatusByParent(customerId: string, parentTaskId: string, completed: boolean): Promise<DbResult<null>> {
-    
+
     if (completed) {
       // 1. נבדוק קודם כל האם בין כל תתי-המשימות של האב הזה יש תת-משימה של "אישור ניהול סופי"
       const { data: subTasks } = await supabase
@@ -534,11 +576,9 @@ async updateTaskStatus(taskId: string, status: 'pending' | 'completed'): Promise
       if (subTasks) {
         // אם נמצאה לפחות תת-משימה אחת שהיא אישור ניהול סופי והיוזר הוא יוחנן/שמוליק - נחסום את כל הפעולה הגורפת!
         const hasFinalApproval = subTasks.some(sub => sub.title?.includes("אישור ניהול סופי"));
-        
+
         if (hasFinalApproval && !authService.canApproveFinal("אישור ניהול סופי")) {
-          const errorMsg = "הפעולה נחסמה: התיק מכיל 'אישור ניהול סופי' ואין לך הרשאה לאשר אותו!";
-          alert(errorMsg);
-          return { data: null, error: { message: errorMsg } as any };
+          return { data: null, error: { message: "הפעולה נחסמה: התיק מכיל 'אישור ניהול סופי' ואין לך הרשאה לאשר אותו!" } };
         }
       }
     }
@@ -546,8 +586,8 @@ async updateTaskStatus(taskId: string, status: 'pending' | 'completed'): Promise
     // 2. רק אם הכל תקין והמשתמש מורשה (או שאין שם אישור סופי) - נבצע את העדכון ב-DB
     const { error } = await supabase
       .from('sub_tasks')
-      .update({ 
-        is_completed: completed, 
+      .update({
+        is_completed: completed,
         updated_at: new Date().toISOString(),
         updated_by: authService.getCurrentUser() // שיוך הפעולה ליוזר המחובר (מוישי/יוחנן/שמוליק)
       })
@@ -578,7 +618,7 @@ async updateTaskStatus(taskId: string, status: 'pending' | 'completed'): Promise
     return { data: null, error };
   },
 
-async updateSubtaskStatus(
+  async updateSubtaskStatus(
     _taskId: string,
     subtaskId: string,
     completed: boolean
@@ -592,18 +632,16 @@ async updateSubtaskStatus(
         .single(); // חוזר ל-single בטוח כי המזהה חובה
 
       if (subtask && !authService.canApproveFinal(subtask.title)) {
-        const errorMsg = "אין לך הרשאה לשנות את הסטטוס של אישור ניהול סופי!";
-        alert(errorMsg);
-        return { data: null, error: { message: errorMsg } as any };
+        return { data: null, error: { message: "אין לך הרשאה לשנות את הסטטוס של אישור ניהול סופי!" } };
       }
     }
 
     const { error } = await supabase
       .from('sub_tasks')
-      .update({ 
-        is_completed: completed, 
+      .update({
+        is_completed: completed,
         updated_at: new Date().toISOString(),
-        updated_by: authService.getCurrentUser() 
+        updated_by: authService.getCurrentUser()
       })
       .eq('id', subtaskId);
 
@@ -626,32 +664,21 @@ async updateSubtaskStatus(
     return { data: null, error };
   },
 
-async updateSubtask(subtaskId: string, _parentTaskId: string, updates: { title: string; priority: string; comment: string }) {
-    try {
-      // ✨ מניעת עריכה או עקיפה של אישור ניהול סופי מתוך חלון העריכה
-      if (updates.title.toLowerCase().includes("אישור ניהול סופי") && !authService.canApproveFinal(updates.title)) {
-        const errorMsg = "אין לך הרשאה לערוך או לשנות את אישור ניהול סופי!";
-        alert(errorMsg);
-        return { success: false, error: { message: errorMsg } };
-      }
-
-      const { error: subErr } = await supabase
-        .from('sub_tasks')
-        .update({ 
-          priority: updates.priority, 
-          title: updates.title.trim(), 
-          comment: updates.comment.trim(), 
-          updated_at: new Date().toISOString(),
-          updated_by: authService.getCurrentUser() 
-        })
-        .eq('id', subtaskId);
-      if (subErr) throw subErr;
-
-      return { success: true, error: null };
-    } catch (err: any) {
-      console.error('Adapter transactional failure:', err);
-      return { success: false, error: err };
+  async updateSubtask(subtaskId: string, _parentTaskId: string, updates: { title: string; priority: string; comment: string }): Promise<DbResult<null>> {
+    if (updates.title.toLowerCase().includes("אישור ניהול סופי") && !authService.canApproveFinal(updates.title)) {
+      return { data: null, error: { message: "אין לך הרשאה לערוך או לשנות את אישור ניהול סופי!" } };
     }
+    const { error } = await supabase
+      .from('sub_tasks')
+      .update({
+        priority: updates.priority,
+        title: updates.title.trim(),
+        comment: updates.comment.trim(),
+        updated_at: new Date().toISOString(),
+        updated_by: authService.getCurrentUser()
+      })
+      .eq('id', subtaskId);
+    return { data: null, error };
   },
 
   async updateTask(taskId: string, patch: Partial<PersistedTask>): Promise<DbResult<null>> {
@@ -662,6 +689,33 @@ async updateSubtask(subtaskId: string, _parentTaskId: string, updates: { title: 
 
     const { error } = await supabase.from('parent_tasks').update(row).eq('id', taskId);
     return { data: null, error };
+  },
+
+  // ── Dashboard counts ──
+
+  async fetchActiveCustomerCount(): Promise<DbResult<number>> {
+    const { count, error } = await supabase
+      .from('customers')
+      .select('*', { count: 'exact', head: true })
+      .eq('is_active', true)
+      .neq('id', OFFICE_CUSTOMER_ID);
+    return { data: count ?? 0, error: error as any };
+  },
+
+  async fetchPendingSubtaskCount(): Promise<DbResult<number>> {
+    const { count, error } = await supabase
+      .from('sub_tasks')
+      .select('*', { count: 'exact', head: true })
+      .eq('is_completed', false);
+    return { data: count ?? 0, error: error as any };
+  },
+
+  async fetchCompletedSubtaskCount(): Promise<DbResult<number>> {
+    const { count, error } = await supabase
+      .from('sub_tasks')
+      .select('*', { count: 'exact', head: true })
+      .eq('is_completed', true);
+    return { data: count ?? 0, error: error as any };
   },
 
   // ── Logs ──

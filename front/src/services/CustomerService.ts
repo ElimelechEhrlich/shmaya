@@ -100,6 +100,7 @@ export const CustomerService = {
             await Promise.all(generatedTasks.map((t: any) => PersistenceAdapter.insertSingleTask({
                 title: t.title,
                 clientId: customerId,
+                registryKey: t.parentTaskId ?? null,
                 subTasks: t.subTasks.map((s: any) => ({
                     title: s.title,
                     priority: (s.priority || 'medium') as SubTaskPriority,
@@ -131,6 +132,7 @@ export const CustomerService = {
             ops.push(...plan.toInsert.map((t: any) => PersistenceAdapter.insertSingleTask({
                 title: t.title,
                 clientId: customerId,
+                registryKey: t.parentTaskId ?? null,
                 subTasks: t.subTasks.map((s: any) => ({
                     title: s.title,
                     priority: (t.priority || 'medium') as SubTaskPriority,

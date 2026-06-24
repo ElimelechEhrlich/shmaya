@@ -1,6 +1,7 @@
 // src/comps/Header.tsx
 import React, { useState } from 'react';
 import { useLocation, useParams, useNavigate } from "react-router";
+import { authService } from '../services/authService';
 
 export default function Header(): React.ReactElement {
   const location = useLocation();
@@ -29,8 +30,8 @@ export default function Header(): React.ReactElement {
 
   // פונקציית התנתקות מהמערכת
   const handleLogout = () => {
-    localStorage.removeItem('user_name'); // מחיקת המשתמש מה-Session
-    navigate('/'); // העברה לעמוד ה-Login
+    authService.logout();
+    navigate('/');
   };
 
   return (

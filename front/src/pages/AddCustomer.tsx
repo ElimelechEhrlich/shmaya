@@ -1,7 +1,7 @@
 // src/comps/AddCustomer.tsx
 import React, { useEffect, useState } from 'react';
 import { TaskGeneratorService } from '../services/TaskService';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import FormField from '../comps/FormField';
 import TaskCard from '../comps/TaskCard';
 import { CustomerService } from '../services/CustomerService';
@@ -11,6 +11,8 @@ import {
     BUSINESS_TYPE_OPTIONS,
     coerceBool,
     boolToOption,
+    applyBusinessRules,
+    type Customer,
 } from '../registries/CustomerRegistry';
 
 interface CustomerFormData {
@@ -58,6 +60,7 @@ export default function AddCustomer(): React.ReactElement {
     });
 
     const [previewTasks, setPreviewTasks] = useState<any[]>([]);
+    const [isSaving, setIsSaving] = useState<boolean>(false);
 
     // תצוגה מקדימה של משימות בלבד - ללא הפעלת לולאת שינוי הסטייט של הלקוח
     useEffect(() => {
@@ -114,7 +117,9 @@ export default function AddCustomer(): React.ReactElement {
         }
         
         try {
-            const result = await CustomerService.saveCustomer(dataToSave as any, false);
+            setIsSaving(true);
+            const cleanedData = applyBusinessRules(dataToSave as unknown as Customer);
+            const result = await CustomerService.saveCustomer(cleanedData as unknown as CustomerFormData, false);
             if (result.success) {
                 alert('הלקוח נוסף ותועד במערכת!');
                 navigate('/admin/customers');
@@ -124,6 +129,8 @@ export default function AddCustomer(): React.ReactElement {
         } catch (error: any) {
             console.error("Error saving data:", error);
             alert('שגיאה בשמירת הנתונים: ' + error.message);
+        } finally {
+            setIsSaving(false);
         }
     };
 
@@ -307,8 +314,8 @@ export default function AddCustomer(): React.ReactElement {
                             </FormField>
                         </Card>
 
-                        <button type="submit" className="w-full bg-slate-900 hover:bg-slate-800 text-white py-4 rounded-2xl font-bold shadow-lg transition">
-                            שמור לקוח והפעל אוטומציית משימות
+                        <button type="submit" disabled={isSaving} className="w-full bg-slate-900 hover:bg-slate-800 text-white py-4 rounded-2xl font-bold shadow-lg transition disabled:cursor-not-allowed disabled:opacity-60">
+                            {isSaving ? 'שומר, נא להמתין...' : 'שמור לקוח והפעל אוטומציית משימות'}
                         </button>
                     </div>
 

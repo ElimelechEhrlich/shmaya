@@ -12,11 +12,11 @@ export const TaskDetailsModal: React.FC<TaskDetailsModalProps> = ({ isOpen, onCl
 
     // שליפת תתי-האובייקטים מתוך המשימה/לקוח
     const customer = task.customer || task; 
-    const business = customer?.business_details?.[0] || customer?.businessDetails || {};
-    const incomeTax = customer?.income_tax_cases?.[0] || customer?.incomeTaxDetails || {};
-    const vat = customer?.vat_cases?.[0] || customer?.vatDetails || {};
-    const insurance = customer?.insurance_cases?.[0] || customer?.insuranceDetails || {};
-    const payment = customer?.payment_details?.[0] || customer?.paymentDetails || {};
+    const business = customer?.businessDetails || {};
+    const incomeTax = customer?.incomeTaxDetails || {};
+    const vat = customer?.vatDetails || {};
+    const insurance = customer?.insuranceDetails || {};
+    const payment = customer?.paymentDetails || {};
 
     return (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 p-4" dir="rtl">

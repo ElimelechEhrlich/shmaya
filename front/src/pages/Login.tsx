@@ -1,6 +1,6 @@
 // src/pages/Login.tsx
 import React, { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
 import { authService } from "../services/authService";
 
 // הגדרת רשימת המשתמשים המורשים במערכת

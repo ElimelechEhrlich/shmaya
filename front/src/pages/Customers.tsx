@@ -1,6 +1,6 @@
 // src/pages/Customers.tsx
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import CustomerList from '../comps/CustomerList';
 
 export default function Customers(): React.ReactElement {
