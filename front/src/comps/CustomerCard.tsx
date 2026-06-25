@@ -11,7 +11,7 @@ import {
     PRIORITY_STYLES,
 } from '../registries/CustomerRegistry';
 import ProgressBar from './ProgressBar';
-import { CreateTaskModal } from '../pages/Tasks';
+import { CreateTaskModal } from '../comps/CreateTaskModal';
 import { authService } from '../services/authService'; // ודא שהנתיב לקובץ ה-Auth נכון
 
 type PriorityLevel = 'low' | 'medium' | 'high' | 'critical';
