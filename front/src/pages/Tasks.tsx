@@ -8,7 +8,7 @@ import {
     PRIORITY_STYLES,
 } from '../registries/CustomerRegistry';
 import { authService } from '../services/authService';
-import { CreateTaskModal } from '../comps/CreateTaskModal
+import { CreateTaskModal } from '../comps/CreateTaskModal';
 
 // הגדרת המבנה של שורת תת-משימה במערכת (מתוך ה-Subtasks View המנורמל)
 export interface SubtaskViewRow {
