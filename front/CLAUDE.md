@@ -33,7 +33,7 @@ Every concern has exactly one owner. Putting code in the wrong place is a real b
 | **DB access** | `src/services/PersistenceAdapter.ts` | Every `supabase.from(...)` call. Translates camelCase ↔ snake_case via `CUSTOMER_TO_DB` / `TASK_TO_DB` / `LOG_TO_DB` rename maps. Defensive `insertLog` (UUID-validates `entityId`). The only file that knows about `client_id`, `parent_task_id`, `entity_type`, `entity_id`, `is_active`, `created_at`. |
 | **Business rules** | `src/registries/CustomerRegistry.ts` | Customer domain types, business-type matrix (`BUSINESS_TYPES`), service definitions (`SERVICES`), field visibility/required (`FIELD_RULES`, `isAttributeVisible`/`isAttributeRequired`), cross-field cascade (`applyBusinessRules`), idempotent merge planner (`planIdempotentSync`), parent↔subtask cascade utilities (`cascadeOnParentToggle`, `cascadeOnSubtaskSet`), parentTaskId-anchored progress (`calculateWeightedProgress`) and finalization (`isCustomerFinalized`), priority + category color maps, boolean coercion (`coerceBool`/`boolToOption`). |
 | **State + orchestration** | `src/hooks/useCustomer.ts` + `src/services/CustomerService.js` | Hook owns CustomerCard's entire data layer (fetch, edit-mode, optimistic mutations, cascade application). Service handles save flow + idempotent `syncTasks` + deactivate/delete. |
-| **Logging** | `src/services/LogService.ts` | Every observable state change. Writes via `PersistenceAdapter.insertLog`. Diff-based changesets via internal `diff()`. Actor defaults to `localStorage.user_name`. |
+| **Logging** | `src/services/LogService.ts` | ⚠️ LogService is intentionally disabled — all methods are no-ops (code is commented out). Do not assume logs are being written. Re-enable only after verifying the logs table exists in Supabase. | Every observable state change. Writes via `PersistenceAdapter.insertLog`. Diff-based changesets via internal `diff()`. Actor defaults to `localStorage.user_name`. |
 
 **Validation invariants** (verifiable by grep):
 - `supabase.from(...)` exists only inside `PersistenceAdapter.ts`.
@@ -75,7 +75,7 @@ When changing the registry, remember the same data shape is consumed by both pre
 - Income-tax deactivation clears its derived fields (generalized for every service via `SERVICES[*].clearsOnDeactivate`).
 - `monthlyFee <= 0` forces `directDebit = false`.
 
-`AddCustomer.jsx` runs every `formData` change through this in a `useEffect`. `CustomerCard.jsx` routes every edit through `actions.updateField` in `useCustomer`, which applies the same cascade. There is no longer a `CustomerService.applyBusinessLogic` — that's the old name; the new path is the Registry function.
+'AddCustomer' runs this once at save time (inside handleSubmit), not on every formData change. The 'useEffect' in AddCustomer only generates the task preview. `CustomerCard.jsx` routes every edit through `actions.updateField` in `useCustomer`, which applies the same cascade. There is no longer a `CustomerService.applyBusinessLogic` — that's the old name; the new path is the Registry function.
 
 ## Parent↔subtask completion coupling
 
