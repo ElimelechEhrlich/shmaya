@@ -50,6 +50,95 @@ interface ConfirmModalProps {
     onCancel: () => void;
 }
 
+// Sub-components
+// ──────────────────────────────────────────────────────────────────
+
+const Section: React.FC<SectionProps> = React.memo(({ title, icon, children }) => (
+    <div className="card-base p-6">
+        <h3 className="text-blue-700 font-black text-[11px] uppercase tracking-[0.2em] mb-5 border-b border-slate-100 pb-2 flex items-center gap-2">
+            {icon && <span className="text-base">{icon}</span>}
+            {title}
+        </h3>
+        {children}
+    </div>
+));
+
+const EditableRow: React.FC<EditableRowProps> = React.memo(({ label, value, isEditing, onCh, type = "text", options = [] }) => (
+    <div className="mb-4 last:mb-0">
+        <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1 tracking-wide">{label}</label>
+        {isEditing ? (
+            type === "select" ? (
+                <select className="input-style cursor-pointer" value={value} onChange={(e) => onCh(e.target.value)}>
+                    <option value="">בחר...</option>
+                    {options.map(o => <option key={o} value={o}>{o === 'yes' ? 'כן' : o === 'no' ? 'לא' : o}</option>)}
+                </select>
+            ) : (
+                <input className="input-style" value={value || ''} onChange={(e) => onCh(e.target.value)} type={type} />
+            )
+        ) : (
+            type === "select" ? (
+                <span className="text-sm font-bold text-slate-800">{(value === 'yes' && 'כן') || (value === 'no' && 'לא') || value}</span>
+            ) : (
+                <span className="text-sm font-bold text-slate-800">{value || '---'}</span>
+            )
+        )
+        }
+    </div>
+));
+
+const ToggleRow: React.FC<ToggleRowProps> = React.memo(({ label, active, isEditing, onToggle }) => (
+    <div className={`flex justify-between items-center p-3 rounded-xl border transition ${active ? 'bg-blue-50 border-blue-100' : 'bg-white border-slate-100 hover:border-slate-200'}`}>
+        <span className={`text-sm font-bold ${active ? 'text-blue-700' : 'text-slate-500'}`}>{label}</span>
+        <input
+            type="checkbox"
+            checked={!!active}
+            disabled={!isEditing}
+            onChange={(e) => onToggle(e.target.checked)}
+            className={`w-5 h-5 accent-blue-600 ${isEditing ? 'cursor-pointer' : 'cursor-not-allowed'}`}
+        />
+    </div>
+));
+
+const PriorityBadge: React.FC<PriorityBadgeProps> = React.memo(({ priority, onChange }) => {
+    const p = (priority && PRIORITY_STYLES[priority as PriorityLevel] ? priority : 'medium') as PriorityLevel;
+    const style = PRIORITY_STYLES[p];
+
+    return (
+        <div className="relative">
+            <select
+                value={p}
+                onChange={(e) => onChange(e.target.value)}
+                onClick={(e) => e.stopPropagation()}
+                className={`cursor-pointer ${style?.bg || 'bg-slate-50'} ${style?.text || 'text-slate-700'} ${style?.border || 'border-slate-200'} border px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider appearance-none`}
+                style={{ backgroundImage: 'none' }}
+                title={`עדיפות: ${style?.label || p}`}
+            >
+                {PRIORITY_LEVELS.map((lv: string) => (
+                    <option key={lv} value={lv}>{PRIORITY_STYLES[lv as PriorityLevel]?.label || lv}</option>
+                ))}
+            </select>
+        </div>
+    );
+});
+
+const ConfirmModal: React.FC<ConfirmModalProps> = React.memo(({ title, body, onConfirm, onCancel }) => (
+    <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center z-50 backdrop-blur-sm" dir="rtl">
+        <div className="bg-white rounded-2xl shadow-2xl p-7 max-w-md w-full mx-4 border border-slate-200">
+            <h3 className="text-lg font-black text-slate-900 mb-2">{title}</h3>
+            <p className="text-sm text-slate-600 mb-6">{body}</p>
+            <div className="flex justify-end gap-3">
+                <button onClick={onCancel} className="cursor-pointer px-5 py-2 rounded-lg text-sm font-bold text-slate-600 hover:bg-slate-100 transition">
+                    ביטול
+                </button>
+                <button onClick={onConfirm} className="cursor-pointer px-5 py-2 rounded-lg text-sm font-bold bg-red-600 text-white hover:bg-red-700 transition">
+                    מחק לצמיתות
+                </button>
+            </div>
+        </div>
+    </div>
+));
+
+
 const CustomerCard: React.FC = () => {
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
@@ -398,92 +487,5 @@ const CustomerCard: React.FC = () => {
 };
 
 // ──────────────────────────────────────────────────────────────────
-// Sub-components
-// ──────────────────────────────────────────────────────────────────
-
-const Section: React.FC<SectionProps> = React.memo(({ title, icon, children }) => (
-    <div className="card-base p-6">
-        <h3 className="text-blue-700 font-black text-[11px] uppercase tracking-[0.2em] mb-5 border-b border-slate-100 pb-2 flex items-center gap-2">
-            {icon && <span className="text-base">{icon}</span>}
-            {title}
-        </h3>
-        {children}
-    </div>
-));
-
-const EditableRow: React.FC<EditableRowProps> = React.memo(({ label, value, isEditing, onCh, type = "text", options = [] }) => (
-    <div className="mb-4 last:mb-0">
-        <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1 tracking-wide">{label}</label>
-        {isEditing ? (
-            type === "select" ? (
-                <select className="input-style cursor-pointer" value={value} onChange={(e) => onCh(e.target.value)}>
-                    <option value="">בחר...</option>
-                    {options.map(o => <option key={o} value={o}>{o === 'yes' ? 'כן' : o === 'no' ? 'לא' : o}</option>)}
-                </select>
-            ) : (
-                <input className="input-style" value={value || ''} onChange={(e) => onCh(e.target.value)} type={type} />
-            )
-        ) : (
-            type === "select" ? (
-                <span className="text-sm font-bold text-slate-800">{(value === 'yes' && 'כן') || (value === 'no' && 'לא') || value}</span>
-            ) : (
-                <span className="text-sm font-bold text-slate-800">{value || '---'}</span>
-            )
-        )
-        }
-    </div>
-));
-
-const ToggleRow: React.FC<ToggleRowProps> = React.memo(({ label, active, isEditing, onToggle }) => (
-    <div className={`flex justify-between items-center p-3 rounded-xl border transition ${active ? 'bg-blue-50 border-blue-100' : 'bg-white border-slate-100 hover:border-slate-200'}`}>
-        <span className={`text-sm font-bold ${active ? 'text-blue-700' : 'text-slate-500'}`}>{label}</span>
-        <input
-            type="checkbox"
-            checked={!!active}
-            disabled={!isEditing}
-            onChange={(e) => onToggle(e.target.checked)}
-            className={`w-5 h-5 accent-blue-600 ${isEditing ? 'cursor-pointer' : 'cursor-not-allowed'}`}
-        />
-    </div>
-));
-
-const PriorityBadge: React.FC<PriorityBadgeProps> = React.memo(({ priority, onChange }) => {
-    const p = (priority && PRIORITY_STYLES[priority as PriorityLevel] ? priority : 'medium') as PriorityLevel;
-    const style = PRIORITY_STYLES[p];
-
-    return (
-        <div className="relative">
-            <select
-                value={p}
-                onChange={(e) => onChange(e.target.value)}
-                onClick={(e) => e.stopPropagation()}
-                className={`cursor-pointer ${style?.bg || 'bg-slate-50'} ${style?.text || 'text-slate-700'} ${style?.border || 'border-slate-200'} border px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider appearance-none`}
-                style={{ backgroundImage: 'none' }}
-                title={`עדיפות: ${style?.label || p}`}
-            >
-                {PRIORITY_LEVELS.map((lv: string) => (
-                    <option key={lv} value={lv}>{PRIORITY_STYLES[lv as PriorityLevel]?.label || lv}</option>
-                ))}
-            </select>
-        </div>
-    );
-});
-
-const ConfirmModal: React.FC<ConfirmModalProps> = React.memo(({ title, body, onConfirm, onCancel }) => (
-    <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center z-50 backdrop-blur-sm" dir="rtl">
-        <div className="bg-white rounded-2xl shadow-2xl p-7 max-w-md w-full mx-4 border border-slate-200">
-            <h3 className="text-lg font-black text-slate-900 mb-2">{title}</h3>
-            <p className="text-sm text-slate-600 mb-6">{body}</p>
-            <div className="flex justify-end gap-3">
-                <button onClick={onCancel} className="cursor-pointer px-5 py-2 rounded-lg text-sm font-bold text-slate-600 hover:bg-slate-100 transition">
-                    ביטול
-                </button>
-                <button onClick={onConfirm} className="cursor-pointer px-5 py-2 rounded-lg text-sm font-bold bg-red-600 text-white hover:bg-red-700 transition">
-                    מחק לצמיתות
-                </button>
-            </div>
-        </div>
-    </div>
-));
 
 export default CustomerCard;
