@@ -141,6 +141,14 @@ export const CustomerService = {
             } as any)));
         }
 
+        if (plan.toUpdate?.length > 0) {
+            ops.push(...plan.toUpdate.map((t: any) =>
+                PersistenceAdapter.updateTaskSubtasks(t.id, t.subTasks).then(r => {
+                    if (r.error) throw new Error(r.error.message);
+                })
+            ));
+        }
+
         if (ops.length > 0) await Promise.all(ops);
     },
 
