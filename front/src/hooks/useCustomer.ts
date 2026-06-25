@@ -30,6 +30,7 @@ import {
     cascadeOnSubtaskSet,
     type Customer,
 } from '../registries/CustomerRegistry';
+import { translateError } from '../utils/translateError';
 
 export interface UseCustomerActions {
     updateField: (category: string | null, field: string, value: unknown) => void;
@@ -182,6 +183,7 @@ export function useCustomer(customerId: string | undefined): UseCustomerResult {
             );
 
             if (error) {
+                alert(`שגיאה בעדכון סטטוס המשימה: ${translateError(error.message)}`);
                 console.error('[useCustomer.toggleTaskStatus] Cascade update failed:', error.message);
                 await reload();
                 return;
@@ -221,6 +223,7 @@ export function useCustomer(customerId: string | undefined): UseCustomerResult {
             const { error: subErr } = await PersistenceAdapter.updateSubtaskStatus(taskId, subtaskId, completed);
 
             if (subErr) {
+                alert(`שגיאה בסימון תת-המשימה: ${translateError(subErr.message)}`);
                 console.error('[useCustomer.setSubtaskCompleted] persist failed:', subErr.message);
                 await reload();
                 return;
@@ -257,6 +260,7 @@ export function useCustomer(customerId: string | undefined): UseCustomerResult {
             const { error } = await PersistenceAdapter.updateSubtaskPriority(subtaskId, priority);
 
             if (error) {
+                alert(`שגיאה בעדכון הדחיפות: ${translateError(error.message)}`);
                 console.error('[useCustomer.updateSubTaskPriority] persist failed:', error.message);
                 await reload(); // רענון מאולץ רק במקרה של שגיאת רשת
                 return;

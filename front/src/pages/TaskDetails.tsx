@@ -15,6 +15,7 @@ import {
 } from '../registries/CustomerRegistry';
 import { authService } from '../services/authService';
 import ProgressBar from '../comps/ProgressBar';
+import { translateError } from '../utils/translateError';
 
 export default function TaskDetails(): React.ReactElement {
     const { id } = useParams<{ id: string }>();
@@ -68,11 +69,11 @@ export default function TaskDetails(): React.ReactElement {
         setTask({ ...task, status: cascaded.status, subTasks: cascaded.subTasks as any });
 
         const { error } = await PersistenceAdapter.updateSubtaskStatus(task.id, subtaskId, newCompleted);
-        if (error) { console.error(error.message); loadTask(); return; }
+        if (error) { alert(`שגיאה בסימון תת-המשימה: ${translateError(error.message)}`); console.error(error.message); loadTask(); return; }
 
         if (cascaded.status !== task.status) {
             const { error: pe } = await PersistenceAdapter.updateTaskStatus(task.id, cascaded.status);
-            if (pe) { console.error(pe.message); loadTask(); }
+            if (pe) { alert(`שגיאה בעדכון סטטוס המשימה: ${translateError(pe.message)}`); console.error(pe.message); loadTask(); }
         }
     }, [task, loadTask]);
 
@@ -93,7 +94,7 @@ export default function TaskDetails(): React.ReactElement {
             priority,
             comment: commentDrafts[subtaskId] ?? sub.comment ?? '',
         });
-        if (error) { console.error(error.message); loadTask(); }
+        if (error) { alert(`שגיאה בעדכון הדחיפות: ${translateError(error.message)}`); console.error(error.message); loadTask(); }
     }, [task, commentDrafts, loadTask]);
 
     const handleCommentBlur = useCallback(async (subtaskId: string) => {
@@ -107,7 +108,7 @@ export default function TaskDetails(): React.ReactElement {
             priority: sub.priority,
             comment: draft,
         });
-        if (error) { console.error(error.message); loadTask(); }
+        if (error) { alert(`שגיאה בשמירת ההערה: ${translateError(error.message)}`); console.error(error.message); loadTask(); }
     }, [task, commentDrafts, loadTask]);
 
     // ── Loading ──────────────────────────────────────────────────────

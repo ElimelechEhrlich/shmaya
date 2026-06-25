@@ -9,6 +9,7 @@ import {
 } from '../registries/CustomerRegistry';
 import { authService } from '../services/authService';
 import { CreateTaskModal } from '../comps/CreateTaskModal';
+import { translateError } from '../utils/translateError';
 
 // הגדרת המבנה של שורת תת-משימה במערכת (מתוך ה-Subtasks View המנורמל)
 export interface SubtaskViewRow {
@@ -98,6 +99,7 @@ export default function Tasks(): React.ReactElement {
             PersistenceAdapter.fetchAllCustomers(),
         ]);
         if (subtasksResult.error) {
+            alert(`שגיאה בטעינת רשימת המשימות: ${translateError(subtasksResult.error.message)}`);
             console.error(subtasksResult.error.message);
         } else if (subtasksResult.data) {
             const uniqueRows = subtasksResult.data.filter((row, index, self) =>
@@ -146,6 +148,7 @@ export default function Tasks(): React.ReactElement {
             ? await PersistenceAdapter.updateTaskStatus(row.taskId, row.taskStatus || 'pending')
             : await PersistenceAdapter.updateSubtaskPriority(row.subtaskId, newPriority as any);
         if (error) {
+            alert(`שגיאה בעדכון הדחיפות: ${translateError(error.message)}`);
             console.error(error.message);
             setRows(prev => prev.map(r =>
                 r.taskId === row.taskId && r.subtaskId === row.subtaskId
@@ -210,8 +213,9 @@ const setSubtaskCompleted = useCallback(async (row: SubtaskViewRow, completed: b
 // שליחה ישירה לאדפטר - ה-subtaskId מובטח להיות UUID חוקי ותקין
     const { error } = await PersistenceAdapter.updateSubtaskStatus(row.taskId, row.subtaskId!, completed);
     
-    if (error) { 
-        console.error(error.message); 
+    if (error) {
+        alert(`שגיאה בסימון תת-המשימה: ${translateError(error.message)}`);
+        console.error(error.message);
         load(); // טעינה מחדש של המצב האמיתי במקרה של כישלון
     }
     
@@ -259,6 +263,7 @@ const setSubtaskCompleted = useCallback(async (row: SubtaskViewRow, completed: b
             : await PersistenceAdapter.updateSubtaskTitle(row.taskId, row.subtaskId, trimmed);
 
         if (error) {
+            alert(`שגיאה בשמירת שם תת-המשימה: ${translateError(error.message)}`);
             console.error(error.message);
             setRows(prev => prev.map(r =>
                 r.taskId === row.taskId && r.subtaskId === row.subtaskId
