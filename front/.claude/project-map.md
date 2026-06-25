@@ -73,15 +73,7 @@ Three services, each with a clean conceptual key mapped to a legacy DB flag:
 
 Note: `subtaskIds` for `incomeTax` includes `taxCoordination` even though that subtask is forced by `BUSINESS_TYPES['זעיר']` rather than by the service flag — so iterating gives the full catalog.
 
-### 2.4 Field visibility/required (`FIELD_RULES`, §5)
-
-A flat table mapping dot-paths (`businessDetails.employsWorkers`, `paymentDetails.directDebit`, …) to `{ visibleWhen, requiredWhen }` predicates. Exposed via:
-
-- `isAttributeVisible(customer, field)`
-- `isAttributeRequired(customer, field)` (auto-false when not visible)
-- `listVisibleFields(customer)` — filters `ALL_FIELDS` by visibility, used by `useCustomer`
-
-### 2.5 Cross-field cascade (`applyBusinessRules`, §7)
+### 2.4 Cross-field cascade (`applyBusinessRules`, §7)
 
 Idempotent normalizer. Called on every form mutation:
 1. For each `BUSINESS_TYPES[bt].forcesServicesOff`, set the corresponding `Customer[activeFlag]` to false. (זעיר/פטור → `isVatActive = false`.)
@@ -91,7 +83,7 @@ Idempotent normalizer. Called on every form mutation:
 
 Every nested object is deep-cloned at the top of the function (including `customerDetails`), so the cascade never mutates its input.
 
-### 2.6 Task-emission predicates (§6b)
+### 2.5 Task-emission predicates (§6b)
 
 These eliminate the duplicate condition lambdas that previously lived in `taskRegistry.js`. The generator calls them on each customer change.
 
@@ -101,7 +93,7 @@ These eliminate the duplicate condition lambdas that previously lived in `taskRe
 - `isSubtaskBusinessTypeGated(parentId, subId)` → true if the subtask appears in *any* business type's `forcedSubtasks` list. Such subtasks are emitted *only* when forced; never by default.
 - `isSubtaskForcedByBusinessType(parentId, subId, c)` → true if the customer's current business type forces this specific subtask.
 
-### 2.7 Progress + finalization — **parentTaskId-anchored** (§9, §10)
+### 2.6 Progress + finalization — **parentTaskId-anchored** (§9, §10)
 
 **`calculateWeightedProgress(tasks): { totalUnits, doneUnits, percent }`** — subtask-weighted. Every subtask is one unit. A parent without subtasks counts as one unit. A parent marked `status === 'completed'` short-circuits to all-subtasks-done.
 
@@ -109,7 +101,7 @@ These eliminate the duplicate condition lambdas that previously lived in `taskRe
 
 > **The `parentTaskId` column is the primary anchor** for both progress and finalization. The legacy Hebrew-substring fallback remains in `isCustomerFinalized` *only* for rows persisted before `db/migrations/0001` ran. Once the migration is applied (and `TaskGeneratorService` is already emitting `parentTaskId` on every new row), the fallback can be deleted.
 
-### 2.8 Boolean coercion (§8)
+### 2.7 Boolean coercion (§8)
 
 - `coerceBool(v)` — accepts `boolean`, `'true'`/`'false'`, or any other value; returns `boolean`.
 - `boolToOption(v)` — returns `'true'` or `'false'` for `<select value=...>`.
@@ -201,7 +193,6 @@ Failures are swallowed (`console.error`) — logging must never block the user.
   isEditing:      boolean;
   progress:       number;                     // 0–100, parentTaskId-anchored weighted
   isFinalized:    boolean;                    // parentTaskId === FINAL_APPROVAL
-  visibleFields:  string[];                   // listVisibleFields(editData)
   actions: {
     updateField(category, field, value);      // runs every change through applyBusinessRules
     setEditMode(editing);                     // exit reverts unsaved edits to `customer`
