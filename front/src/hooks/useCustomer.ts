@@ -36,10 +36,7 @@ export interface UseCustomerActions {
     setEditMode: (editing: boolean) => void;
     save: () => Promise<{ success: boolean; error?: string }>;
     toggleTaskStatus: (parentTaskId: string, currentStatus: 'pending' | 'completed') => Promise<void>;
-    updateTask: (taskId: string, patch: Partial<PersistedTask>) => Promise<void>;
     setSubtaskCompleted: (taskId: string, subtaskId: string, completed: boolean) => Promise<void>;
-    toggleSubtask: (taskId: string, subtaskId: string) => Promise<void>;
-    updateSubtaskComment: (taskId: string, subtaskId: string, comment: string) => Promise<void>;
     updateSubTaskPriority: (taskId: string, subtaskId: string, priority: SubTaskPriority) => Promise<void>;
     deactivate: () => Promise<{ success: boolean; error?: string }>;
     reactivate: () => Promise<{ success: boolean; error?: string }>;
@@ -239,47 +236,9 @@ export function useCustomer(customerId: string | undefined): UseCustomerResult {
         [editData, customer, reload]
     );
 
-    const toggleSubtask = useCallback(
-        async (taskId: string, subtaskId: string): Promise<void> => {
-            const existing = (editData ?? customer)?.tasks.find((t) => t.id === taskId);
-            const sub = existing?.subTasks?.find((s) => s.id === subtaskId);
-            await setSubtaskCompleted(taskId, subtaskId, !sub?.completed);
-        },
-        [editData, customer, setSubtaskCompleted]
-    );
+    
 
-    const updateSubtaskComment = useCallback(
-        async (taskId: string, subtaskId: string, comment: string): Promise<void> => {
-            const targetTask = (editData ?? customer)?.tasks.find(t => t.id === taskId);
-            if (!targetTask) return;
-
-            const beforeSubTasks = targetTask.subTasks || [];
-            const nextSubTasks = beforeSubTasks.map((s) => (s.id === subtaskId ? { ...s, comment } : s));
-
-            const apply = (t: PersistedTask): PersistedTask => ({ ...t, subTasks: nextSubTasks });
-            setCustomer((s) => withTaskUpdated(s, taskId, apply));
-            setEditData((s) => withTaskUpdated(s, taskId, apply));
-
-            const { error } = await PersistenceAdapter.updateSubtask(subtaskId, taskId, {
-                title: beforeSubTasks.find(s => s.id === subtaskId)?.title || '',
-                // שליפת העדיפות מתוך תת-המשימה הספציפית שעוברת עריכה, ולא מאובייקט האב הכללי
-                priority: beforeSubTasks.find(s => s.id === subtaskId)?.priority || 'medium',
-                comment: comment
-            });
-
-            if (error) {
-                console.error('[useCustomer.updateSubtaskComment] persist failed:', error.message);
-                await reload();
-                return;
-            }
-            await LogService.recordTaskChange(
-                taskId,
-                { subTasks: beforeSubTasks } as unknown as Record<string, unknown>,
-                { subTasks: nextSubTasks } as unknown as Record<string, unknown>
-            );
-        },
-        [editData, customer, reload]
-    );
+    
 
     // ✨ תיקון: עדכון רמת הדחיפות ישירות לתוך השדה הפנימי של תת המשימה
     const updateSubTaskPriority = useCallback(
@@ -313,30 +272,7 @@ export function useCustomer(customerId: string | undefined): UseCustomerResult {
         [editData, customer, reload]
     );
 
-    const updateTask = useCallback(
-        async (taskId: string, patch: Partial<PersistedTask>): Promise<void> => {
-            const existing = (editData ?? customer)?.tasks.find((t) => t.id === taskId);
-            if (!existing) return;
-
-            const apply = (t: PersistedTask): PersistedTask => ({ ...t, ...patch });
-            setCustomer((s) => withTaskUpdated(s, taskId, apply));
-            setEditData((s) => withTaskUpdated(s, taskId, apply));
-
-            const { error } = await PersistenceAdapter.updateTask(taskId, patch);
-            if (error) {
-                console.error('[useCustomer.updateTask] persist failed:', error.message);
-                await reload();
-                return;
-            }
-
-            await LogService.recordTaskChange(
-                taskId,
-                existing as unknown as Record<string, unknown>,
-                { ...existing, ...patch } as unknown as Record<string, unknown>
-            );
-        },
-        [editData, customer, reload]
-    );
+    
 
     const deactivate = useCallback(
         async (): Promise<{ success: boolean; error?: string }> => {
@@ -378,21 +314,18 @@ export function useCustomer(customerId: string | undefined): UseCustomerResult {
         [tasks]
     );
 
-    const actions = useMemo(() => ({
+    const actions = {
         updateField,
         setEditMode,
         save,
         toggleTaskStatus,
-        updateTask,
         setSubtaskCompleted,
-        toggleSubtask,
-        updateSubtaskComment,
         updateSubTaskPriority, // ✨ הפניה לפונקציה המעודכנת
         deactivate,
         reactivate,
         remove,
         reload,
-    }), [updateField, setEditMode, save, toggleTaskStatus, updateTask, setSubtaskCompleted, toggleSubtask, updateSubtaskComment, updateSubTaskPriority, deactivate, reactivate, remove, reload]);
+    };
 
     return {
         customer,
