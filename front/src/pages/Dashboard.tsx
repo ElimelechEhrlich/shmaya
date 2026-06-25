@@ -28,14 +28,14 @@ export default function Dashboard() {
                 </div>
                 <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
                     <span className="text-2xl">⏳</span>
-                    <h3 className="text-slate-400 text-xs font-bold uppercase tracking-wider mt-2">משימות לטיפול</h3>
+                    <h3 className="text-slate-400 text-xs font-bold uppercase tracking-wider mt-2">לקוחות בטיפול</h3>
                     <p className="text-4xl font-black text-amber-600 mt-1">
                         {pendingTasks ?? <span className="inline-block w-12 h-9 bg-slate-100 rounded animate-pulse" />}
                     </p>
                 </div>
                 <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
                     <span className="text-2xl">✅</span>
-                    <h3 className="text-slate-400 text-xs font-bold uppercase tracking-wider mt-2">משימות שהושלמו</h3>
+                    <h3 className="text-slate-400 text-xs font-bold uppercase tracking-wider mt-2">לקוחות שהושלמו</h3>
                     <p className="text-4xl font-black text-green-600 mt-1">
                         {completedTasks ?? <span className="inline-block w-12 h-9 bg-slate-100 rounded animate-pulse" />}
                     </p>

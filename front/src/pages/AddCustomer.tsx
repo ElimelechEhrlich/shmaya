@@ -202,7 +202,7 @@ export default function AddCustomer(): React.ReactElement {
                                     <FormField label="מקדמות ביטוח לאומי">
                                         <input name="insurancePrepayment" className="input-style" onChange={(e) => handleChange('insuranceDetails', e)} />
                                     </FormField>
-                                    <FormField label="סך שעות עבודה">
+                                    <FormField label="שעות עבודה שבועיות">
                                         <input name="workHours" className="input-style" onChange={(e) => handleChange('insuranceDetails', e)} />
                                     </FormField>
                                 </div>

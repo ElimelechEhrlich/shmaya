@@ -71,7 +71,7 @@ const directDebitCondition = (c: RegistryCustomer): boolean =>
 export const AUTO_TASKS_CONFIG: RegistryParentTask[] = [
     {
         id: 'ADMIN_SETUP',
-        title: 'הקמה אדמיניסטרטיבית',
+        title: 'הקמה משרדית',
         condition: (): boolean => true,
         subTasks: [
             {
