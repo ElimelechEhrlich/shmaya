@@ -212,6 +212,8 @@ const CustomerCard: React.FC = () => {
     const isEmployerType = registryIsEmployerType(editData);
     const isVatRelevant = isRepresentationAllowed(editData);
     const isInactive = editData.isActive === false;
+    const monthlyFeeNum = parseFloat(String(editData.paymentDetails?.monthlyFee ?? ''));
+    const directDebitDisabled = !editData.paymentDetails?.monthlyFee || isNaN(monthlyFeeNum) || monthlyFeeNum <= 0;
 
     const onCh = (category: string, field: string) => (value: string) =>
         actions.updateField(category, field, value);
@@ -273,6 +275,9 @@ const CustomerCard: React.FC = () => {
                             <div className="flex items-center gap-2 mb-2">
                                 <span className="inline-block px-2.5 py-0.5 bg-blue-50 text-blue-700 font-bold text-[11px] rounded-full border border-blue-100">{bType || 'ללא סיווג'}</span>
                                 {isInactive && <span className="inline-block px-2.5 py-0.5 bg-slate-100 text-slate-500 font-bold text-[11px] rounded-full border border-slate-200">לא פעיל</span>}
+                                {editData.isInsuranceActive && editData.insuranceDetails?.workHours === '9' && (
+                                    <span className="inline-block px-2.5 py-0.5 bg-orange-100 text-orange-700 font-bold text-[11px] rounded-full border border-orange-300">עצמאי שאינו עונה להגדרה</span>
+                                )}
                             </div>
                             <h1 className="text-3xl font-black text-slate-900 leading-tight">{editData.customerDetails?.fullName}</h1>
                             <p className="text-slate-500 font-medium mt-1">{editData.businessDetails?.businessName}</p>
@@ -326,7 +331,7 @@ const CustomerCard: React.FC = () => {
                                 {editData.isInsuranceActive && editData.insuranceDetails && (
                                     <div className="pr-4 border-r-2 border-blue-100 space-y-3 mt-2 mb-3">
                                         <EditableRow label="מקדמות ב״ל" value={editData.insuranceDetails?.insurancePrepayment} isEditing={isEditing} onCh={onCh('insuranceDetails', 'insurancePrepayment')} />
-                                        <EditableRow label="שעות עבודה" value={editData.insuranceDetails?.workHours} isEditing={isEditing} onCh={onCh('insuranceDetails', 'workHours')} />
+                                        <EditableRow label="שעות עבודה" value={editData.insuranceDetails?.workHours} isEditing={isEditing} type="select" options={['9', '25']} onCh={onCh('insuranceDetails', 'workHours')} />
                                     </div>
                                 )}
 
@@ -353,7 +358,8 @@ const CustomerCard: React.FC = () => {
                                 {isEditing ? (
                                     <button
                                         onClick={() => actions.updateField('paymentDetails', 'directDebit', !editData.paymentDetails?.directDebit)}
-                                        className="cursor-pointer px-4 py-1 rounded-full text-[10px] font-black transition bg-green-600 text-white"
+                                        disabled={directDebitDisabled}
+                                        className={`px-4 py-1 rounded-full text-[10px] font-black transition bg-green-600 text-white ${directDebitDisabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`}
                                     >
                                         {editData.paymentDetails?.directDebit ? 'הוקם' : 'לא הוקם'}
                                     </button>

@@ -9,8 +9,6 @@ import {
     isEmployerType,
     isRepresentationAllowed,
     BUSINESS_TYPE_OPTIONS,
-    coerceBool,
-    boolToOption,
     applyBusinessRules,
     type Customer,
 } from '../registries/CustomerRegistry';
@@ -135,6 +133,7 @@ export default function AddCustomer(): React.ReactElement {
     };
 
     const showEmployerFields = isEmployerType(formData as any);
+    const directDebitDisabled = !formData.paymentDetails.monthlyFee || parseFloat(formData.paymentDetails.monthlyFee) <= 0;
 
     return (
         <div className="p-6 bg-slate-50 min-h-screen" dir="rtl">
@@ -191,19 +190,25 @@ export default function AddCustomer(): React.ReactElement {
                             {formData.isInsuranceActive && (
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4 pt-4 border-t border-slate-100">
                                     <FormField label="תיק ביטוח לאומי חדש">
-                                        <select name="newInsuranceCase" className="input-style"
-                                            value={boolToOption(formData.insuranceDetails.newInsuranceCase)}
-                                            onChange={(e) => setFormData({ ...formData, insuranceDetails: { ...formData.insuranceDetails, newInsuranceCase: coerceBool(e.target.value) } })}
-                                            required>
-                                            <option value={boolToOption(true)}>כן</option>
-                                            <option value={boolToOption(false)}>לא</option>
-                                        </select>
+                                        <label className="flex items-center gap-2 cursor-pointer mt-1">
+                                            <input
+                                                type="checkbox"
+                                                className="w-5 h-5 cursor-pointer accent-blue-600"
+                                                checked={formData.insuranceDetails.newInsuranceCase}
+                                                onChange={(e) => setFormData({ ...formData, insuranceDetails: { ...formData.insuranceDetails, newInsuranceCase: e.target.checked } })}
+                                            />
+                                            <span className="text-sm text-slate-600">{formData.insuranceDetails.newInsuranceCase ? 'כן' : 'לא'}</span>
+                                        </label>
                                     </FormField>
                                     <FormField label="מקדמות ביטוח לאומי">
                                         <input name="insurancePrepayment" className="input-style" onChange={(e) => handleChange('insuranceDetails', e)} />
                                     </FormField>
                                     <FormField label="שעות עבודה שבועיות">
-                                        <input name="workHours" className="input-style" onChange={(e) => handleChange('insuranceDetails', e)} />
+                                        <select name="workHours" className="input-style" value={formData.insuranceDetails.workHours} onChange={(e) => handleChange('insuranceDetails', e)}>
+                                            <option value="">בחר...</option>
+                                            <option value="9">9</option>
+                                            <option value="25">25</option>
+                                        </select>
                                     </FormField>
                                 </div>
                             )}
@@ -230,13 +235,15 @@ export default function AddCustomer(): React.ReactElement {
                                     {formData.isIncomeTaxActive && (
                                         <>
                                             <FormField label="תיק מס הכנסה חדש">
-                                                <select name="newItCase" className="input-style"
-                                                    value={boolToOption(formData.incomeTaxDetails.newItCase)}
-                                                    onChange={(e) => setFormData({ ...formData, incomeTaxDetails: { ...formData.incomeTaxDetails, newItCase: coerceBool(e.target.value) } })}
-                                                    required>
-                                                    <option value={boolToOption(true)}>כן</option>
-                                                    <option value={boolToOption(false)}>לא</option>
-                                                </select>
+                                                <label className="flex items-center gap-2 cursor-pointer mt-1">
+                                                    <input
+                                                        type="checkbox"
+                                                        className="w-5 h-5 cursor-pointer accent-blue-600"
+                                                        checked={formData.incomeTaxDetails.newItCase}
+                                                        onChange={(e) => setFormData({ ...formData, incomeTaxDetails: { ...formData.incomeTaxDetails, newItCase: e.target.checked } })}
+                                                    />
+                                                    <span className="text-sm text-slate-600">{formData.incomeTaxDetails.newItCase ? 'כן' : 'לא'}</span>
+                                                </label>
                                             </FormField>
                                             <FormField label="מקדמות מס הכנסה">
                                                 <input name="incomeTaxPrepayment" className="input-style" onChange={(e) => handleChange('incomeTaxDetails', e)} />
@@ -254,13 +261,15 @@ export default function AddCustomer(): React.ReactElement {
                                     )}
                                     {formData.isVatActive && (
                                         <FormField label="תיק מע״מ חדש">
-                                            <select name="newVatCase" className="input-style"
-                                                value={boolToOption(formData.vatDetails.newVatCase)}
-                                                onChange={(e) => setFormData({ ...formData, vatDetails: { ...formData.vatDetails, newVatCase: coerceBool(e.target.value) } })}
-                                                required>
-                                                <option value={boolToOption(true)}>כן</option>
-                                                <option value={boolToOption(false)}>לא</option>
-                                            </select>
+                                            <label className="flex items-center gap-2 cursor-pointer mt-1">
+                                                <input
+                                                    type="checkbox"
+                                                    className="w-5 h-5 cursor-pointer accent-blue-600"
+                                                    checked={formData.vatDetails.newVatCase}
+                                                    onChange={(e) => setFormData({ ...formData, vatDetails: { ...formData.vatDetails, newVatCase: e.target.checked } })}
+                                                />
+                                                <span className="text-sm text-slate-600">{formData.vatDetails.newVatCase ? 'כן' : 'לא'}</span>
+                                            </label>
                                         </FormField>
                                     )}
                                 </div>
@@ -300,9 +309,9 @@ export default function AddCustomer(): React.ReactElement {
                                 </FormField>
                                 <div>
                                     <label className="block text-sm font-bold text-slate-700 mb-1 mr-1">הוקם הו״ק?</label>
-                                    <div className="flex gap-2 border border-slate-200 rounded-lg items-center p-1.5 bg-slate-50">
-                                        <button type="button" onClick={() => setFormData(prev => ({ ...prev, paymentDetails: { ...prev.paymentDetails, directDebit: true } }))} className={`flex-1 py-1.5 rounded-md text-sm font-bold transition ${formData.paymentDetails.directDebit ? 'bg-green-600 text-white' : 'bg-white text-slate-400'}`}>כן</button>
-                                        <button type="button" onClick={() => setFormData(prev => ({ ...prev, paymentDetails: { ...prev.paymentDetails, directDebit: false } }))} className={`flex-1 py-1.5 rounded-md text-sm font-bold transition ${!formData.paymentDetails.directDebit ? 'bg-red-600 text-white' : 'bg-white text-slate-400'}`}>לא</button>
+                                    <div className={`flex gap-2 border rounded-lg items-center p-1.5 ${directDebitDisabled ? 'bg-slate-100 border-slate-200 opacity-50' : 'bg-slate-50 border-slate-200'}`}>
+                                        <button type="button" disabled={directDebitDisabled} onClick={() => setFormData(prev => ({ ...prev, paymentDetails: { ...prev.paymentDetails, directDebit: true } }))} className={`flex-1 py-1.5 rounded-md text-sm font-bold transition ${formData.paymentDetails.directDebit ? 'bg-green-600 text-white' : 'bg-white text-slate-400'} ${directDebitDisabled ? 'cursor-not-allowed' : 'cursor-pointer'}`}>כן</button>
+                                        <button type="button" disabled={directDebitDisabled} onClick={() => setFormData(prev => ({ ...prev, paymentDetails: { ...prev.paymentDetails, directDebit: false } }))} className={`flex-1 py-1.5 rounded-md text-sm font-bold transition ${!formData.paymentDetails.directDebit ? 'bg-red-600 text-white' : 'bg-white text-slate-400'} ${directDebitDisabled ? 'cursor-not-allowed' : 'cursor-pointer'}`}>לא</button>
                                     </div>
                                 </div>
                             </div>
