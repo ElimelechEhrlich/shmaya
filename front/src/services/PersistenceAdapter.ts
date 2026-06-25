@@ -702,22 +702,6 @@ export const PersistenceAdapter = {
     return { data: count ?? 0, error: error as any };
   },
 
-  async fetchPendingSubtaskCount(): Promise<DbResult<number>> {
-    const { count, error } = await supabase
-      .from('sub_tasks')
-      .select('*', { count: 'exact', head: true })
-      .eq('is_completed', false);
-    return { data: count ?? 0, error: error as any };
-  },
-
-  async fetchCompletedSubtaskCount(): Promise<DbResult<number>> {
-    const { count, error } = await supabase
-      .from('sub_tasks')
-      .select('*', { count: 'exact', head: true })
-      .eq('is_completed', true);
-    return { data: count ?? 0, error: error as any };
-  },
-
   // ── Logs ──
 
   async insertLog(row: Record<string, unknown>): Promise<DbResult<null>> {

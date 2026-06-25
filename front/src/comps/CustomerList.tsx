@@ -2,7 +2,7 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { OFFICE_CUSTOMER_ID, PersistenceAdapter } from '../services/PersistenceAdapter';
 import { TaskGeneratorService } from '../services/TaskService';
-import { BUSINESS_TYPE_OPTIONS } from '../registries/CustomerRegistry';
+import { BUSINESS_TYPE_OPTIONS, calculateWeightedProgress } from '../registries/CustomerRegistry';
 import { useNavigate } from 'react-router';
 
 // הגדרת המבנה של פילטרים באפליקציה
@@ -49,6 +49,12 @@ const CustomerList: React.FC = () => {
     const finalizationMap = useMemo(() => {
         const map = new Map<string, boolean>();
         customers.forEach(c => map.set(c.id, TaskGeneratorService.isCustomerFinalized(c.tasks || [])));
+        return map;
+    }, [customers]);
+
+    const progressMap = useMemo(() => {
+        const map = new Map<string, number>();
+        customers.forEach(c => map.set(c.id, calculateWeightedProgress(c.tasks || []).percent));
         return map;
     }, [customers]);
 
@@ -213,8 +219,8 @@ const CustomerList: React.FC = () => {
                                             {client.isVatActive && <span className="bg-amber-100 text-amber-700 px-2 py-1 rounded font-medium">מע״מ</span>}
                                         </td>
                                         <td className="p-4 text-center">
-                                            {isApproved
-                                                ? <span className="text-green-700 bg-green-50 px-3 py-1 rounded-full border border-green-200 text-xs font-bold">✓ אושר</span>
+                                            {(progressMap.get(client.id) ?? 0) === 100
+                                                ? <span className="text-green-700 bg-green-50 px-3 py-1 rounded-full border border-green-200 text-xs font-bold">✓ הושלם</span>
                                                 : <span className="text-amber-700 bg-amber-50 px-3 py-1 rounded-full border border-amber-200 text-xs font-bold">⏳ בטיפול</span>}
                                         </td>
                                     </tr>

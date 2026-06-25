@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { PersistenceAdapter } from '../services/PersistenceAdapter';
+import { OFFICE_CUSTOMER_ID, PersistenceAdapter } from '../services/PersistenceAdapter';
+import { calculateWeightedProgress } from '../registries/CustomerRegistry';
 
 export default function Dashboard() {
     const [activeCustomers, setActiveCustomers] = useState<number | null>(null);
@@ -9,10 +10,19 @@ export default function Dashboard() {
     useEffect(() => {
         PersistenceAdapter.fetchActiveCustomerCount()
             .then(r => setActiveCustomers(r.data ?? 0));
-        PersistenceAdapter.fetchPendingSubtaskCount()
-            .then(r => setPendingTasks(r.data ?? 0));
-        PersistenceAdapter.fetchCompletedSubtaskCount()
-            .then(r => setCompletedTasks(r.data ?? 0));
+
+        PersistenceAdapter.fetchAllCustomersWithTasks().then(({ data }) => {
+            if (!data) return;
+            const realCustomers = data.filter(c => c.id !== OFFICE_CUSTOMER_ID);
+            let pending = 0, completed = 0;
+            for (const c of realCustomers) {
+                const progress = calculateWeightedProgress(c.tasks ?? []).percent;
+                if (progress === 100) completed++;
+                else pending++;
+            }
+            setPendingTasks(pending);
+            setCompletedTasks(completed);
+        });
     }, []);
 
     return (

@@ -126,35 +126,35 @@ export const AUTO_TASKS_CONFIG: RegistryParentTask[] = [
         ],
     },
     {
-        id: 'INCOME_TAX',
-        title: 'טיפול מול מס הכנסה',
-        condition: (c: RegistryCustomer): boolean => !!c.isIncomeTaxActive,
-        subTasks: [
-            { 
-                id: 'it_rep', 
-                title: 'מס הכנסה ייצוגים'
-            },
-            { 
-                id: 'it_open', 
-                title: 'פתיחת תיק מס הכנסה', 
-                condition: (c: RegistryCustomer): boolean => !!c.incomeTaxDetails?.newItCase 
-            },
-            { 
-                id: 'taxCoordination', 
-                title: 'תיאום מס' 
-            },
-        ],
-    },
-    {
         id: 'VAT',
         title: 'טיפול מול מע"מ',
         condition: (c: RegistryCustomer): boolean => !!c.isVatActive,
         subTasks: [
             { id: 'vat_rep', title: 'מע"מ ייצוגים' },
-            { 
-                id: 'vat_open', 
-                title: 'פתיחת תיק מע"מ', 
-                condition: (c: RegistryCustomer): boolean => !!c.vatDetails?.newVatCase 
+            {
+                id: 'vat_open',
+                title: 'פתיחת תיק מע"מ',
+                condition: (c: RegistryCustomer): boolean => !!c.vatDetails?.newVatCase
+            },
+        ],
+    },
+    {
+        id: 'INCOME_TAX',
+        title: 'טיפול מול מס הכנסה',
+        condition: (c: RegistryCustomer): boolean => !!c.isIncomeTaxActive,
+        subTasks: [
+            {
+                id: 'it_rep',
+                title: 'מס הכנסה ייצוגים'
+            },
+            {
+                id: 'it_open',
+                title: 'פתיחת תיק מס הכנסה',
+                condition: (c: RegistryCustomer): boolean => !!c.incomeTaxDetails?.newItCase
+            },
+            {
+                id: 'taxCoordination',
+                title: 'תיאום מס'
             },
         ],
     },
