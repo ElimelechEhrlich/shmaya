@@ -51,7 +51,6 @@ export interface UseCustomerResult {
     isEditing: boolean;
     progress: number;
     isFinalized: boolean;
-    visibleFields: string[];
     actions: UseCustomerActions;
 }
 
