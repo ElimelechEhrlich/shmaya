@@ -116,9 +116,11 @@ export const CustomerService = {
     },
 
     syncTasksWithExisting: async (customerId: string, clientForm: CustomerFormData, existing: any[]): Promise<void> => {
+        console.log("=== DEBUG INCOMING DATA ===", { customerId, clientForm, existing }); // 👈 שים את זה בשורה הראשונה!
         const clientPayload = { id: customerId, ...clientForm };
         const generatedTasks = TaskGeneratorService.generateForCustomer(clientPayload as any);
         const plan = planIdempotentSync(generatedTasks as any, existing as any) as any;
+        console.log("=== DEBUG SYNC PLAN ===", plan); // 👈 תוסיף את השורה הזו זמנית
 
         const ops: Promise<any>[] = [];
 
@@ -142,11 +144,13 @@ export const CustomerService = {
         }
 
         if (plan.toUpdate?.length > 0) {
-            ops.push(...plan.toUpdate.map((t: any) =>
+            const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+            const validUpdates = plan.toUpdate.filter((t: any) => t.id && uuidRegex.test(t.id)); ops.push(...validUpdates.map((t: any) =>
                 PersistenceAdapter.updateTaskSubtasks(t.id, t.subTasks).then(r => {
                     if (r.error) throw new Error(r.error.message);
                 })
             ));
+
         }
 
         if (ops.length > 0) await Promise.all(ops);

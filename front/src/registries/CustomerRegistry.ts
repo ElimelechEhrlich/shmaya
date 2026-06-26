@@ -38,20 +38,20 @@ export const PRIORITY_LEVELS: TaskPriority[] = ['low', 'medium', 'high', 'critic
 
 /** Tailwind color tokens for priority badges. */
 export const PRIORITY_STYLES: Record<TaskPriority, { bg: string; text: string; border: string; label: string }> = {
-  low:      { bg: 'bg-slate-100',  text: 'text-slate-600',  border: 'border-slate-200',  label: 'נמוך' },
-  medium:   { bg: 'bg-blue-50',    text: 'text-blue-700',   border: 'border-blue-200',   label: 'בינוני' },
-  high:     { bg: 'bg-orange-50',  text: 'text-orange-700', border: 'border-orange-200', label: 'גבוה' },
-  critical: { bg: 'bg-red-50',     text: 'text-red-700',    border: 'border-red-200',    label: 'קריטי' },
+  low: { bg: 'bg-slate-100', text: 'text-slate-600', border: 'border-slate-200', label: 'נמוך' },
+  medium: { bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200', label: 'בינוני' },
+  high: { bg: 'bg-orange-50', text: 'text-orange-700', border: 'border-orange-200', label: 'גבוה' },
+  critical: { bg: 'bg-red-50', text: 'text-red-700', border: 'border-red-200', label: 'קריטי' },
 };
 
 /** Soft, non-intrusive color branding per parent_task_id. */
 export const CATEGORY_STYLES: Record<string, { accent: string; bg: string; ring: string; emoji: string }> = {
-  ADMIN_SETUP:    { accent: 'border-r-slate-400',  bg: 'bg-slate-50',  ring: 'ring-slate-200',  emoji: '🗂️' },
-  INSURANCE:      { accent: 'border-r-blue-400',   bg: 'bg-blue-50/60', ring: 'ring-blue-200',   emoji: '🛡️' },
-  INCOME_TAX:     { accent: 'border-r-emerald-400', bg: 'bg-emerald-50/60', ring: 'ring-emerald-200', emoji: '💼' },
-  VAT:            { accent: 'border-r-amber-400',  bg: 'bg-amber-50/60', ring: 'ring-amber-200',  emoji: '🧾' },
-  DIRECT_DEBIT:   { accent: 'border-r-purple-400', bg: 'bg-purple-50/60', ring: 'ring-purple-200', emoji: '💳' },
-  FINAL_APPROVAL: { accent: 'border-r-rose-400',   bg: 'bg-rose-50/60',  ring: 'ring-rose-200',   emoji: '✅' },
+  ADMIN_SETUP: { accent: 'border-r-slate-400', bg: 'bg-slate-50', ring: 'ring-slate-200', emoji: '🗂️' },
+  INSURANCE: { accent: 'border-r-blue-400', bg: 'bg-blue-50/60', ring: 'ring-blue-200', emoji: '🛡️' },
+  INCOME_TAX: { accent: 'border-r-emerald-400', bg: 'bg-emerald-50/60', ring: 'ring-emerald-200', emoji: '💼' },
+  VAT: { accent: 'border-r-amber-400', bg: 'bg-amber-50/60', ring: 'ring-amber-200', emoji: '🧾' },
+  DIRECT_DEBIT: { accent: 'border-r-purple-400', bg: 'bg-purple-50/60', ring: 'ring-purple-200', emoji: '💳' },
+  FINAL_APPROVAL: { accent: 'border-r-rose-400', bg: 'bg-rose-50/60', ring: 'ring-rose-200', emoji: '✅' },
 };
 export const DEFAULT_CATEGORY_STYLE = { accent: 'border-r-slate-300', bg: 'bg-white', ring: 'ring-slate-200', emoji: '📋' };
 
@@ -363,7 +363,7 @@ export function isSubtaskBusinessTypeGated(parentId: string, subtaskId: string):
 // This guarantees the useEffect pattern in AddCustomer cannot loop.
 // ──────────────────────────────────────────────────────────────────
 export function hasActiveAuthorities(customer: any): boolean {
-    return !!(customer.isIncomeTaxActive || customer.isVatActive || customer.isInsuranceActive);
+  return !!(customer.isIncomeTaxActive || customer.isVatActive || customer.isInsuranceActive);
 }
 
 export function applyBusinessRules(c: Customer): Customer {
@@ -371,12 +371,12 @@ export function applyBusinessRules(c: Customer): Customer {
   // the asymmetric-clone fragility flagged in the prior review.
   const next: Customer = {
     ...c,
-    customerDetails:  { ...c.customerDetails },
-    businessDetails:  { ...c.businessDetails },
+    customerDetails: { ...c.customerDetails },
+    businessDetails: { ...c.businessDetails },
     insuranceDetails: { ...c.insuranceDetails },
     incomeTaxDetails: { ...c.incomeTaxDetails },
-    vatDetails:       { ...c.vatDetails },
-    paymentDetails:   { ...c.paymentDetails },
+    vatDetails: { ...c.vatDetails },
+    paymentDetails: { ...c.paymentDetails },
     isActive: c.isActive,
   };
 
@@ -555,44 +555,44 @@ export const FINAL_APPROVAL_PARENT_ID = 'FINAL_APPROVAL';
 // Pure functions, no I/O. Callers apply the result via PersistenceAdapter.
 
 interface CascadeInput {
-    status: 'pending' | 'completed';
-    subTasks?: { id: string; completed: boolean }[];
+  status: 'pending' | 'completed';
+  subTasks?: { id: string; completed: boolean }[];
 }
 
 export interface CascadeResult {
-    status: 'pending' | 'completed';
-    subTasks: { id: string; completed: boolean; [k: string]: unknown }[];
+  status: 'pending' | 'completed';
+  subTasks: { id: string; completed: boolean;[k: string]: unknown }[];
 }
 
 export function cascadeOnParentToggle(task: CascadeInput): CascadeResult {
-    const next: 'pending' | 'completed' = task.status === 'completed' ? 'pending' : 'completed';
-    const subs = task.subTasks ?? [];
-    return {
-        status: next,
-        subTasks: next === 'completed'
-            ? subs.map((s) => ({ ...s, completed: true }))
-            : subs.map((s) => ({ ...s })),
-    };
+  const next: 'pending' | 'completed' = task.status === 'completed' ? 'pending' : 'completed';
+  const subs = task.subTasks ?? [];
+  return {
+    status: next,
+    subTasks: next === 'completed'
+      ? subs.map((s) => ({ ...s, completed: true }))
+      : subs.map((s) => ({ ...s })),
+  };
 }
 
 export function cascadeOnSubtaskToggle(task: CascadeInput, subtaskId: string): CascadeResult {
-    const subs = (task.subTasks ?? []).map((s) =>
-        s.id === subtaskId ? { ...s, completed: !s.completed } : { ...s }
-    );
-    const allDone = subs.length > 0 && subs.every((s) => s.completed);
-    return { status: allDone ? 'completed' : 'pending', subTasks: subs };
+  const subs = (task.subTasks ?? []).map((s) =>
+    s.id === subtaskId ? { ...s, completed: !s.completed } : { ...s }
+  );
+  const allDone = subs.length > 0 && subs.every((s) => s.completed);
+  return { status: allDone ? 'completed' : 'pending', subTasks: subs };
 }
 
 export function cascadeOnSubtaskSet(
-    task: CascadeInput,
-    subtaskId: string,
-    completed: boolean
+  task: CascadeInput,
+  subtaskId: string,
+  completed: boolean
 ): CascadeResult {
-    const subs = (task.subTasks ?? []).map((s) =>
-        s.id === subtaskId ? { ...s, completed } : { ...s }
-    );
-    const allDone = subs.length > 0 && subs.every((s) => s.completed);
-    return { status: allDone ? 'completed' : 'pending', subTasks: subs };
+  const subs = (task.subTasks ?? []).map((s) =>
+    s.id === subtaskId ? { ...s, completed } : { ...s }
+  );
+  const allDone = subs.length > 0 && subs.every((s) => s.completed);
+  return { status: allDone ? 'completed' : 'pending', subTasks: subs };
 }
 
 // ──────────────────────────────────────────────────────────────────
@@ -606,22 +606,27 @@ export function cascadeOnSubtaskSet(
 // completion+comments) or insert it fresh.
 
 interface MergeableTask {
-    id?: string;
-    parentTaskId?: string | null;
-    title: string;
-    status?: 'pending' | 'completed';
-    restrictedTo?: string | null;
-    subTasks: { id: string; title: string; completed?: boolean; comment?: string; details?: Record<string, unknown> }[];
-    priority?: TaskPriority;
+  id?: string;
+  parentTaskId?: string | null;
+  title: string;
+  status?: 'pending' | 'completed';
+  restrictedTo?: string | null;
+  subTasks: { 
+    id?: string; 
+    title: string; 
+    completed?: boolean; 
+    comment?: string; 
+    details?: Record<string, unknown> }[];
+  priority?: TaskPriority;
 }
 
 export interface IdempotentSyncPlan {
-    /** Tasks that should be INSERTED as new rows. */
-    toInsert: MergeableTask[];
-    /** Existing-task patches: { id, subTasks } — preserves status. */
-    toUpdate: { id: string; subTasks: MergeableTask['subTasks'] }[];
-    /** Pending-only existing tasks no longer in the generated set. */
-    toDeletePendingIds: string[];
+  /** Tasks that should be INSERTED as new rows. */
+  toInsert: MergeableTask[];
+  /** Existing-task patches: { id, subTasks } — preserves status. */
+  toUpdate: { id: string; subTasks: MergeableTask['subTasks'] }[];
+  /** Pending-only existing tasks no longer in the generated set. */
+  toDeletePendingIds: string[];
 }
 
 /**
@@ -630,67 +635,72 @@ export interface IdempotentSyncPlan {
  * `existing` is what's currently in the DB for this client.
  */
 export function planIdempotentSync(
-    generated: MergeableTask[],
-    existing: { id: string; title: string; parentTaskId?: string | null; status: 'pending' | 'completed'; subTasks?: MergeableTask['subTasks'] }[]
+  generated: MergeableTask[],
+  existing: { id: string; title: string; parentTaskId?: string | null; status: 'pending' | 'completed'; subTasks?: MergeableTask['subTasks'] }[]
 ): IdempotentSyncPlan {
-    const existingByParent = new Map<string, typeof existing[number]>();
-    const existingByTitle = new Map<string, typeof existing[number]>();
-    for (const e of existing) {
-        if (e.parentTaskId) existingByParent.set(e.parentTaskId, e);
-        existingByTitle.set(e.title, e);
-    }
-    const generatedParentIds = new Set<string>();
-    const generatedTitles = new Set<string>();
+  const existingByParent = new Map<string, typeof existing[number]>();
+  const existingByTitle = new Map<string, typeof existing[number]>();
+  for (const e of existing) {
+    if (e.parentTaskId) existingByParent.set(e.parentTaskId, e);
+    existingByTitle.set(e.title, e);
+  }
+  const generatedParentIds = new Set<string>();
+  const generatedTitles = new Set<string>();
 
-    const toInsert: MergeableTask[] = [];
-    const toUpdate: IdempotentSyncPlan['toUpdate'] = [];
+  const toInsert: MergeableTask[] = [];
+  const toUpdate: IdempotentSyncPlan['toUpdate'] = [];
 
-    for (const g of generated) {
-        const match = g.parentTaskId ? existingByParent.get(g.parentTaskId) : undefined;
-        if (g.parentTaskId) generatedParentIds.add(g.parentTaskId);
-        generatedTitles.add(g.title);
+  for (const g of generated) {
+    const match = g.parentTaskId ? existingByParent.get(g.parentTaskId) : undefined;
+    if (g.parentTaskId) generatedParentIds.add(g.parentTaskId);
+    generatedTitles.add(g.title);
 
-        if (!match) {
-            const titleMatch = existingByTitle.get(g.title);
-            if (titleMatch) {
-                toUpdate.push({
-                    id: titleMatch.id,
-                    subTasks: g.subTasks.map((newSub) => {
-                        const oldByid = new Map((titleMatch.subTasks ?? []).map((s) => [s.id, s]));
-                        const old = oldByid.get(newSub.id);
-                        return old
-                            ? { ...newSub, completed: !!old.completed, comment: old.comment ?? '' }
-                            : { ...newSub, completed: false, comment: '' };
-                    })
-                });
-                continue;
-            }
-            toInsert.push(g);
-            continue;
-        }
-
-        const oldByid = new Map((match.subTasks ?? []).map((s) => [s.id, s]));
-        const mergedSubs = g.subTasks.map((newSub) => {
-            const old = oldByid.get(newSub.id);
+    if (!match) {
+      const titleMatch = existingByTitle.get(g.title);
+      if (titleMatch) {
+        toUpdate.push({
+          id: titleMatch.id,
+          subTasks: g.subTasks.map((newSub) => {
+            // const oldByid = new Map((titleMatch.subTasks ?? []).map((s) => [s.id, s]));
+            // const old = oldByid.get(newSub.id);
+            const old = (titleMatch.subTasks ?? []).find(s => s.title === newSub.title);
             return old
-                ? { ...newSub, completed: !!old.completed, comment: old.comment ?? '' }
-                : { ...newSub, completed: false, comment: '' };
+              // ? { ...newSub, completed: !!old.completed, comment: old.comment ?? '' }
+              // : { ...newSub, completed: false, comment: '' };
+              ? { ...newSub, id: old.id, completed: !!old.completed, comment: old.comment ?? '' } // 👈 משתילים את ה-UUID האמיתי של תת-המשימה!
+              : { ...newSub, id: undefined, completed: false, comment: '' }; // שורה חדשה באמת תקבל undefined ויבוצע לה Insert          })
+          })
         });
-        toUpdate.push({ id: match.id, subTasks: mergedSubs });
+        continue;
+      }
+      toInsert.push(g);
+      continue;
     }
 
-    // Pending existing tasks whose parentTaskId is no longer generated → delete.
-    const toDeletePendingIds: string[] = [];
-    for (const e of existing) {
-        if (e.status !== 'pending') continue;
-        const existingKey = e.parentTaskId ?? e.title;
-        if (!existingKey) continue;
-        if (!generatedParentIds.has(existingKey) && !generatedTitles.has(existingKey)) {
-            toDeletePendingIds.push(e.id);
+    // const oldByid = new Map((match.subTasks ?? []).map((s) => [s.id, s]));
+    const mergedSubs = g.subTasks.map((newSub) => {
+      const old = (match.subTasks ?? []).find(s => s.id === newSub.id || s.title === newSub.title);
+      return old
+        ? { ...newSub, id: old.id, completed: !!old.completed, comment: old.comment ?? '' } // 👈 הגנה קשיחה על ה-UUID של הבן
+        : { ...newSub, id: undefined, completed: false, comment: '' };
+        });
+        toUpdate.push({ id: match.id, subTasks: mergedSubs 
+
+        });
         }
-    }
 
-    return { toInsert, toUpdate, toDeletePendingIds };
+  // Pending existing tasks whose parentTaskId is no longer generated → delete.
+  const toDeletePendingIds: string[] = [];
+  for (const e of existing) {
+    if (e.status !== 'pending') continue;
+    const existingKey = e.parentTaskId ?? e.title;
+    if (!existingKey) continue;
+    if (!generatedParentIds.has(existingKey) && !generatedTitles.has(existingKey)) {
+      toDeletePendingIds.push(e.id);
+    }
+  }
+
+  return { toInsert, toUpdate, toDeletePendingIds };
 }
 
 /** Read the parent id from a task, accepting either the adapter-translated
