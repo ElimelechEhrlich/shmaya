@@ -605,17 +605,23 @@ export const PersistenceAdapter = {
   async updateTaskSubtasks(taskId: string, subTasks: PersistedSubTask[]): Promise<DbResult<null>> {
     if (subTasks.length === 0) return { data: null, error: null };
 
-    const rows = subTasks.map((s) => ({
-      id: (s.id && UUID_RE.test(s.id)) ? s.id : undefined,
-      parent_task_id: taskId,
-      title: s.title,
-      is_completed: s.completed,
-      comment: s.comment,
-      priority: s.priority || 'medium'
-    }));
+    const existing = subTasks
+      .filter(s => s.id && UUID_RE.test(s.id))
+      .map(s => ({ id: s.id, parent_task_id: taskId, title: s.title, is_completed: s.completed ?? false, comment: s.comment ?? '', priority: s.priority || 'medium' }));
 
-    const { error } = await supabase.from('sub_tasks').upsert(rows);
-    return { data: null, error };
+    const newOnes = subTasks
+      .filter(s => !s.id || !UUID_RE.test(s.id))
+      .map(s => ({ parent_task_id: taskId, title: s.title, is_completed: s.completed ?? false, comment: s.comment ?? '', priority: s.priority || 'medium' }));
+
+    if (existing.length > 0) {
+      const { error } = await supabase.from('sub_tasks').upsert(existing);
+      if (error) return { data: null, error };
+    }
+    if (newOnes.length > 0) {
+      const { error } = await supabase.from('sub_tasks').insert(newOnes);
+      if (error) return { data: null, error };
+    }
+    return { data: null, error: null };
   },
 
   async updateSubtaskStatus(
