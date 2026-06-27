@@ -9,6 +9,7 @@ import {
 } from '../registries/CustomerRegistry';
 import { authService } from '../services/authService';
 import { CreateTaskModal, type CreateTaskModalProps } from '../comps/CreateTaskModal';
+import { AUTO_TASKS_CONFIG } from '../constants/taskRegistry';
 import { translateError } from '../utils/translateError';
 
 // הגדרת המבנה של שורת תת-משימה במערכת (מתוך ה-Subtasks View המנורמל)
@@ -107,18 +108,9 @@ export default function Tasks(): React.ReactElement {
 
     useEffect(() => { load(); }, [load]);
 
-    const categories = useMemo((): [string, string][] => {
-        const uniqueTitles = new Set<string>();
-        for (const r of rows) {
-            const title = r.parentTitle;
-            if (title && title.trim() !== '') {
-                uniqueTitles.add(title.trim());
-            }
-        }
-        return Array.from(uniqueTitles)
-            .sort((a, b) => a.localeCompare(b))
-            .map(title => [title, title]);
-    }, [rows]);
+    const categories = useMemo((): [string, string][] =>
+        AUTO_TASKS_CONFIG.map(t => [t.id, t.title]),
+    []);
 
     const clientOptions = useMemo((): [string, string][] => {
         const set = new Map<string, string>();
@@ -155,7 +147,7 @@ export default function Tasks(): React.ReactElement {
     const filtered = useMemo(() => rows.filter(r => {
         const statusKey = r.completed ? 'completed' : 'pending';
         if (filters.statuses.length && !filters.statuses.includes(statusKey)) return false;
-        if (filters.categories.length && !filters.categories.includes(r.parentTitle || '')) return false;
+        if (filters.categories.length && !filters.categories.includes(r.parentTaskId || '')) return false;
         const itemPriority = (r.priority || 'medium').toLowerCase();
         if (filters.priorities.length && !filters.priorities.includes(itemPriority)) return false;
         if (filters.clients.length) {
