@@ -606,7 +606,7 @@ export const PersistenceAdapter = {
     if (subTasks.length === 0) return { data: null, error: null };
 
     const rows = subTasks.map((s) => ({
-      id: s.id || undefined,
+      id: (s.id && UUID_RE.test(s.id)) ? s.id : undefined,
       parent_task_id: taskId,
       title: s.title,
       is_completed: s.completed,

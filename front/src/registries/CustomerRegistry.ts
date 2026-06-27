@@ -162,9 +162,9 @@ export const BUSINESS_TYPES: Record<BusinessTypeKey, BusinessTypeRule> = {
   // subtask. See project-map.md §2.
   'זעיר': {
     key: 'זעיר',
-    representationAllowed: false,
+    representationAllowed: true,
     showsEmployerFields: false,
-    forcesServicesOff: ['representation'],
+    forcesServicesOff: [],
     // INCOME_TAX parent only fires when income tax is also active (gated automation).
     forcedParentTasks: [],
     // taxCoordination requires both: businessType=='זעיר' AND isIncomeTaxActive.
@@ -174,9 +174,9 @@ export const BUSINESS_TYPES: Record<BusinessTypeKey, BusinessTypeRule> = {
   },
   'פטור': {
     key: 'פטור',
-    representationAllowed: false,
+    representationAllowed: true,
     showsEmployerFields: false,
-    forcesServicesOff: ['representation'],
+    forcesServicesOff: [],
     forcedParentTasks: [],
     forcedSubtasks: [],
   },

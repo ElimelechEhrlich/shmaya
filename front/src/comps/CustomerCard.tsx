@@ -332,6 +332,10 @@ const CustomerCard: React.FC = () => {
                                     <div className="pr-4 border-r-2 border-blue-100 space-y-3 mt-2 mb-3">
                                         <EditableRow label="מקדמות ב״ל" value={editData.insuranceDetails?.insurancePrepayment} isEditing={isEditing} onCh={onCh('insuranceDetails', 'insurancePrepayment')} />
                                         <EditableRow label="שעות עבודה" value={editData.insuranceDetails?.workHours} isEditing={isEditing} type="select" options={['9', '25']} onCh={onCh('insuranceDetails', 'workHours')} />
+                                        <div className="flex items-center gap-3">
+                                            <span className="text-xs font-bold text-blue-700">תיק ביטוח לאומי חדש</span>
+                                            <input type="checkbox" checked={!!editData.insuranceDetails?.newInsuranceCase} disabled={!isEditing} onChange={(e) => actions.updateField('insuranceDetails', 'newInsuranceCase', e.target.checked)} className={`w-5 h-5 accent-blue-600 ${isEditing ? 'cursor-pointer' : 'cursor-not-allowed'}`} />
+                                        </div>
                                     </div>
                                 )}
 
@@ -341,11 +345,25 @@ const CustomerCard: React.FC = () => {
                                         <EditableRow label="מקדמות מס" value={editData.incomeTaxDetails?.incomeTaxPrepayment} isEditing={isEditing} onCh={onCh('incomeTaxDetails', 'incomeTaxPrepayment')} />
                                         <EditableRow label="מחזור צפוי" value={editData.incomeTaxDetails?.annualTurnover} isEditing={isEditing} onCh={onCh('incomeTaxDetails', 'annualTurnover')} />
                                         <EditableRow label="סוג ייצוג" value={editData.incomeTaxDetails?.repType} isEditing={isEditing} type="select" options={['ראשי', 'משני']} onCh={onCh('incomeTaxDetails', 'repType')} />
+                                        <div className="flex items-center gap-3">
+                                            <span className="text-xs font-bold text-emerald-700">תיק מס הכנסה חדש</span>
+                                            <input type="checkbox" checked={!!editData.incomeTaxDetails?.newItCase} disabled={!isEditing} onChange={(e) => actions.updateField('incomeTaxDetails', 'newItCase', e.target.checked)} className={`w-5 h-5 accent-emerald-600 ${isEditing ? 'cursor-pointer' : 'cursor-not-allowed'}`} />
+                                        </div>
                                     </div>
                                 )}
 
                                 {isVatRelevant && (
-                                    <ToggleRow label="מע״מ" active={editData.isVatActive} isEditing={isEditing} onToggle={(v) => actions.updateField(null, 'isVatActive', v)} />
+                                    <>
+                                        <ToggleRow label="מע״מ" active={editData.isVatActive} isEditing={isEditing} onToggle={(v) => actions.updateField(null, 'isVatActive', v)} />
+                                        {editData.isVatActive && (
+                                            <div className="pr-4 border-r-2 border-amber-100 space-y-3 mt-2 mb-3">
+                                                <div className="flex items-center gap-3">
+                                                    <span className="text-xs font-bold text-amber-700">תיק מע״מ חדש</span>
+                                                    <input type="checkbox" checked={!!editData.vatDetails?.newVatCase} disabled={!isEditing} onChange={(e) => actions.updateField('vatDetails', 'newVatCase', e.target.checked)} className={`w-5 h-5 accent-amber-600 ${isEditing ? 'cursor-pointer' : 'cursor-not-allowed'}`} />
+                                                </div>
+                                            </div>
+                                        )}
+                                    </>
                                 )}
                             </div>
                         </Section>
