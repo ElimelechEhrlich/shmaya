@@ -1,6 +1,36 @@
 // Create task modal component (Transactional & Fixed UI Layout)
 // ──────────────────────────────────────────────────────────────────
 
+import React, { useState, useEffect, useMemo } from 'react';
+import { OFFICE_CUSTOMER_ID, PersistenceAdapter } from '../services/PersistenceAdapter';
+import { authService } from '../services/authService';
+import { PRIORITY_LEVELS, PRIORITY_STYLES } from '../registries/CustomerRegistry';
+
+interface CustomerOption {
+    id: string;
+    customerDetails?: { fullName?: string };
+    [key: string]: any;
+}
+
+export interface CreateTaskModalProps {
+    customers: CustomerOption[];
+    taskToEdit: {
+        taskId: string;
+        subtaskId: string | null;
+        subtaskTitle: string;
+        parentTaskId: string | null;
+        parentTitle: string | null;
+        clientId: string | null;
+        customerName: string | null;
+        completed: boolean;
+        priority: 'low' | 'medium' | 'high' | 'critical';
+        comment?: string | null;
+        taskStatus?: 'pending' | 'completed';
+    } | null;
+    onClose: () => void;
+    onCreated: () => void;
+}
+
 export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({ customers, taskToEdit, onClose, onCreated }) => {
     const [title, setTitle] = useState<string>(taskToEdit ? taskToEdit.subtaskTitle : '');
     const [isOffice, setIsOffice] = useState<boolean>(taskToEdit ? !taskToEdit.clientId : false);

@@ -8,7 +8,7 @@ import {
     PRIORITY_STYLES,
 } from '../registries/CustomerRegistry';
 import { authService } from '../services/authService';
-import { CreateTaskModal } from '../comps/CreateTaskModal';
+import { CreateTaskModal, type CreateTaskModalProps } from '../comps/CreateTaskModal';
 import { translateError } from '../utils/translateError';
 
 // הגדרת המבנה של שורת תת-משימה במערכת (מתוך ה-Subtasks View המנורמל)
@@ -58,12 +58,6 @@ interface SubtaskTableRowProps {
     onPriorityChange: (priority: string) => void;
 }
 
-interface CreateTaskModalProps {
-    customers: CustomerOption[];
-    taskToEdit: SubtaskViewRow | null;
-    onClose: () => void;
-    onCreated: () => void;
-}
 
 // ✨ משקולות לצורך מיון דחיפות פנימי (מהגבוה לנמוך)
 const PRIORITY_WEIGHTS = {
