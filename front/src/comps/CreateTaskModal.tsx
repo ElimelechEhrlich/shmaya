@@ -107,6 +107,7 @@ const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
                 const insertResult = await PersistenceAdapter.insertSingleTask({
                     title: title.trim(),
                     clientId: isOffice ? OFFICE_CUSTOMER_ID : clientId,
+                    priority,
                     subTasks: []
                 } as any);
                 

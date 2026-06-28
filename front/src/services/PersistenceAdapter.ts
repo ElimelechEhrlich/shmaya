@@ -543,6 +543,7 @@ export const PersistenceAdapter = {
     title: string;
     clientId: string | null;
     registryKey?: string | null;
+    priority?: string;
     subTasks: { title: string }[];
   }) {
     try {
@@ -569,14 +570,14 @@ export const PersistenceAdapter = {
           title: sub.title.trim(),
           is_completed: false,
           comment: '',
-          priority: 'medium'
+          priority: taskData.priority || 'medium'
         }))
         : [{
           parent_task_id: parent.id,
-          title: taskData.title.trim(), // תת-משימה יחידה עם שם המשימה הראשית
+          title: taskData.title.trim(),
           is_completed: false,
           comment: '',
-          priority: 'medium'
+          priority: taskData.priority || 'medium'
         }];
       const { error: subErr } = await supabase.from('sub_tasks').insert(subtasksRows);
       if (subErr) throw subErr;
