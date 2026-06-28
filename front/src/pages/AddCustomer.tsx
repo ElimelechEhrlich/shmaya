@@ -122,6 +122,8 @@ export default function AddCustomer(): React.ReactElement {
             const cleanedData = applyBusinessRules(dataToSave as unknown as Customer);
             const result = await CustomerService.saveCustomer(cleanedData as unknown as CustomerFormData, false);
             if (result.success) {
+                alert('שמירה הצליחה! סוג עסק: ' + formData.businessDetails.businessType);
+  
     if (formData.businessDetails.businessType === 'חברה בע"מ') {
         // יצירת תת-משימה
         await PersistenceAdapter.insertSubtaskUnderRegistry(
