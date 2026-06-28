@@ -652,12 +652,12 @@ export const PersistenceAdapter = {
   },
 
   async updateTaskSubtasks(taskId: string, subTasks: PersistedSubTask[]): Promise<DbResult<null>> {
-    if (subTasks.length === 0) return { data: null, error: null };
-
+    // upsert — תת-משימות קיימות עם UUID תקני
     const existing = subTasks
       .filter(s => s.id && UUID_RE.test(s.id))
       .map(s => ({ id: s.id, parent_task_id: taskId, title: s.title, is_completed: s.completed ?? false, comment: s.comment ?? '', priority: s.priority || 'medium' }));
 
+    // insert — תת-משימות חדשות ללא UUID
     const newOnes = subTasks
       .filter(s => !s.id || !UUID_RE.test(s.id))
       .map(s => ({ parent_task_id: taskId, title: s.title, is_completed: s.completed ?? false, comment: s.comment ?? '', priority: s.priority || 'medium' }));
@@ -670,6 +670,21 @@ export const PersistenceAdapter = {
       const { error } = await supabase.from('sub_tasks').insert(newOnes);
       if (error) return { data: null, error };
     }
+
+    // delete — pending שלא מופיעות ברשימה החדשה
+    // knownIds ריק → מחק את כל ה-pending של האב
+    const knownIds = existing.map(s => s.id as string);
+    let deleteQuery = supabase
+      .from('sub_tasks')
+      .delete()
+      .eq('parent_task_id', taskId)
+      .eq('is_completed', false);
+    if (knownIds.length > 0) {
+      deleteQuery = deleteQuery.not('id', 'in', `(${knownIds.join(',')})`);
+    }
+    const { error: deleteError } = await deleteQuery;
+    if (deleteError) return { data: null, error: deleteError };
+
     return { data: null, error: null };
   },
 
