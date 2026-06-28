@@ -130,8 +130,7 @@ export default function AddCustomer(): React.ReactElement {
             const cleanedData = applyBusinessRules(dataToSave as unknown as Customer);
             const result = await CustomerService.saveCustomer(cleanedData as unknown as CustomerFormData, false);
             if (result.success) {
-                alert('שמירה הצליחה! סוג עסק: ' + formData.businessDetails.businessType);
-  
+    
     if (formData.businessDetails.businessType === 'חברה בע"מ') {
         // יצירת תת-משימה
         await PersistenceAdapter.insertSubtaskUnderRegistry(
@@ -155,7 +154,7 @@ export default function AddCustomer(): React.ReactElement {
         address: formData.customerDetails.address,
         email: formData.customerDetails.email,
     });
-    modal.alert('עובר לרישום לקוח חדש...').then(() => {
+    modal.alert('שומר תיק לקוח ועובר לרישום לקוח חדש...').then(() => {
         navigate(`/admin/customers/new?${params.toString()}`);
     });
 },
