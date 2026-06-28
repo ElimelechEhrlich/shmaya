@@ -3,7 +3,9 @@ import React, { useState } from 'react';
 import { useLocation, useParams, useNavigate } from "react-router";
 import { authService } from '../services/authService';
 
-export default function Header(): React.ReactElement {
+interface HeaderProps { onMenuClick?: () => void; }
+export default function Header({ onMenuClick }: HeaderProps) {
+
   const location = useLocation();
   const navigate = useNavigate();
   
@@ -33,9 +35,17 @@ export default function Header(): React.ReactElement {
     authService.logout();
     navigate('/');
   };
+  
 
   return (
     <header className="h-20 bg-white shadow-sm flex items-center justify-between px-8 border-b border-slate-200 relative z-50">
+<button
+    onClick={onMenuClick}
+    className="md:hidden p-2 rounded-lg hover:bg-slate-100 transition"
+>
+    <span className="text-2xl">☰</span>
+</button>
+
       <h1 className="text-2xl font-bold text-slate-800">{getTitle()}</h1>
       
       {/* אזור הפרופיל - הופך למיכל יחסי עבור ה-Dropdown */}
