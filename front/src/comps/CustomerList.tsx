@@ -208,7 +208,7 @@ getCustomerDisplayName(client).includes(filters.search || '')
                                         className={`cursor-pointer hover:bg-blue-50/50 transition group ${isInactive ? 'opacity-60' : ''}`}
                                     >
                                         <td className="p-4 font-bold text-slate-800 group-hover:text-blue-700 transition ">
-                                            {client.customerDetails?.fullName || '—'}
+                                            {getCustomerDisplayName(client) || '—'}
                                             {isInactive && <span className="text-[10px] text-slate-400 mr-2">(לא פעיל)</span>}
                                         </td>
                                         <td className="p-4 text-sm font-mono text-slate-600 text-center">{client.businessDetails?.businessID || '—'}</td>
