@@ -199,7 +199,7 @@ export const PersistenceAdapter = {
     });
 
     return { data: null, error };
-  }
+  },
 
   // ── Customers (read) ──
 
