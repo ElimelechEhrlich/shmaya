@@ -2,9 +2,11 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router';
 
-interface SidebarProps { onNavigate?: () => void; }
-export default function Sidebar({ onNavigate }: SidebarProps): React.ReactElement {
-  const location = useLocation();
+interface SidebarProps { 
+    onNavigate?: () => void;
+    onClose?: () => void;
+}
+export default function Sidebar({ onNavigate, onClose }: SidebarProps): React.ReactElement {  const location = useLocation();
   
   // הגדרת טיפוס מפורש לפרמטר וטיפוס חזרה של מחרוזת (string)
   const isActive = (path: string): string => 
@@ -12,6 +14,12 @@ export default function Sidebar({ onNavigate }: SidebarProps): React.ReactElemen
 
   return (
     <aside className="w-64 bg-slate-900 text-white flex flex-col justify-between shrink-0 h-full">
+      <button
+    onClick={onClose}
+    className="md:hidden absolute top-4 left-4 text-slate-400 hover:text-white text-2xl transition"
+>
+    ✕
+</button>
       <div>
         {/* לוגו החברה */}
         <div className="p-8 text-center border-b border-slate-800">
