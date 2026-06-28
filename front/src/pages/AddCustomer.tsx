@@ -12,6 +12,8 @@ import {
     applyBusinessRules,
     type Customer,
 } from '../registries/CustomerRegistry';
+import { useModal } from '../contexts/ModalContext';
+import { PersistenceAdapter } from '../services/PersistenceAdapter';
 
 interface CustomerFormData {
     customerDetails: { fullName: string; identityId: string; phoneNumber: string; address: string; email: string };
@@ -44,6 +46,7 @@ interface ToggleHeaderProps {
 
 export default function AddCustomer(): React.ReactElement {
     const navigate = useNavigate();
+    const modal = useModal();
 
     const [formData, setFormData] = useState<CustomerFormData>({
         customerDetails: { fullName: '', identityId: '', phoneNumber: '', address: '', email: '' },
@@ -119,9 +122,35 @@ export default function AddCustomer(): React.ReactElement {
             const cleanedData = applyBusinessRules(dataToSave as unknown as Customer);
             const result = await CustomerService.saveCustomer(cleanedData as unknown as CustomerFormData, false);
             if (result.success) {
-                alert('הלקוח נוסף ותועד במערכת!');
-                navigate('/admin/customers');
-            } else {
+    if (formData.businessDetails.businessType === 'חברה בע"מ') {
+        // יצירת תת-משימה
+        await PersistenceAdapter.insertSubtaskUnderRegistry(
+            result.data.id,
+            'ADMIN_SETUP',
+            `פתיחת תיק לקוח נוסף עבור ${formData.customerDetails.fullName}`
+        );
+        // modal עם כפתורים מותאמים
+        modal.custom({
+            title: 'חברה בע"מ',
+            message: 'עבור תיק עסק שהוא חברה בע"מ, נדרש לפתוח תיק לקוח נוסף.',
+            buttons: [
+                {
+                    label: 'הוסף תיק לקוח',
+                    variant: 'primary',
+                    onClick: () => navigate('/admin/customers/new'),
+                },
+                {
+                    label: 'אישור',
+                    variant: 'secondary',
+                    onClick: () => navigate('/admin/customers'),
+                },
+            ],
+        });
+    } else {
+        alert('הלקוח נוסף ותועד במערכת!');
+        navigate('/admin/customers');
+    }
+} else {
                 alert('שגיאה בשמירה: ' + result.error);
             }
         } catch (error: any) {
