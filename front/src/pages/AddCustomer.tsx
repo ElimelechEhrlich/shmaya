@@ -24,7 +24,7 @@ interface CustomerFormData {
         businessName: string; businessID: string; businessType: string; openingDate: string; occupation: string; businessDescription: string; employsWorkers: string; deductionsId: string;
     };
     insuranceDetails: { insurancePrepayment: string; workHours: string; newInsuranceCase: boolean; insuranceId: string; insuranceStatus: string };
-    incomeTaxDetails: { repType: string; incomeTaxPrepayment: string; annualTurnover: string; newItCase: boolean };
+    incomeTaxDetails: { repType: string; incomeTaxPrepayment: string; annualTurnover: string; newItCase: boolean; needsIncomeTaxDirectDebit: boolean };
     vatDetails: { newVatCase: boolean };
     paymentDetails: { setupFee: string; monthlyFee: string; directDebit: boolean; setupFeePaid: boolean };
     isInsuranceActive: boolean;
@@ -64,7 +64,7 @@ export default function AddCustomer(): React.ReactElement {
             businessName: '', businessID: '', businessType: '', openingDate: '', occupation: '', businessDescription: '', employsWorkers: 'no', deductionsId: ''
         },
         insuranceDetails: { insurancePrepayment: '', workHours: '', newInsuranceCase: true, insuranceId: '', insuranceStatus: '' },
-        incomeTaxDetails: { repType: 'ראשי', incomeTaxPrepayment: '', annualTurnover: '', newItCase: true },
+        incomeTaxDetails: { repType: 'ראשי', incomeTaxPrepayment: '', annualTurnover: '', newItCase: true, needsIncomeTaxDirectDebit: true },
         vatDetails: { newVatCase: true },
         paymentDetails: { setupFee: '', monthlyFee: '', directDebit: false, setupFeePaid: false },
         isInsuranceActive: false, isIncomeTaxActive: false, isVatActive: false, needsDeductionsFile: false, comments: '', isActive: true
@@ -266,6 +266,17 @@ if (formData.businessDetails.businessType === 'חברה בע"מ') {
                                                         onChange={(e) => setFormData({ ...formData, incomeTaxDetails: { ...formData.incomeTaxDetails, newItCase: e.target.checked } })}
                                                     />
                                                     <span className="text-sm text-slate-600">{formData.incomeTaxDetails.newItCase ? 'כן' : 'לא'}</span>
+                                                </label>
+                                            </FormField>
+                                            <FormField label="נדרש הוראת קבע">
+                                                <label className="flex items-center gap-2 cursor-pointer mt-1">
+                                                    <input
+                                                        type="checkbox"
+                                                        className="w-5 h-5 cursor-pointer accent-emerald-600"
+                                                        checked={formData.incomeTaxDetails.needsIncomeTaxDirectDebit}
+                                                        onChange={(e) => setFormData({ ...formData, incomeTaxDetails: { ...formData.incomeTaxDetails, needsIncomeTaxDirectDebit: e.target.checked } })}
+                                                    />
+                                                    <span className="text-sm text-slate-600">{formData.incomeTaxDetails.needsIncomeTaxDirectDebit ? 'כן' : 'לא'}</span>
                                                 </label>
                                             </FormField>
                                             <FormField label="מקדמות מס הכנסה">

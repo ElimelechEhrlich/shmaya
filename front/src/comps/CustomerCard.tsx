@@ -350,6 +350,10 @@ const CustomerCard: React.FC = () => {
                                             <span className="text-xs font-bold text-emerald-700">תיק מס הכנסה חדש</span>
                                             <input type="checkbox" checked={!!editData.incomeTaxDetails?.newItCase} disabled={!isEditing} onChange={(e) => actions.updateField('incomeTaxDetails', 'newItCase', e.target.checked)} className={`w-5 h-5 accent-emerald-600 ${isEditing ? 'cursor-pointer' : 'cursor-not-allowed'}`} />
                                         </div>
+                                        <div className="flex items-center gap-3">
+                                            <span className="text-xs font-bold text-emerald-700">נדרש הוראת קבע</span>
+                                            <input type="checkbox" checked={editData.incomeTaxDetails?.needsIncomeTaxDirectDebit ?? true} disabled={!isEditing} onChange={(e) => actions.updateField('incomeTaxDetails', 'needsIncomeTaxDirectDebit', e.target.checked)} className={`w-5 h-5 accent-emerald-600 ${isEditing ? 'cursor-pointer' : 'cursor-not-allowed'}`} />
+                                        </div>
                                     </div>
                                 )}
 

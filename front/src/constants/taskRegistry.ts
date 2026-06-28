@@ -36,6 +36,7 @@ export interface RegistryCustomer {
     };
     incomeTaxDetails?: {
         newItCase?: boolean;
+        needsIncomeTaxDirectDebit?: boolean;
         [key: string]: any;
     };
     vatDetails?: {
@@ -173,10 +174,11 @@ export const AUTO_TASKS_CONFIG: RegistryParentTask[] = [
                 title: 'הסדרת הו"ק מע"מ', 
                 condition: (c: RegistryCustomer): boolean => !!c.isVatActive 
             },
-            { 
-                id: 'dd_it', 
-                title: 'הסדרת הו"ק מס הכנסה', 
-                condition: (c: RegistryCustomer): boolean => !!c.isIncomeTaxActive 
+            {
+                id: 'dd_it',
+                title: 'הסדרת הו"ק מס הכנסה',
+                condition: (c: RegistryCustomer): boolean =>
+                    !!c.isIncomeTaxActive && (c.incomeTaxDetails?.needsIncomeTaxDirectDebit ?? true) === true
             },
             {
                 id: 'dd_office',

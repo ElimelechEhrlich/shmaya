@@ -133,6 +133,7 @@ function dbRowToCustomer(row: any): Customer {
       incomeTaxPrepayment: row.income_tax_prepayment || '',
       annualTurnover: row.annual_turnover || '',
       newItCase: row.income_tax_is_new_case ?? true,
+      needsIncomeTaxDirectDebit: row.needs_income_tax_direct_debit ?? true,
     },
     vatDetails: {
       newVatCase: row.vat_is_new_case ?? true,
@@ -293,6 +294,7 @@ export const PersistenceAdapter = {
       income_tax_prepayment: c.incomeTaxDetails?.incomeTaxPrepayment ?? '',
       annual_turnover: c.incomeTaxDetails?.annualTurnover ?? '',
       income_tax_is_new_case: c.incomeTaxDetails?.newItCase ?? true,
+      needs_income_tax_direct_debit: c.incomeTaxDetails?.needsIncomeTaxDirectDebit ?? true,
       vat_is_new_case: c.vatDetails?.newVatCase ?? true,
       insurance_prepayment: c.insuranceDetails?.insurancePrepayment ?? '',
       work_hours: c.insuranceDetails?.workHours ?? '',
@@ -345,6 +347,7 @@ export const PersistenceAdapter = {
       flatRow.income_tax_prepayment = c.incomeTaxDetails.incomeTaxPrepayment;
       flatRow.annual_turnover = c.incomeTaxDetails.annualTurnover;
       flatRow.income_tax_is_new_case = c.incomeTaxDetails.newItCase;
+      flatRow.needs_income_tax_direct_debit = c.incomeTaxDetails.needsIncomeTaxDirectDebit ?? true;
     }
 
     if (c.vatDetails) {

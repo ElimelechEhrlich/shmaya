@@ -101,6 +101,7 @@ export interface IncomeTaxDetails {
   incomeTaxPrepayment: string;
   annualTurnover: string;
   newItCase: boolean;
+  needsIncomeTaxDirectDebit: boolean;
 }
 
 export interface VatDetails {
@@ -465,6 +466,7 @@ export const BOOLEAN_FIELDS: string[] = [
   'needsDeductionsFile',
   'paymentDetails.directDebit',
   'paymentDetails.setupFeePaid',
+  'incomeTaxDetails.needsIncomeTaxDirectDebit',
 ];
 
 // ──────────────────────────────────────────────────────────────────
