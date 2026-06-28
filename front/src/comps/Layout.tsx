@@ -11,7 +11,7 @@ export default function Layout(): React.ReactElement {
             {/* Overlay כהה במובייל כשהסידבר פתוח */}
             {sidebarOpen && (
                 <div
-                    className="fixed inset-0 bg-black/50 z-50 md:hidden"
+                    className="fixed top-0 inset-0 bg-black/50 z-20 md:hidden"
                     onClick={() => setSidebarOpen(false)}
                 />
             )}
