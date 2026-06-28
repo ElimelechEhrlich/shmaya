@@ -2,7 +2,7 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { OFFICE_CUSTOMER_ID, PersistenceAdapter } from '../services/PersistenceAdapter';
 import { TaskGeneratorService } from '../services/TaskService';
-import { BUSINESS_TYPE_OPTIONS, calculateWeightedProgress } from '../registries/CustomerRegistry';
+import { BUSINESS_TYPE_OPTIONS, calculateWeightedProgress, getCustomerDisplayName } from '../registries/CustomerRegistry';
 import { useNavigate } from 'react-router';
 
 // הגדרת המבנה של פילטרים באפליקציה
@@ -61,8 +61,7 @@ const CustomerList: React.FC = () => {
     const filteredCustomers = useMemo(() => customers.filter(client => {
         const isApproved = finalizationMap.get(client.id) ?? false;
         const matchesSearch =
-            (client.customerDetails?.fullName || '').includes(filters.search) ||
-            (client.businessDetails?.businessID || '').includes(filters.search);
+            getCustomerDisplayName(client).includes(filters.search)  (client.businessDetails?.businessID || '').includes(filters.search);
         const matchesType = filters.businessType === '' || client.businessDetails?.businessType === filters.businessType;
         const matchesInsurance = filters.isInsuranceActive === 'all' || String(!!client.isInsuranceActive) === filters.isInsuranceActive;
         const matchesTax = filters.isIncomeTaxActive === 'all' || String(!!client.isIncomeTaxActive) === filters.isIncomeTaxActive;
@@ -74,7 +73,7 @@ const CustomerList: React.FC = () => {
     const exportToExcel = (): void => {
         const headers = ["שם לקוח", "מזהה עסק", "סוג עסק", "ביטוח לאומי", "מס הכנסה", "מע\"מ", "אישור סופי"];
         const rows = filteredCustomers.filter(c => c.id !== OFFICE_CUSTOMER_ID).map(client => [
-            client.customerDetails?.fullName || '',
+            getCustomerDisplayName(client),
             client.businessDetails?.businessID || '',
             client.businessDetails?.businessType || '',
             client.isInsuranceActive ? "כן" : "לא",
