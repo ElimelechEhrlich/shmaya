@@ -38,7 +38,7 @@ export default function Header({ onMenuClick }: HeaderProps):React.ReactElement 
   
 
   return (
-    <header className="h-20 bg-white shadow-sm flex items-center justify-between px-8 border-b border-slate-200 relative z-50">
+    <header className="h-20 bg-white shadow-sm flex items-center justify-between px-8 border-b border-slate-200 relative z-30">
 <button
     onClick={onMenuClick}
     className="md:hidden p-2 rounded-lg hover:bg-slate-100 transition"
