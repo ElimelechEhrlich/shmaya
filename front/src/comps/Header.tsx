@@ -4,7 +4,7 @@ import { useLocation, useParams, useNavigate } from "react-router";
 import { authService } from '../services/authService';
 
 interface HeaderProps { onMenuClick?: () => void; }
-export default function Header({ onMenuClick }: HeaderProps) {
+export default function Header({ onMenuClick }: HeaderProps):React.ReactElement {
 
   const location = useLocation();
   const navigate = useNavigate();
