@@ -15,6 +15,7 @@
 import { supabase } from '../supabaseClient.js';
 import type { Customer } from '../registries/CustomerRegistry';
 import { authService } from './authService.js';
+import { AUTO_TASKS_CONFIG } from '../constants/taskRegistry';
 
 // ──────────────────────────────────────────────────────────────────
 // Persisted shapes
@@ -88,6 +89,7 @@ export interface DbResult<T> {
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const isUuid = (v: unknown): boolean => typeof v === 'string' && UUID_RE.test(v);
+const TASK_ORDER = AUTO_TASKS_CONFIG.map((t: any) => t.id);
 
 function dbRowToCustomer(row: any): Customer {
   return {
@@ -193,13 +195,18 @@ export const PersistenceAdapter = {
       .select(FULL_CUSTOMER_SELECT)
       .neq('id', OFFICE_CUSTOMER_ID)
       .order('created_at', { ascending: false });
-
     if (!data) return { data: null, error };
 
     return {
-      data: data.map((row: any) => ({
-        ...dbRowToCustomer(row),
-        tasks: (row.parent_tasks ?? []).map(mapTaskRow),
+     data: data.map((row: any) => ({
+    ...dbRowToCustomer(row),
+    tasks: (row.parent_tasks ?? [])
+        .map(mapTaskRow)
+        .sort((a: any, b: any) => {
+            const ai = TASK_ORDER.indexOf(a.parentTaskId ?? '');
+            const bi = TASK_ORDER.indexOf(b.parentTaskId ?? '');
+            return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+        }),
       })),
       error,
     };
@@ -211,15 +218,18 @@ export const PersistenceAdapter = {
       .select(FULL_CUSTOMER_SELECT)
       .eq('id', id)
       .single();
-
-    if (!data) return { data: null, error };
+    if (!data) return { data: null, error };  // ← חסר!
 
     return {
       data: {
         ...dbRowToCustomer(data),
-        tasks: (data.parent_tasks ?? [])
-          .map(mapTaskRow)
-          .sort((a: any, b: any) => (a.createdAt ?? '').localeCompare(b.createdAt ?? '')),
+      tasks: (data.parent_tasks ?? [])
+       .map(mapTaskRow)
+       .sort((a, b) => {
+          const ai = TASK_ORDER.indexOf(a.parentTaskId ?? '');
+          const bi = TASK_ORDER.indexOf(b.parentTaskId ?? '');
+          return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+    }),
       },
       error,
     };
@@ -356,10 +366,13 @@ export const PersistenceAdapter = {
       .eq('customer_id', clientId)
       .order('created_at', { ascending: true });
 
-    return {
-      data: data ? data.map(mapTaskRow) : null,
-      error,
-    };
+    const mapped = data ? data.map(mapTaskRow) : null;
+    if (mapped) mapped.sort((a, b) => {
+      const ai = TASK_ORDER.indexOf(a.parentTaskId ?? '');
+      const bi = TASK_ORDER.indexOf(b.parentTaskId ?? '');
+      return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+    });
+  return { data: mapped, error };
   },
 
   async fetchAllTasksWithCustomer(): Promise<DbResult<PersistedTaskWithCustomer[]>> {
