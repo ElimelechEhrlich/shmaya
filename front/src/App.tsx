@@ -11,10 +11,16 @@ import ProtectedRoute from './comps/ProtectedRoute';
 import Logs from './pages/Logs';
 import TaskDetails from './pages/TaskDetails';
 import CustomerCard from './comps/CustomerCard';
+import { ModalProvider } from './contexts/ModalContext';
+
+
+
+
 
 
 function App(): React.ReactElement {
   return (
+  <ModalProvider>
     <Routes>
       <Route path="/" element={<Login />} />
 
@@ -36,6 +42,7 @@ function App(): React.ReactElement {
         <Route path="logs" element={<Logs />} />
       </Route>
     </Routes>
+    </ModalProvider>
   );
 }
 
