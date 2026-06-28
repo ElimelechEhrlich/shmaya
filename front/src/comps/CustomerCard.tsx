@@ -9,6 +9,7 @@ import {
     BUSINESS_TYPE_OPTIONS,
     PRIORITY_LEVELS,
     PRIORITY_STYLES,
+    getCustomerDisplayName
 } from '../registries/CustomerRegistry';
 import ProgressBar from './ProgressBar';
 import { CreateTaskModal } from '../comps/CreateTaskModal';
@@ -261,7 +262,7 @@ const CustomerCard: React.FC = () => {
                 {confirmDelete && (
                     <ConfirmModal
                         title="מחיקת לקוח לצמיתות"
-                        body={`האם למחוק את ${editData.customerDetails?.fullName || 'הלקוח'} ואת כל המשימות שלו? פעולה זו אינה הפיכה.`}
+                        body={`האם למחוק את ${getCustomerDisplayName(editData)|| 'הלקוח'} ואת כל המשימות שלו? פעולה זו אינה הפיכה.`}
                         onConfirm={() => { setConfirmDelete(false); handleDelete(); }}
                         onCancel={() => setConfirmDelete(false)}
                     />
@@ -279,7 +280,7 @@ const CustomerCard: React.FC = () => {
                                     <span className="inline-block px-2.5 py-0.5 bg-orange-100 text-orange-700 font-bold text-[11px] rounded-full border border-orange-300">עצמאי שאינו עונה להגדרה</span>
                                 )}
                             </div>
-                            <h1 className="text-3xl font-black text-slate-900 leading-tight">{editData.customerDetails?.fullName}</h1>
+                            <h1 className="text-3xl font-black text-slate-900 leading-tight">{getCustomerDisplayName(editData)}</h1>
                             <p className="text-slate-500 font-medium mt-1">{editData.businessDetails?.businessName}</p>
                         </div>
                         <div className="text-left flex-shrink-0">
