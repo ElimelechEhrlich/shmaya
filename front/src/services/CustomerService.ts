@@ -51,6 +51,7 @@ function formDataToCustomer(formData: CustomerFormData): Partial<Customer> {
             setupFee: formData.paymentDetails.setupFee,
             monthlyFee: formData.paymentDetails.monthlyFee,
             directDebit: formData.paymentDetails.directDebit,
+            setupFeePaid: formData.paymentDetails.setupFeePaid,
         },
         isInsuranceActive: formData.isInsuranceActive,
         isIncomeTaxActive: formData.isIncomeTaxActive,

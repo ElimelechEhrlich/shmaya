@@ -47,6 +47,7 @@ export interface PaymentDetails {
     setupFee: string;
     monthlyFee: string;
     directDebit: boolean;
+    setupFeePaid: boolean;
 }
 
 export interface CustomerFormData {
