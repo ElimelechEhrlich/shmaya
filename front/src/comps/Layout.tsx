@@ -18,7 +18,7 @@ export default function Layout(): React.ReactElement {
 
             {/* Sidebar */}
             <div className={`
-                fixed inset-y-0 right-0 z-30 md:static md:block
+                fixed inset-y-0 right-0 z-50 md:static md:block
                 transition-transform duration-300
                 ${sidebarOpen ? 'translate-x-0' : 'translate-x-full md:translate-x-0'}
             `}>
