@@ -173,6 +173,33 @@ const FULL_CUSTOMER_SELECT = '*, parent_tasks(*, sub_tasks(*))';
 // ──────────────────────────────────────────────────────────────────
 
 export const PersistenceAdapter = {
+  async insertSubtaskUnderRegistry(
+    customerId: string,
+    registryKey: string,
+    subtaskTitle: string
+): Promise<DbResult<null>> {
+    const { data: parent, error: pErr } = await supabase
+        .from('parent_tasks')
+        .select('id')
+        .eq('customer_id', customerId)
+        .eq('registry_key', registryKey)
+        .single();
+
+    if (pErr || !parent) return { 
+        data: null, 
+        error: pErr ?? { message: 'משימת אב לא נמצאה' } 
+    };
+
+    const { error } = await supabase.from('sub_tasks').insert({
+        parent_task_id: parent.id,
+        title: subtaskTitle,
+        is_completed: false,
+        comment: '',
+        priority: 'medium',
+    });
+
+    return { data: null, error };
+  }
 
   // ── Customers (read) ──
 
