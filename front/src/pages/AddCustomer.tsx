@@ -14,6 +14,7 @@ import {
 } from '../registries/CustomerRegistry';
 import { useModal } from '../contexts/ModalContext';
 import { PersistenceAdapter } from '../services/PersistenceAdapter';
+import { useSearchParams } from 'react-router';
 
 interface CustomerFormData {
     customerDetails: { fullName: string; identityId: string; phoneNumber: string; address: string; email: string };
@@ -46,10 +47,17 @@ interface ToggleHeaderProps {
 
 export default function AddCustomer(): React.ReactElement {
     const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
     const modal = useModal();
 
     const [formData, setFormData] = useState<CustomerFormData>({
-        customerDetails: { fullName: '', identityId: '', phoneNumber: '', address: '', email: '' },
+        customerDetails: {
+    fullName: searchParams.get('fullName') || '',
+    identityId: searchParams.get('identityId') || '',
+    phoneNumber: searchParams.get('phoneNumber') || '',
+    address: searchParams.get('address') || '',
+    email: searchParams.get('email') || '',
+},
         businessDetails: {
             businessName: '', businessID: '', businessType: '', openingDate: '', occupation: '', businessDescription: '', employsWorkers: 'no', deductionsId: ''
         },
@@ -139,7 +147,18 @@ export default function AddCustomer(): React.ReactElement {
                 {
                     label: 'הוסף תיק לקוח',
                     variant: 'primary',
-                    onClick: () => navigate('/admin/customers/new'),
+                    onClick: () => {
+    const params = new URLSearchParams({
+        fullName: formData.customerDetails.fullName,
+        identityId: formData.customerDetails.identityId,
+        phoneNumber: formData.customerDetails.phoneNumber,
+        address: formData.customerDetails.address,
+        email: formData.customerDetails.email,
+    });
+    modal.alert('עובר לרישום לקוח חדש...').then(() => {
+        navigate(`/admin/customers/new?${params.toString()}`);
+    });
+},
                 },
                 {
                     label: 'אישור',
