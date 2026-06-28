@@ -15,6 +15,8 @@ import {
 import { useModal } from '../contexts/ModalContext';
 import { PersistenceAdapter } from '../services/PersistenceAdapter';
 import { useSearchParams } from 'react-router';
+import { handleLtdCustomerFlow } from '../utils/handleLtdCustomerFlow';
+
 
 interface CustomerFormData {
     customerDetails: { fullName: string; identityId: string; phoneNumber: string; address: string; email: string };
@@ -131,45 +133,17 @@ export default function AddCustomer(): React.ReactElement {
             const result = await CustomerService.saveCustomer(cleanedData as unknown as CustomerFormData, false);
             if (result.success) {
     
-    if (formData.businessDetails.businessType === 'חברה בע"מ') {
-        // יצירת תת-משימה
-        await PersistenceAdapter.insertSubtaskUnderRegistry(
-            result.data.id,
-            'ADMIN_SETUP',
-            `פתיחת תיק לקוח נוסף עבור ${formData.customerDetails.fullName}`
-        );
-        // modal עם כפתורים מותאמים
-        modal.custom({
-            title: 'חברה בע"מ',
-            message: 'עבור תיק עסק שהוא חברה בע"מ, נדרש לפתוח תיק לקוח נוסף.',
-            buttons: [
-                {
-                    label: 'הוסף תיק לקוח',
-                    variant: 'primary',
-                    onClick: () => {
-    const params = new URLSearchParams({
-        fullName: formData.customerDetails.fullName,
-        identityId: formData.customerDetails.identityId,
-        phoneNumber: formData.customerDetails.phoneNumber,
-        address: formData.customerDetails.address,
-        email: formData.customerDetails.email,
-    });
-    modal.alert('שומר תיק לקוח ועובר לרישום לקוח חדש...').then(() => {
-        navigate(`/admin/customers/new?${params.toString()}`);
-    });
-},
-                },
-                {
-                    label: 'אישור',
-                    variant: 'secondary',
-                    onClick: () => navigate('/admin/customers'),
-                },
-            ],
-        });
-    } else {
-        alert('הלקוח נוסף ותועד במערכת!');
-        navigate('/admin/customers');
-    }
+if (formData.businessDetails.businessType === 'חברה בע"מ') {
+    await handleLtdCustomerFlow(
+        result.data.id,
+        formData.customerDetails,
+        modal,
+        navigate
+    );
+} else {
+    await modal.alert('הלקוח נוסף ותועד במערכת!');
+    navigate('/admin/customers');
+}
 } else {
                 alert('שגיאה בשמירה: ' + result.error);
             }
