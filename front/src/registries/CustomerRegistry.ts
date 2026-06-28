@@ -484,8 +484,7 @@ export const BOOLEAN_FIELDS: string[] = [
 export interface SubTask {
   id: string;
   completed: boolean;
-  /** Optional user-entered comment; persisted in tasks.subTasks JSONB. */
-  comment?: string;
+  comment?: string | null;
 }
 
 export interface Task {

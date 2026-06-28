@@ -247,6 +247,19 @@ export const PersistenceAdapter = {
     };
   },
 
+  async fetchOfficeTasks(): Promise<DbResult<PersistedTask[]>> {
+    const { data, error } = await supabase
+      .from('parent_tasks')
+      .select('*, sub_tasks(*)')
+      .eq('customer_id', OFFICE_CUSTOMER_ID)
+      .order('created_at', { ascending: true });
+    if (!data) return { data: null, error };
+    return {
+      data: data.map(mapTaskRow),
+      error,
+    };
+  },
+
   async fetchCustomerWithTasks(id: string): Promise<DbResult<CustomerWithTasks>> {
     const { data, error } = await supabase
       .from('customers')
