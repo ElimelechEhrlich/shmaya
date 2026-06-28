@@ -2,7 +2,8 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router';
 
-export default function Sidebar(): React.ReactElement {
+interface SidebarProps { onNavigate?: () => void; }
+export default function Sidebar({ onNavigate }: SidebarProps): React.ReactElement {
   const location = useLocation();
   
   // הגדרת טיפוס מפורש לפרמטר וטיפוס חזרה של מחרוזת (string)
@@ -21,16 +22,16 @@ export default function Sidebar(): React.ReactElement {
 
         {/* ניווט */}
         <nav className="mt-15">
-          <Link to="/admin/dashboard" className={`flex items-center p-4 hover:bg-slate-800 transition ${isActive('dashboard')}`}>
+          <Link to="/admin/dashboard" onClick={onNavigate} className={`flex items-center p-4 hover:bg-slate-800 transition ${isActive('dashboard')}`}>
             <span>דאשבורד</span>
           </Link>
-          <Link to="/admin/customers" className={`flex items-center p-4 hover:bg-slate-800 transition ${isActive('customers')}`}>
+          <Link to="/admin/customers" onClick={onNavigate} className={`flex items-center p-4 hover:bg-slate-800 transition ${isActive('customers')}`}>
             <span>לקוחות</span>
           </Link>
-          <Link to="/admin/tasks" className={`flex items-center p-4 hover:bg-slate-800 transition ${isActive('tasks')}`}>
+          <Link to="/admin/tasks" onClick={onNavigate} className={`flex items-center p-4 hover:bg-slate-800 transition ${isActive('tasks')}`}>
             <span>משימות</span>
           </Link>
-          <Link to="/admin/logs" className={`flex items-center p-4 hover:bg-slate-800 transition ${isActive('logs')}`}>
+          <Link to="/admin/logs" onClick={onNavigate} className={`flex items-center p-4 hover:bg-slate-800 transition ${isActive('logs')}`}>
             <span>יומן פעולות</span>
           </Link>
         </nav>
