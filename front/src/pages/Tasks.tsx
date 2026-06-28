@@ -395,7 +395,7 @@ const setSubtaskCompleted = useCallback(async (row: SubtaskViewRow, completed: b
                                         row={row}
                                         onToggle={(c) => setSubtaskCompleted(row, c)}
                                         onSaveTitle={(t) => saveTitle(row, t)}
-                                        onCustomerClick={() => row.clientId && navigate(`/admin/customers/${row.clientId}`)}
+                                        onCustomerClick={() => row.clientId && row.clientId !== OFFICE_CUSTOMER_ID && navigate(`/admin/customers/${row.clientId}`)}
                                         onEditClick={() => setEditingTask(row)}
                                         onOpenPage={() => navigate(`/admin/tasks/${row.taskId}`)}
                                         onPriorityChange={(p) => handlePriorityChange(row, p)}
