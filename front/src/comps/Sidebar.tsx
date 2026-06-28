@@ -23,7 +23,7 @@ export default function Sidebar({ onNavigate }: SidebarProps): React.ReactElemen
         {/* ניווט */}
         <nav className="mt-15">
           <Link to="/admin/dashboard" onClick={onNavigate} className={`flex items-center p-4 hover:bg-slate-800 transition ${isActive('dashboard')}`}>
-            <span>דאשבורד</span>
+            <span>ראשי</span>
           </Link>
           <Link to="/admin/customers" onClick={onNavigate} className={`flex items-center p-4 hover:bg-slate-800 transition ${isActive('customers')}`}>
             <span>לקוחות</span>
