@@ -31,6 +31,9 @@ import {
     type Customer,
 } from '../registries/CustomerRegistry';
 import { translateError } from '../utils/translateError';
+import { useNavigate } from 'react-router';
+import { useModal } from '../contexts/ModalContext';
+import { handleLtdCustomerFlow } from '../utils/handleLtdCustomerFlow';
 
 export interface UseCustomerActions {
     updateField: (category: string | null, field: string, value: unknown) => void;
@@ -73,6 +76,8 @@ export function useCustomer(customerId: string | undefined): UseCustomerResult {
     const [editData, setEditData] = useState<CustomerWithTasks | null>(null);
     const [loading, setLoading] = useState<boolean>(true);
     const [isEditing, setIsEditing] = useState<boolean>(false);
+    const navigate = useNavigate();
+    const modal = useModal();
 
     const reload = useCallback(async () => {
         if (!customerId) { setLoading(false); return; }
@@ -144,6 +149,18 @@ export function useCustomer(customerId: string | undefined): UseCustomerResult {
             if (result.success) {
                 setIsEditing(false);
                 await reload();
+                const wasLtd = customer?.businessDetails?.businessType === 'חברה בע"מ';
+const isNowLtd = editData?.businessDetails?.businessType === 'חברה בע"מ';
+
+if (!wasLtd && isNowLtd && editData) {
+    await handleLtdCustomerFlow(
+        customerId,
+        editData.customerDetails,
+        modal,
+        navigate
+    );
+}
+                
             }
             return result;
         },
