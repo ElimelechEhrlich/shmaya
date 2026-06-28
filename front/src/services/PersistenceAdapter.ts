@@ -259,7 +259,7 @@ export const PersistenceAdapter = {
         ...dbRowToCustomer(data),
       tasks: (data.parent_tasks ?? [])
        .map(mapTaskRow)
-       .sort((a, b) => {
+       .sort((a: PersistedTask, b: PersistedTask) => {
           const ai = TASK_ORDER.indexOf(a.parentTaskId ?? '');
           const bi = TASK_ORDER.indexOf(b.parentTaskId ?? '');
           return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
