@@ -1,6 +1,7 @@
 const ERROR_MAP: [RegExp, string][] = [
     [/failed to fetch|networkerror|network error|fetch failed/i,    'שגיאת רשת — בדוק את החיבור לאינטרנט'],
     [/jwt expired|token.*expired|session.*expired/i,                 'פג תוקף ההתחברות — רענן את הדף'],
+    [/duplicate key value.*identity_id/i, 'מספר זהות זה כבר קיים במערכת — לקוח עם ת"ז זו כבר רשום'],
     [/duplicate key value.*business_id|already exists.*business_id/i, 'מזהה עסק זה כבר קיים במערכת — בדוק אם הלקוח כבר רשום'],
     [/duplicate key value|already exists/i,                          'הרשומה כבר קיימת במערכת'],
     [/violates foreign key constraint/i,                             'שגיאת קשר — הרשומה המקושרת אינה קיימת'],
