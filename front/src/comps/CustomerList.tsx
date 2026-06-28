@@ -61,8 +61,10 @@ const CustomerList: React.FC = () => {
     const filteredCustomers = useMemo(() => customers.filter(client => {
         const isApproved = finalizationMap.get(client.id) ?? false;
 const matchesSearch =
-    client.customerDetails?.fullName.includes(filters.search || '')
-    || (client.businessDetails?.businessID || '').includes(filters.search || '');        const matchesInsurance = filters.isInsuranceActive === 'all' || String(!!client.isInsuranceActive) === filters.isInsuranceActive;
+getCustomerDisplayName(client).includes(filters.search || '')
+|| (client.businessDetails?.businessID || '').includes(filters.search || '')        
+    const matchesType = !filters.businessType || client.businessDetails?.businessType === filters.businessType;
+        const matchesInsurance = filters.isInsuranceActive === 'all' || String(!!client.isInsuranceActive) === filters.isInsuranceActive;
         const matchesTax = filters.isIncomeTaxActive === 'all' || String(!!client.isIncomeTaxActive) === filters.isIncomeTaxActive;
         const matchesVat = filters.isVatActive === 'all' || String(!!client.isVatActive) === filters.isVatActive;
         const matchesApproved = filters.isFinalApproved === 'all' || String(isApproved) === filters.isFinalApproved;
