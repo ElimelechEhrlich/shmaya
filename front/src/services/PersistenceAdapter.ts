@@ -679,16 +679,7 @@ export const PersistenceAdapter = {
       .filter(s => !s.id || !UUID_RE.test(s.id))
       .map(s => ({ parent_task_id: taskId, title: s.title, is_completed: s.completed ?? false, comment: s.comment ?? '', priority: s.priority || 'medium' }));
 
-    if (existing.length > 0) {
-      const { error } = await supabase.from('sub_tasks').upsert(existing);
-      if (error) return { data: null, error };
-    }
-    if (newOnes.length > 0) {
-      const { error } = await supabase.from('sub_tasks').insert(newOnes);
-      if (error) return { data: null, error };
-    }
-
-    // delete — pending שלא מופיעות ברשימה החדשה
+    // 1. DELETE קודם — כך לא יגע ב-newOnes שיוכנסו אחרי
     // knownIds ריק → מחק את כל ה-pending של האב
     const knownIds = existing.map(s => s.id as string);
     let deleteQuery = supabase
@@ -701,6 +692,18 @@ export const PersistenceAdapter = {
     }
     const { error: deleteError } = await deleteQuery;
     if (deleteError) return { data: null, error: deleteError };
+
+    // 2. upsert existing
+    if (existing.length > 0) {
+      const { error } = await supabase.from('sub_tasks').upsert(existing);
+      if (error) return { data: null, error };
+    }
+
+    // 3. insert newOnes — אחרון, אחרי ה-DELETE
+    if (newOnes.length > 0) {
+      const { error } = await supabase.from('sub_tasks').insert(newOnes);
+      if (error) return { data: null, error };
+    }
 
     return { data: null, error: null };
   },
