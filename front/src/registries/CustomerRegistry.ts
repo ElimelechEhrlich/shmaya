@@ -111,6 +111,7 @@ export interface PaymentDetails {
   setupFee: string;
   monthlyFee: string;
   directDebit: boolean;
+  setupFeePaid: boolean;
 }
 
 export interface Customer {
@@ -463,6 +464,7 @@ export const BOOLEAN_FIELDS: string[] = [
   'isVatActive',
   'needsDeductionsFile',
   'paymentDetails.directDebit',
+  'paymentDetails.setupFeePaid',
 ];
 
 // ──────────────────────────────────────────────────────────────────

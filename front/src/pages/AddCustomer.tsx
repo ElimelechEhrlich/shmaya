@@ -26,7 +26,7 @@ interface CustomerFormData {
     insuranceDetails: { insurancePrepayment: string; workHours: string; newInsuranceCase: boolean; insuranceId: string; insuranceStatus: string };
     incomeTaxDetails: { repType: string; incomeTaxPrepayment: string; annualTurnover: string; newItCase: boolean };
     vatDetails: { newVatCase: boolean };
-    paymentDetails: { setupFee: string; monthlyFee: string; directDebit: boolean };
+    paymentDetails: { setupFee: string; monthlyFee: string; directDebit: boolean; setupFeePaid: boolean };
     isInsuranceActive: boolean;
     isIncomeTaxActive: boolean;
     isVatActive: boolean;
@@ -66,7 +66,7 @@ export default function AddCustomer(): React.ReactElement {
         insuranceDetails: { insurancePrepayment: '', workHours: '', newInsuranceCase: true, insuranceId: '', insuranceStatus: '' },
         incomeTaxDetails: { repType: 'ראשי', incomeTaxPrepayment: '', annualTurnover: '', newItCase: true },
         vatDetails: { newVatCase: true },
-        paymentDetails: { setupFee: '', monthlyFee: '', directDebit: false },
+        paymentDetails: { setupFee: '', monthlyFee: '', directDebit: false, setupFeePaid: false },
         isInsuranceActive: false, isIncomeTaxActive: false, isVatActive: false, needsDeductionsFile: false, comments: '', isActive: true
     });
 
@@ -326,6 +326,18 @@ if (formData.businessDetails.businessType === 'חברה בע"מ') {
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                 <FormField label="מחיר פתיחת תיק (₪)">
                                     <input name="setupFee" type="number" className="input-style" onChange={(e) => handleChange('paymentDetails', e)} />
+                                    {parseFloat(formData.paymentDetails.setupFee) > 0 && (
+                                        <div className="flex items-center gap-2 mt-2">
+                                            <input
+                                                type="checkbox"
+                                                id="setupFeePaid"
+                                                checked={formData.paymentDetails.setupFeePaid}
+                                                onChange={(e) => setFormData(prev => ({ ...prev, paymentDetails: { ...prev.paymentDetails, setupFeePaid: e.target.checked } }))}
+                                                className="w-4 h-4 accent-green-600 cursor-pointer"
+                                            />
+                                            <label htmlFor="setupFeePaid" className="text-xs font-bold text-green-700 cursor-pointer">שולם</label>
+                                        </div>
+                                    )}
                                 </FormField>
                                 <FormField label="מחיר חודשי שוטף (₪)">
                                     <input name="monthlyFee" type="number" className="input-style" onChange={(e) => handleChange('paymentDetails', e)} />

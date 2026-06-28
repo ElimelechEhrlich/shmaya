@@ -371,6 +371,18 @@ const CustomerCard: React.FC = () => {
 
                         <Section title="תשלומים למשרד" icon="💰">
                             <EditableRow label="פתיחת תיק (₪)" value={editData.paymentDetails?.setupFee} isEditing={isEditing} onCh={onCh('paymentDetails', 'setupFee')} />
+                            {parseFloat(String(editData.paymentDetails?.setupFee ?? '')) > 0 && (
+                                <div className="flex items-center gap-3 pr-1 pb-1">
+                                    <span className="text-xs font-bold text-green-700">שולם</span>
+                                    <input
+                                        type="checkbox"
+                                        checked={!!editData.paymentDetails?.setupFeePaid}
+                                        disabled={!isEditing}
+                                        onChange={(e) => actions.updateField('paymentDetails', 'setupFeePaid', e.target.checked)}
+                                        className={`w-5 h-5 accent-green-600 ${isEditing ? 'cursor-pointer' : 'cursor-not-allowed'}`}
+                                    />
+                                </div>
+                            )}
                             <EditableRow label="ריטיינר חודשי (₪)" value={editData.paymentDetails?.monthlyFee} isEditing={isEditing} onCh={onCh('paymentDetails', 'monthlyFee')} />
                             <div className={`mt-3 p-3 rounded-xl flex justify-between items-center border ${editData.paymentDetails?.directDebit ? 'bg-green-50 border-green-200 text-green-700' : 'bg-slate-50 border-slate-200 text-slate-500'}`}>
                                 <span className="text-xs font-bold uppercase tracking-wide">הוראת קבע</span>

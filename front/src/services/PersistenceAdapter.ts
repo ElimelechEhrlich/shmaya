@@ -141,6 +141,7 @@ function dbRowToCustomer(row: any): Customer {
       setupFee: String(row.setup_fee ?? 0),
       monthlyFee: String(row.monthly_fee ?? 0),
       directDebit: row.direct_debit ?? false,
+      setupFeePaid: row.setup_fee_paid ?? false,
     },
 
     isInsuranceActive: !!row.is_insurance_active,
@@ -301,6 +302,7 @@ export const PersistenceAdapter = {
       setup_fee: Number(c.paymentDetails?.setupFee) || 0,
       monthly_fee: Number(c.paymentDetails?.monthlyFee) || 0,
       direct_debit: c.paymentDetails?.directDebit ?? false,
+      setup_fee_paid: c.paymentDetails?.setupFeePaid ?? false,
       is_income_tax_active: c.isIncomeTaxActive ?? false,
       is_vat_active: c.isVatActive ?? false,
       is_insurance_active: c.isInsuranceActive ?? false,
@@ -361,6 +363,7 @@ export const PersistenceAdapter = {
       flatRow.setup_fee = Number(c.paymentDetails.setupFee) || 0;
       flatRow.monthly_fee = Number(c.paymentDetails.monthlyFee) || 0;
       flatRow.direct_debit = c.paymentDetails.directDebit;
+      flatRow.setup_fee_paid = c.paymentDetails.setupFeePaid ?? false;
     }
 
     if (c.isIncomeTaxActive !== undefined) flatRow.is_income_tax_active = c.isIncomeTaxActive;
