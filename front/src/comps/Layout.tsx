@@ -22,7 +22,7 @@ export default function Layout(): React.ReactElement {
                 transition-transform duration-300
                 ${sidebarOpen ? 'translate-x-0' : 'translate-x-full md:translate-x-0'}
             `}>
-                <Sidebar onNavigate={() => setSidebarOpen(false)} />
+                <Sidebar onNavigate={() => setSidebarOpen(false)} onClose={() => setSidebarOpen(false)} />
             </div>
 
             {/* תוכן ראשי */}
