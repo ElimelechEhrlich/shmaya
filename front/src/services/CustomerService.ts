@@ -43,6 +43,7 @@ function formDataToCustomer(formData: CustomerFormData): Partial<Customer> {
             incomeTaxPrepayment: formData.incomeTaxDetails.incomeTaxPrepayment,
             annualTurnover: formData.incomeTaxDetails.annualTurnover,
             newItCase: formData.incomeTaxDetails.newItCase,
+            needsIncomeTaxDirectDebit: formData.incomeTaxDetails.needsIncomeTaxDirectDebit,
         },
         vatDetails: {
             newVatCase: formData.vatDetails.newVatCase,

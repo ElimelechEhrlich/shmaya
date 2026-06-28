@@ -31,6 +31,7 @@ export interface IncomeTaxCase {
     incomeTaxPrepayment: string;
     annualTurnover: string;
     newItCase: boolean;
+    needsIncomeTaxDirectDebit: boolean;
 }
 
 export interface VatCase {
