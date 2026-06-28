@@ -90,6 +90,12 @@ export interface DbResult<T> {
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const isUuid = (v: unknown): boolean => typeof v === 'string' && UUID_RE.test(v);
 const TASK_ORDER = AUTO_TASKS_CONFIG.map((t: any) => t.id);
+function getDisplayName(customer: any): string {
+    if (customer?.business_type === 'חברה בע"מ' && customer?.business_name) {
+        return customer.business_name;
+    }
+    return customer?.full_name ?? 'משימה משרדית';
+}
 
 function dbRowToCustomer(row: any): Customer {
   return {
@@ -405,7 +411,7 @@ export const PersistenceAdapter = {
   async fetchAllTasksWithCustomer(): Promise<DbResult<PersistedTaskWithCustomer[]>> {
     const { data, error } = await supabase
       .from('parent_tasks')
-      .select('*, customers(id, full_name)')
+.select('*, customers(id, full_name, business_name, business_type)')
       .order('created_at', { ascending: false });
 
     if (!data) return { data: null, error };
@@ -415,9 +421,7 @@ export const PersistenceAdapter = {
         return {
           ...mapTaskRow(rawTask),
           customerId: customer?.id ?? rawTask.customer_id,
- customerName: (customer?.business_type === 'חברה בע"מ' && customer?.business_name)
-    ? customer.business_name
-    : customer?.full_name ?? 'משימה משרדית',
+ customerName: getDisplayName(customer),
         };
       }),
       error,
@@ -427,7 +431,7 @@ export const PersistenceAdapter = {
   async fetchTaskById(taskId: string): Promise<DbResult<PersistedTaskWithCustomer>> {
     const { data, error } = await supabase
       .from('parent_tasks')
-      .select('*, customers(id, full_name), sub_tasks(*)')
+.select('*, customers(id, full_name, business_name, business_type), sub_tasks(*)')
       .eq('id', taskId)
       .maybeSingle();
 
@@ -444,7 +448,7 @@ export const PersistenceAdapter = {
         customerId: customer?.id ?? rawTask.customer_id,
         customerName: ((customer?.id === OFFICE_CUSTOMER_ID || !customer)
           ? 'משימה משרדית'
-          : customer.full_name)
+          : getDisplayName(customer))
       },
       error: null,
     };
@@ -453,7 +457,7 @@ export const PersistenceAdapter = {
   async fetchAllSubtasksView(): Promise<DbResult<PersistedSubtaskRow[]>> {
     const { data, error } = await supabase
       .from('sub_tasks')
-      .select('*, parent_tasks(id, title, status, customer_id, customers(id, full_name))')
+     .select('*, parent_tasks(id, title, status, customer_id, customers(id, full_name, business_name, business_type))')
       .order('created_at', { ascending: false });
 
     if (error) return { data: null, error };
@@ -474,7 +478,7 @@ export const PersistenceAdapter = {
         priority: (item.priority || 'medium') as SubTaskPriority, // ✨ שלוף מתוך תת-המשימה
         taskStatus: (parent?.status || 'pending') as 'pending' | 'completed',
         clientId: parent?.customer_id || null,
-        customerName: customer?.full_name || 'משימה משרדית',
+        customerName: getDisplayName(customer),
       };
     });
 
