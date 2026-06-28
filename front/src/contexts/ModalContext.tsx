@@ -58,8 +58,15 @@ export function ModalProvider({ children }: { children: React.ReactNode }): Reac
     }, [close]);
 
     const custom = useCallback((opts: ModalOptions) => {
-        setOptions(opts);
-    }, []);
+    const wrappedButtons = opts.buttons.map(btn => ({
+        ...btn,
+        onClick: () => {
+            close();
+            btn.onClick();
+        }
+    }));
+    setOptions({ ...opts, buttons: wrappedButtons });
+}, [close]);
 
     return (
         <ModalContext.Provider value={{ alert, confirm, custom }}>
