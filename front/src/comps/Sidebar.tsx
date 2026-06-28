@@ -13,7 +13,7 @@ export default function Sidebar({ onNavigate, onClose }: SidebarProps): React.Re
     location.pathname.includes(path) ? 'bg-slate-800 border-l-4 border-blue-400' : '';
 
   return (
-    <aside className="w-64 bg-slate-900 text-white flex flex-col justify-between shrink-0 h-full">
+    <aside className="w-64 bg-slate-900 text-white flex flex-col justify-between shrink-0 h-full relative">
       <button
     onClick={onClose}
     className="md:hidden absolute top-4 left-4 text-slate-400 hover:text-white text-2xl transition"
