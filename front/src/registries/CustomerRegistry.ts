@@ -678,7 +678,7 @@ export function planIdempotentSync(
             return old
               // ? { ...newSub, completed: !!old.completed, comment: old.comment ?? '' }
               // : { ...newSub, completed: false, comment: '' };
-              ? { ...newSub, id: old.id, completed: !!old.completed, comment: old.comment ?? '' } // 👈 משתילים את ה-UUID האמיתי של תת-המשימה!
+              ? { ...newSub, id: old.id, completed: newSub.completed === true ? true : !!old.completed, comment: old.comment ?? '' } // 👈 משתילים את ה-UUID האמיתי של תת-המשימה!
               : { ...newSub, id: undefined, completed: false, comment: '' }; // שורה חדשה באמת תקבל undefined ויבוצע לה Insert          })
           })
         });

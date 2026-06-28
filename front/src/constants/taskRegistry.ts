@@ -51,6 +51,7 @@ export interface RegistrySubTask {
     isAutoUpdate?: boolean;
     condition?: (c: RegistryCustomer) => boolean;
     getDetails?: (c: RegistryCustomer) => Record<string, any>;
+    getCompleted?: (c: RegistryCustomer) => boolean;
 }
 
 export interface RegistryParentTask {
@@ -89,8 +90,18 @@ export const AUTO_TASKS_CONFIG: RegistryParentTask[] = [
             {
                 id: 'folder',
                 title: 'פתיחת תיקיית לקוח במחשב',
-                getDetails: (c: RegistryCustomer): Record<string, any> => ({ 
-                    'שם תיקייה': c.customerDetails?.fullName || 'טרם הוזן' 
+                getDetails: (c: RegistryCustomer): Record<string, any> => ({
+                    'שם תיקייה': c.customerDetails?.fullName || 'טרם הוזן'
+                }),
+            },
+            {
+                id: 'setup_fee_payment',
+                title: 'תשלום עבור פתיחת תיק',
+                condition: (c: RegistryCustomer): boolean => Number(c.paymentDetails?.setupFee) > 0,
+                getCompleted: (c: RegistryCustomer): boolean => c.paymentDetails?.setupFeePaid === true,
+                getDetails: (c: RegistryCustomer): Record<string, any> => ({
+                    'סכום': `${c.paymentDetails?.setupFee || 0} ₪`,
+                    'סטטוס': c.paymentDetails?.setupFeePaid ? 'שולם' : 'טרם שולם',
                 }),
             },
         ],

@@ -71,7 +71,7 @@ export class TaskGeneratorService {
                     .map((sub: any): GeneratedSubTask => ({
                         id: sub.id,
                         title: sub.title,
-                        completed: false,
+                        completed: sub.getCompleted ? sub.getCompleted(customerData) : false,
                         details: sub.getDetails ? sub.getDetails(customerData) : {},
                         comment: '',
                         priority: sub.priority || 'medium', // יורש עדיפות מתת-המשימה, או מהמשימה האב, או ברירת מחדל
