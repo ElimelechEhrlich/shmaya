@@ -415,7 +415,9 @@ export const PersistenceAdapter = {
         return {
           ...mapTaskRow(rawTask),
           customerId: customer?.id ?? rawTask.customer_id,
-          customerName: customer?.full_name ?? 'משימה משרדית',
+ customerName: (customer?.business_type === 'חברה בע"מ' && customer?.business_name)
+    ? customer.business_name
+    : customer?.full_name ?? 'משימה משרדית',
         };
       }),
       error,
