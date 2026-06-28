@@ -629,6 +629,13 @@ export interface IdempotentSyncPlan {
   toDeletePendingIds: string[];
 }
 
+export function getCustomerDisplayName(customer: Customer): string {
+    if (customer.businessDetails?.businessType === 'חברה בע"מ') {
+        return customer.businessDetails.businessName || customer.customerDetails.fullName;
+    }
+    return customer.customerDetails.fullName;
+}
+
 /**
  * Build a sync plan that preserves completion state across regenerations.
  * `generated` is the latest output of TaskGeneratorService.generateForCustomer.
