@@ -22,7 +22,7 @@ export default function Header({ onMenuClick }: HeaderProps):React.ReactElement 
   const getTitle = (): string => {
     const path = location.pathname;
     if (path.includes('/customers/') && !path.includes('/customers/new')) return `פרטי לקוח`;
-    if (path.includes('/tasks/')) return `פרטי משימה: ${id || ''}`;
+    if (path.includes('/tasks/')) return `פרטי משימה`;
     if (path.includes('dashboard')) return 'לוח בקרה';
     if (path.includes('customers')) return 'לקוחות';
     if (path.includes('tasks')) return 'ניהול משימות';

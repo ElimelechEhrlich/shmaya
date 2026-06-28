@@ -556,7 +556,7 @@ const SubtaskTableRow: React.FC<SubtaskTableRowProps> = React.memo(({
                 )}
             </td>
             <td className="p-3">
-                {row.clientId ? (
+                {row.clientId && row.clientId !== OFFICE_CUSTOMER_ID ? (
                     <button
                         type="button"
                         onClick={onCustomerClick}
