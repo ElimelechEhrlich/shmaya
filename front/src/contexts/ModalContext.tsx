@@ -3,7 +3,7 @@ import React, { createContext, useContext, useState, useCallback, useRef } from 
 import AppModal, { type ModalOptions } from '../comps/AppModal';
 
 interface ModalContextValue {
-    alert: (message: string, title?: string) => Promise<void>;
+    alert: (message: string, title?: string, autoCloseMs?: number) => Promise<void>;
     confirm: (message: string, title?: string) => Promise<boolean>;
     custom: (options: ModalOptions) => void;
 }
