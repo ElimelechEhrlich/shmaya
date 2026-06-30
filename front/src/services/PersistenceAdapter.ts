@@ -476,13 +476,11 @@ export const PersistenceAdapter = {
   async fetchAllSubtasksView(): Promise<DbResult<PersistedSubtaskRow[]>> {
     const { data, error } = await supabase
       .from('sub_tasks')
-     .select('*, parent_tasks(id, title, status, customer_id, customers(id, full_name, business_name, business_type))')
+     .select('*, parent_tasks(id, title, status, customer_id, registry_key, customers(id, full_name, business_name, business_type))')
       .order('created_at', { ascending: false });
 
     if (error) return { data: null, error };
     if (!data) return { data: [], error: null };
-
-    console.log('[DEBUG] raw is_completed values:', data.map(d => d.is_completed));
 
     const rows: PersistedSubtaskRow[] = data.map((item: any) => {
       const parent = item.parent_tasks;
@@ -494,7 +492,7 @@ export const PersistenceAdapter = {
         completed: !!item.is_completed,
         comment: item.comment || '',
         details: {},
-        parentTaskId: parent?.id || null,
+        parentTaskId: parent?.registry_key || null,
         parentTitle: parent?.title || '',
         priority: (item.priority || 'medium') as SubTaskPriority, // ✨ שלוף מתוך תת-המשימה
         taskStatus: (parent?.status || 'pending') as 'pending' | 'completed',
