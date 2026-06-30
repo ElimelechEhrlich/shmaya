@@ -7,6 +7,7 @@ import CustomerAccordion from '../comps/CustomerAccordion';
 import { type SubtaskViewRow } from '../comps/SubtaskRow';
 import { AUTO_TASKS_CONFIG } from '../constants/taskRegistry';
 import { translateError } from '../utils/translateError';
+import { useModal } from '../contexts/ModalContext';
 
 // re-export so any existing import from this module still works
 export type { SubtaskViewRow } from '../comps/SubtaskRow';
@@ -35,6 +36,7 @@ interface MultiSelectProps {
 }
 
 export default function Tasks(): React.ReactElement {
+    const modal = useModal();
     const [rows, setRows] = useState<SubtaskViewRow[]>([]);
     const [customers, setCustomers] = useState<CustomerOption[]>([]);
     const [loading, setLoading] = useState(true);
@@ -202,7 +204,8 @@ export default function Tasks(): React.ReactElement {
 
     const onDeleteTask = useCallback(async (row: SubtaskViewRow) => {
         const taskTitle = row.parentTitle || row.subtaskTitle;
-        if (!window.confirm(`האם למחוק את המשימה "${taskTitle}"?\nפעולה זו לא ניתנת לביטול.`)) return;
+        const confirmed = await modal.confirm(`האם למחוק את המשימה "${taskTitle}"?\nפעולה זו לא ניתנת לביטול.`);
+        if (!confirmed) return;
         setRows(prev => prev.filter(r => r.taskId !== row.taskId));
         const { error } = await PersistenceAdapter.deleteTask(row.taskId);
         if (error) {
