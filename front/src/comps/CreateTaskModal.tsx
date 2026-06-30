@@ -30,11 +30,12 @@ export interface CreateTaskModalProps {
     } | null;
     onClose: () => void;
     onCreated: () => void;
+    defaultIsOffice?: boolean;
 }
 
-export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({ customers, taskToEdit, onClose, onCreated }) => {
+export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({ customers, taskToEdit, onClose, onCreated, defaultIsOffice }) => {
     const [title, setTitle] = useState<string>(taskToEdit ? taskToEdit.subtaskTitle : '');
-    const [isOffice, setIsOffice] = useState<boolean>(taskToEdit ? !taskToEdit.clientId : false);
+    const [isOffice, setIsOffice] = useState<boolean>(taskToEdit ? !taskToEdit.clientId : (defaultIsOffice ?? false));
     const [clientId, setClientId] = useState<string>(taskToEdit?.clientId || '');
     const [priority, setPriority] = useState<string>(taskToEdit?.priority || 'medium');
     const [isCompleted, setIsCompleted] = useState<boolean>(taskToEdit ? taskToEdit.completed : false);
