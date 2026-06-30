@@ -6,7 +6,6 @@ export interface CustomerBase {
     phoneNumber: string;
     address: string;
     email: string;
-    isActive: boolean;
 }
 
 export interface BusinessDetails {
