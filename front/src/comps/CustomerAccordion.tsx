@@ -17,6 +17,13 @@ interface CustomerAccordionProps {
     onPriorityChange: (row: SubtaskViewRow, priority: string) => void;
 }
 
+function getAccordionAccentBg(openCount: number): string {
+    if (openCount === 0) return 'bg-slate-200';
+    if (openCount <= 3)  return 'bg-blue-300';
+    if (openCount <= 7)  return 'bg-blue-500';
+    return 'bg-amber-400';
+}
+
 const CustomerAccordion: React.FC<CustomerAccordionProps> = React.memo(({
     clientId,
     clientName,
@@ -30,15 +37,22 @@ const CustomerAccordion: React.FC<CustomerAccordionProps> = React.memo(({
 }) => {
     const navigate = useNavigate();
     const openCount = rows.filter(r => !r.completed).length;
+    const accentBg = getAccordionAccentBg(openCount);
 
     return (
-        <div className="card-base mb-3">
+        <div className="card-base mb-3 overflow-hidden relative">
+
+            {/* accent strip — 4px on the right (RTL start) */}
+            <div className={`absolute inset-y-0 right-0 w-1 ${accentBg} transition-colors duration-300`} />
 
             {/* ─── Header ─── */}
             <button
                 type="button"
                 onClick={() => onToggle(clientId)}
-                className="w-full flex items-center gap-3 p-4 text-right"
+                className="w-full flex items-center gap-3 pr-6 pl-4 py-3.5 text-right
+                           bg-linear-to-b from-white to-slate-50/80
+                           hover:from-slate-50 hover:to-slate-100/60 hover:shadow-sm
+                           transition-all duration-150"
             >
                 <span className="font-bold text-slate-800">{clientName}</span>
 
@@ -53,12 +67,19 @@ const CustomerAccordion: React.FC<CustomerAccordionProps> = React.memo(({
                     </a>
                 )}
 
-                <span className="text-xs text-slate-400 font-medium">
-                    {rows.length} משימות · {openCount} פתוחות
-                </span>
+                <div className="flex items-center gap-1.5">
+                    <span className="bg-slate-100 text-slate-500 text-[11px] px-2 py-0.5 rounded-full font-medium">
+                        {rows.length} משימות
+                    </span>
+                    {openCount > 0 && (
+                        <span className="bg-blue-50 text-blue-600 text-[11px] px-2 py-0.5 rounded-full font-semibold">
+                            {openCount} פתוחות
+                        </span>
+                    )}
+                </div>
 
-                <span className="mr-auto text-slate-400 text-xs">
-                    {isOpen ? '▴' : '▾'}
+                <span className={`mr-auto text-slate-400 text-xs transition-transform duration-200 ${isOpen ? 'rotate-180' : 'rotate-0'}`}>
+                    ▾
                 </span>
             </button>
 

@@ -210,3 +210,13 @@ export const AUTO_TASKS_CONFIG: RegistryParentTask[] = [
         ],
     },
 ];
+
+// bg classes for the 3-4px accent strip (absolute-positioned, right side in RTL)
+export const CATEGORY_ACCENT_COLORS: Record<string, string> = {
+    ADMIN_SETUP:    'bg-slate-400',
+    INSURANCE:      'bg-sky-400',
+    INCOME_TAX:     'bg-blue-500',
+    VAT:            'bg-indigo-400',
+    DIRECT_DEBIT:   'bg-teal-400',
+    FINAL_APPROVAL: 'bg-emerald-500',
+};

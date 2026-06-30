@@ -1,6 +1,7 @@
 // src/comps/SubtaskRow.tsx
 import React, { useState } from 'react';
 import PriorityBadge from './PriorityBadge';
+import { CATEGORY_ACCENT_COLORS } from '../constants/taskRegistry';
 
 export interface SubtaskViewRow {
     taskId: string;
@@ -39,19 +40,32 @@ const SubtaskRow: React.FC<SubtaskRowProps> = React.memo(({
         onSaveTitle(row, draft);
     };
 
+    const accentBg = CATEGORY_ACCENT_COLORS[row.parentTaskId || ''] ?? 'bg-slate-200';
+
     return (
-        <div
-            className={`flex items-center gap-3 px-4 py-3 transition ${
-                row.completed ? 'bg-green-50/40' : 'hover:bg-slate-50/60'
-            }`}
-        >
-            {/* Checkbox */}
-            <input
-                type="checkbox"
-                checked={row.completed}
-                onChange={(e) => onToggle(row, e.target.checked)}
-                className="cursor-pointer w-5 h-5 accent-blue-600 shrink-0"
-            />
+        <div className={`relative flex items-center gap-3 pr-6 pl-4 py-3 transition-colors duration-100 ${
+            row.completed ? 'bg-green-50/40' : 'hover:bg-slate-50/70'
+        }`}>
+
+            {/* category accent strip — 3px on the right (RTL start) */}
+            <div className={`absolute inset-y-0 right-0 w-0.75 ${accentBg} opacity-70`} />
+
+            {/* Styled checkbox — peer pattern */}
+            <label className="cursor-pointer flex items-center shrink-0">
+                <input
+                    type="checkbox"
+                    checked={row.completed}
+                    onChange={(e) => onToggle(row, e.target.checked)}
+                    className="peer sr-only"
+                />
+                <span className="w-5 h-5 rounded-full border-2 border-slate-300
+                                 peer-checked:border-blue-500 peer-checked:bg-blue-500
+                                 transition-all duration-200 flex items-center justify-center
+                                 text-transparent peer-checked:text-white text-[11px] font-black
+                                 hover:border-slate-400 shrink-0 select-none">
+                    ✓
+                </span>
+            </label>
 
             {/* Title area */}
             <div className="flex-1 min-w-0">
@@ -78,11 +92,9 @@ const SubtaskRow: React.FC<SubtaskRowProps> = React.memo(({
                     </div>
                 ) : (
                     <div className="flex items-center gap-2 min-w-0">
-                        <span
-                            className={`text-sm font-medium truncate ${
-                                row.completed ? 'line-through text-slate-400' : 'text-slate-800'
-                            }`}
-                        >
+                        <span className={`text-sm font-medium truncate ${
+                            row.completed ? 'line-through text-slate-400' : 'text-slate-800'
+                        }`}>
                             {row.subtaskTitle}
                         </span>
                         {row.parentTitle && row.parentTitle !== row.subtaskTitle && (
