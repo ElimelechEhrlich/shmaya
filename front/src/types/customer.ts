@@ -7,9 +7,6 @@ export interface CustomerBase {
     address: string;
     email: string;
     isActive: boolean;
-    // DEAD FIELD — never read by formDataToCustomer or any service code.
-    // The real value always comes from the top-level CustomerFormData.comments field.
-    comments: string;
 }
 
 export interface BusinessDetails {
@@ -21,9 +18,6 @@ export interface BusinessDetails {
     businessDescription: string;
     employsWorkers: string;
     deductionsId: string;
-    // DEAD FIELD — never read by formDataToCustomer or any service code.
-    // The real value always comes from the top-level CustomerFormData.needsDeductionsFile field.
-    needsDeductionsFile: boolean;
 }
 
 export interface IncomeTaxCase {
