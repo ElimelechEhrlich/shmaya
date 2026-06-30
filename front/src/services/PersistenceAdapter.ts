@@ -501,7 +501,8 @@ export const PersistenceAdapter = {
       };
     });
 
-    return { data: rows, error: null };
+    const filteredRows = rows.filter(r => r.clientId !== OFFICE_CUSTOMER_ID);
+    return { data: filteredRows, error: null };
   },
 
   async insertSingleTask(taskData: {
