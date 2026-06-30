@@ -1,28 +1,15 @@
 // src/pages/Tasks.tsx
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { useNavigate } from 'react-router';
 import { OFFICE_CUSTOMER_ID, PersistenceAdapter } from '../services/PersistenceAdapter';
-import { LogService } from '../services/LogService';
 import { authService } from '../services/authService';
-import { CreateTaskModal, type CreateTaskModalProps } from '../comps/CreateTaskModal';
-import PriorityBadge from '../comps/PriorityBadge';
+import { CreateTaskModal } from '../comps/CreateTaskModal';
+import CustomerAccordion from '../comps/CustomerAccordion';
+import { type SubtaskViewRow } from '../comps/SubtaskRow';
 import { AUTO_TASKS_CONFIG } from '../constants/taskRegistry';
 import { translateError } from '../utils/translateError';
 
-// הגדרת המבנה של שורת תת-משימה במערכת (מתוך ה-Subtasks View המנורמל)
-export interface SubtaskViewRow {
-    taskId: string;
-    subtaskId: string | null;
-    subtaskTitle: string;
-    parentTaskId: string | null;
-    parentTitle: string | null;
-    clientId: string | null;
-    customerName: string | null;
-    completed: boolean;
-    priority: 'low' | 'medium' | 'high' | 'critical'; // שונה לכלול critical
-    comment?: string | null;
-    taskStatus?: 'pending' | 'completed';
-}
+// re-export so any existing import from this module still works
+export type { SubtaskViewRow } from '../comps/SubtaskRow';
 
 interface CustomerOption {
     id: string;
@@ -35,7 +22,7 @@ interface TaskFilters {
     statuses: string[];
     categories: string[];
     clients: string[];
-    priorities: string[]; // 👈 הוספת סינון דחיפות מרובה
+    priorities: string[];
     search: string;
 }
 
@@ -47,37 +34,22 @@ interface MultiSelectProps {
     searchable?: boolean;
 }
 
-interface SubtaskTableRowProps {
-    row: SubtaskViewRow;
-    onToggle: (completed: boolean) => void;
-    onSaveTitle: (title: string) => void;
-    onCustomerClick: () => void;
-    onEditClick: () => void;
-    onOpenPage: () => void;
-    onPriorityChange: (priority: string) => void;
-}
-
-
-
-
 export default function Tasks(): React.ReactElement {
-    const navigate = useNavigate();
     const [rows, setRows] = useState<SubtaskViewRow[]>([]);
     const [customers, setCustomers] = useState<CustomerOption[]>([]);
-    const [loading, setLoading] = useState<boolean>(true);
+    const [loading, setLoading] = useState(true);
     const [editingTask, setEditingTask] = useState<SubtaskViewRow | null>(null);
-    const [showCreate, setShowCreate] = useState<boolean>(false);
+    const [showCreate, setShowCreate] = useState(false);
+    const [openAccordions, setOpenAccordions] = useState<Set<string>>(new Set());
     const [filters, setFilters] = useState<TaskFilters>({
         statuses: [],
         categories: [],
         clients: [],
-        priorities: [], // 👈 איתחול מערך ריק
+        priorities: [],
         search: '',
     });
-    const [sortConfig, setSortConfig] = useState<{ sortBy: 'title' | 'priority' | null; direction: 'asc' | 'desc' | null }>({
-        sortBy: null,
-        direction: null
-    });
+
+    // ── Data loading ──────────────────────────────────────────────────
     const load = useCallback(async () => {
         setLoading(true);
         const [subtasksResult, customersResult] = await Promise.all([
@@ -86,10 +58,9 @@ export default function Tasks(): React.ReactElement {
         ]);
         if (subtasksResult.error) {
             alert(`שגיאה בטעינת רשימת המשימות: ${translateError(subtasksResult.error.message)}`);
-            console.error(subtasksResult.error.message);
         } else if (subtasksResult.data) {
             const uniqueRows = subtasksResult.data.filter((row, index, self) =>
-                index === self.findIndex((r) => r.subtaskId === row.subtaskId)
+                index === self.findIndex(r => r.subtaskId === row.subtaskId)
             );
             setRows(uniqueRows);
         }
@@ -99,51 +70,27 @@ export default function Tasks(): React.ReactElement {
 
     useEffect(() => { load(); }, [load]);
 
+    // ── Filter options ────────────────────────────────────────────────
     const categories = useMemo((): [string, string][] =>
         AUTO_TASKS_CONFIG.map(t => [t.id, t.title]),
     []);
 
     const clientOptions = useMemo((): [string, string][] => {
-        const set = new Map<string, string>();
+        const map = new Map<string, string>();
         for (const r of rows) {
-            if (r.clientId) set.set(r.clientId, r.customerName || '—');
+            if (r.clientId) map.set(r.clientId, r.customerName || '—');
         }
-        const hasOffice = rows.some(r => !r.clientId);
-        const list = Array.from(set.entries()).sort((a, b) => a[1].localeCompare(b[1]));
-        if (hasOffice) list.unshift(['__OFFICE__', '🏢 משימה משרדית כללית']);
+        const list = Array.from(map.entries()).sort((a, b) => a[1].localeCompare(b[1], 'he'));
+        if (rows.some(r => !r.clientId)) list.unshift([OFFICE_CUSTOMER_ID, '🏢 משימה משרדית כללית']);
         return list;
     }, [rows]);
 
-    const handlePriorityChange = useCallback(async (row: SubtaskViewRow, newPriority: string) => {
-        const prevPriority = row.priority;
-        setRows(prev => prev.map(r =>
-            r.taskId === row.taskId && r.subtaskId === row.subtaskId
-                ? { ...r, priority: newPriority as any }
-                : r
-        ));
-        const { error } = row.subtaskId === null
-            ? await PersistenceAdapter.updateTaskStatus(row.taskId, row.taskStatus || 'pending')
-            : await PersistenceAdapter.updateSubtaskPriority(row.subtaskId, newPriority as any);
-        if (error) {
-            alert(`שגיאה בעדכון הדחיפות: ${translateError(error.message)}`);
-            console.error(error.message);
-            setRows(prev => prev.map(r =>
-                r.taskId === row.taskId && r.subtaskId === row.subtaskId
-                    ? { ...r, priority: prevPriority }
-                    : r
-            ));
-        }
-    }, []);
-
+    // ── Filtering ─────────────────────────────────────────────────────
     const filtered = useMemo(() => rows.filter(r => {
-        const statusKey = r.completed ? 'completed' : 'pending';
-        if (filters.statuses.length && !filters.statuses.includes(statusKey)) return false;
+        if (filters.statuses.length && !filters.statuses.includes(r.completed ? 'completed' : 'pending')) return false;
         if (filters.categories.length && !filters.categories.includes(r.parentTaskId || '')) return false;
-        const itemPriority = (r.priority || 'medium').toLowerCase();
-        if (filters.priorities.length && !filters.priorities.includes(itemPriority)) return false;
-        if (filters.clients.length) {
-            if (!filters.clients.includes(r.clientId ?? '__OFFICE__')) return false;
-        }
+        if (filters.priorities.length && !filters.priorities.includes((r.priority || 'medium').toLowerCase())) return false;
+        if (filters.clients.length && !filters.clients.includes(r.clientId ?? OFFICE_CUSTOMER_ID)) return false;
         if (filters.search) {
             const q = filters.search.toLowerCase();
             if (
@@ -155,130 +102,118 @@ export default function Tasks(): React.ReactElement {
         return true;
     }), [rows, filters]);
 
-    const sorted = useMemo(() => {
-        if (!sortConfig.sortBy || !sortConfig.direction) return filtered;
-        const { sortBy, direction } = sortConfig;
-        const isAsc = direction === 'asc';
-        return [...filtered].sort((a, b) => {
-            if (sortBy === 'title') {
-                return isAsc
-                    ? (a.subtaskTitle || '').localeCompare(b.subtaskTitle || '')
-                    : (b.subtaskTitle || '').localeCompare(a.subtaskTitle || '');
-            }
-            if (sortBy === 'priority') {
-                const w: Record<string, number> = { low: 1, medium: 2, high: 3, critical: 4 };
-                const wA = w[(a.priority || 'medium').toLowerCase()] || 2;
-                const wB = w[(b.priority || 'medium').toLowerCase()] || 2;
-                return isAsc ? wA - wB : wB - wA;
-            }
-            return 0;
+    // ── Grouping: office first, then A-Z by client name ───────────────
+    const groupedByClient = useMemo(() => {
+        const map = new Map<string, { clientName: string; rows: SubtaskViewRow[] }>();
+        for (const row of filtered) {
+            const key = row.clientId ?? OFFICE_CUSTOMER_ID;
+            const name = row.clientId ? (row.customerName ?? '—') : '🏢 משימות משרדיות';
+            if (!map.has(key)) map.set(key, { clientName: name, rows: [] });
+            map.get(key)!.rows.push(row);
+        }
+        return Array.from(map.entries())
+            .sort(([aId, { clientName: aName }], [bId, { clientName: bName }]) => {
+                if (aId === OFFICE_CUSTOMER_ID) return -1;
+                if (bId === OFFICE_CUSTOMER_ID) return 1;
+                return aName.localeCompare(bName, 'he');
+            })
+            .map(([clientId, { clientName, rows: clientRows }]) => ({ clientId, clientName, rows: clientRows }));
+    }, [filtered]);
+
+    // ── Accordion controls ────────────────────────────────────────────
+    const toggleAccordion = useCallback((clientId: string) => {
+        setOpenAccordions(prev => {
+            const next = new Set(prev);
+            if (next.has(clientId)) next.delete(clientId);
+            else next.add(clientId);
+            return next;
         });
-    }, [filtered, sortConfig]);
+    }, []);
 
-// בתוך src/pages/Tasks.tsx
+    const handleOpenAll = useCallback(() => {
+        setOpenAccordions(new Set(groupedByClient.map(g => g.clientId)));
+    }, [groupedByClient]);
 
-const setSubtaskCompleted = useCallback(async (row: SubtaskViewRow, completed: boolean): Promise<void> => {
-    if (!authService.canApproveFinal(row.subtaskTitle)) {
-        alert("אין לך הרשאה לשנות את הסטטוס של אישור ניהול סופי!");
-        return;
-    }
+    const handleCloseAll = useCallback(() => {
+        setOpenAccordions(new Set());
+    }, []);
 
-    setRows(prev => prev.map(r =>
-        r.subtaskId === row.subtaskId ? { ...r, completed } : r
-    ));
+    // Auto-open matching accordions when search is active
+    useEffect(() => {
+        if (!filters.search) return;
+        setOpenAccordions(prev =>
+            new Set([...prev, ...groupedByClient.map(g => g.clientId)])
+        );
+    }, [filters.search, groupedByClient]);
 
-// שליחה ישירה לאדפטר - ה-subtaskId מובטח להיות UUID חוקי ותקין
-    const { error } = await PersistenceAdapter.updateSubtaskStatus(row.taskId, row.subtaskId!, completed);
-    
-    if (error) {
-        alert(`שגיאה בסימון תת-המשימה: ${translateError(error.message)}`);
-        console.error(error.message);
-        load(); // טעינה מחדש של המצב האמיתי במקרה של כישלון
-    }
-    
-        // const prevCompleted = row.completed;
-        //// setRows(prev => prev.map(r =>
-        //     r.taskId === row.taskId && r.subtaskId === row.subtaskId ? { ...r, completed } : r
-        // ));
-}, [load]);
+    // ── Row callbacks — stable refs, passed directly to CustomerAccordion ──
+    const onRowToggle = useCallback(async (row: SubtaskViewRow, completed: boolean) => {
+        if (!authService.canApproveFinal(row.subtaskTitle)) {
+            alert('אין לך הרשאה לשנות את הסטטוס של אישור ניהול סופי!');
+            return;
+        }
+        setRows(prev => prev.map(r =>
+            r.subtaskId === row.subtaskId ? { ...r, completed } : r
+        ));
+        const { error } = await PersistenceAdapter.updateSubtaskStatus(row.taskId, row.subtaskId!, completed);
+        if (error) {
+            alert(`שגיאה בסימון תת-המשימה: ${translateError(error.message)}`);
+            load();
+        }
+    }, [load]);
 
-    // if (row.subtaskId === null) {
-    //     const nextStatus = completed ? 'completed' : 'pending';
-    //     const { error } = await PersistenceAdapter.updateTaskStatus(row.taskId, nextStatus);
-    //     if (error) {
-    //         console.error(error.message);
-    //         setRows(prev => prev.map(r =>
-    //             r.taskId === row.taskId && r.subtaskId === row.subtaskId ? { ...r, completed: prevCompleted } : r
-    //         ));
-    //         return;
-    //     }
-        // await LogService.recordTaskStatusChange(row.taskId, completed ? 'pending' : 'completed', nextStatus);
-//     } else {
-//         const { error } = await PersistenceAdapter.updateSubtaskStatus(row.taskId, row.subtaskId, completed);
-//         if (error) {
-//             console.error(error.message);
-//             setRows(prev => prev.map(r =>
-//                 r.taskId === row.taskId && r.subtaskId === row.subtaskId ? { ...r, completed: prevCompleted } : r
-//             ));
-//         }
-//     }
-// }, []);
-
-    const saveTitle = useCallback(async (row: SubtaskViewRow, newTitle: string): Promise<void> => {
+    const onSaveTitle = useCallback(async (row: SubtaskViewRow, newTitle: string) => {
         const trimmed = newTitle.trim();
         if (!trimmed || trimmed === row.subtaskTitle) return;
-
         const prevTitle = row.subtaskTitle;
         setRows(prev => prev.map(r =>
             r.taskId === row.taskId && r.subtaskId === row.subtaskId
-                ? { ...r, subtaskTitle: trimmed }
-                : r
+                ? { ...r, subtaskTitle: trimmed } : r
         ));
-
-        const { error } = row.subtaskId === null
-            ? await PersistenceAdapter.updateTaskTitle(row.taskId, trimmed)
-            : await PersistenceAdapter.updateSubtaskTitle(row.taskId, row.subtaskId, trimmed);
-
+        const { error } = await PersistenceAdapter.updateSubtaskTitle(row.taskId, row.subtaskId!, trimmed);
         if (error) {
             alert(`שגיאה בשמירת שם תת-המשימה: ${translateError(error.message)}`);
-            console.error(error.message);
             setRows(prev => prev.map(r =>
                 r.taskId === row.taskId && r.subtaskId === row.subtaskId
-                    ? { ...r, subtaskTitle: prevTitle }
-                    : r
+                    ? { ...r, subtaskTitle: prevTitle } : r
             ));
-            return;
         }
-        await LogService.recordTaskChange(row.taskId, { title: prevTitle }, { title: trimmed });
     }, []);
 
-    const resetFilters = (): void => setFilters({ statuses: [], categories: [], clients: [], priorities: [], search: '' });
-    const handleSort = (field: 'title' | 'priority') => {
-        setSortConfig(prev => {
-            if (prev.sortBy !== field) {
-                return { sortBy: field, direction: 'asc' }; // לחיצה ראשונה: עולה
-            }
-            if (prev.direction === 'asc') {
-                return { sortBy: field, direction: 'desc' }; // לחיצה שנייה: יורד
-            }
-            return { sortBy: null, direction: null }; // לחיצה שלישית: איפוס (ללא מיון)
-        });
-    };
+    const onEditClick = useCallback((row: SubtaskViewRow) => {
+        setEditingTask(row);
+    }, []);
 
-    // פונקציית עזר קטנה שמחזירה את האייקון הנכון לפי מצב המיון הנוכחי של העמודה
-    const getSortIcon = (field: 'title' | 'priority') => {
-        if (sortConfig.sortBy !== field) return ' ⇅';
-        if (sortConfig.direction === 'asc') return ' ↑';
-        return ' ↓';
-    };
+    const onPriorityChange = useCallback(async (row: SubtaskViewRow, newPriority: string) => {
+        const prevPriority = row.priority;
+        setRows(prev => prev.map(r =>
+            r.taskId === row.taskId && r.subtaskId === row.subtaskId
+                ? { ...r, priority: newPriority as any } : r
+        ));
+        const { error } = await PersistenceAdapter.updateSubtaskPriority(row.subtaskId!, newPriority as any);
+        if (error) {
+            alert(`שגיאה בעדכון הדחיפות: ${translateError(error.message)}`);
+            setRows(prev => prev.map(r =>
+                r.taskId === row.taskId && r.subtaskId === row.subtaskId
+                    ? { ...r, priority: prevPriority } : r
+            ));
+        }
+    }, []);
 
+    const resetFilters = useCallback(() =>
+        setFilters({ statuses: [], categories: [], clients: [], priorities: [], search: '' }),
+    []);
+
+    // ── Render ────────────────────────────────────────────────────────
     return (
         <div className="p-6 min-h-screen" dir="rtl">
-            <div className="max-w-7xl mx-auto">
+            <div className="max-w-4xl mx-auto">
+
+                {/* Header */}
                 <div className="flex justify-between items-center mb-6">
                     <div>
                         <h1 className="text-3xl font-black text-slate-900">משימות</h1>
-                        <p className="text-sm text-slate-500 mt-1">כל המשימות במערכת, מבט תת-משימה מנורמל</p>
+                        <p className="text-sm text-slate-500 mt-1">מבט לפי לקוח</p>
                     </div>
                     <button
                         onClick={() => setShowCreate(true)}
@@ -289,115 +224,92 @@ const setSubtaskCompleted = useCallback(async (row: SubtaskViewRow, completed: b
                 </div>
 
                 {/* Filter bar */}
-                <div className="card-base p-4 mb-6 bg-white rounded-2xl border shadow-sm">
+                <div className="card-base p-4 mb-4">
                     <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
                         <input
                             type="text"
                             placeholder="🔍 חיפוש..."
                             value={filters.search}
-                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFilters({ ...filters, search: e.target.value })}
+                            onChange={e => setFilters(f => ({ ...f, search: e.target.value }))}
                             className="input-style"
                         />
                         <MultiSelect
                             label="סטטוס"
                             options={[['pending', 'פתוחות'], ['completed', 'הושלמו']]}
                             selected={filters.statuses}
-                            onChange={(s) => setFilters({ ...filters, statuses: s })}
+                            onChange={s => setFilters(f => ({ ...f, statuses: s }))}
                         />
                         <MultiSelect
                             label="קטגוריה"
                             options={categories}
                             selected={filters.categories}
-                            onChange={(s) => setFilters({ ...filters, categories: s })}
+                            onChange={s => setFilters(f => ({ ...f, categories: s }))}
                             searchable
                         />
                         <MultiSelect
                             label="לקוח"
                             options={clientOptions}
                             selected={filters.clients}
-                            onChange={(s) => setFilters({ ...filters, clients: s })}
+                            onChange={s => setFilters(f => ({ ...f, clients: s }))}
                             searchable
                         />
-                        {/* 👈 הזרקת ה-MultiSelect החדש של הדחיפות בדיוק לפי המבנה שלך */}
                         <MultiSelect
                             label="דחיפות"
                             options={[['low', 'נמוכה'], ['medium', 'בינונית'], ['high', 'גבוהה'], ['critical', 'קריטית']]}
                             selected={filters.priorities}
-                            onChange={(s) => setFilters({ ...filters, priorities: s })}
+                            onChange={s => setFilters(f => ({ ...f, priorities: s }))}
                         />
                     </div>
                     <div className="mt-3 flex justify-between items-center">
-                        <span className="text-xs text-slate-500 font-medium">מציג {sorted.length} מתוך {rows.length} משימות</span>
+                        <span className="text-xs text-slate-500 font-medium">
+                            מציג {filtered.length} משימות ב-{groupedByClient.length} לקוחות
+                        </span>
                         <button onClick={resetFilters} className="cursor-pointer text-sm text-blue-600 hover:text-blue-800 font-bold transition">
                             ניקוי סינונים
                         </button>
                     </div>
                 </div>
 
-                {/* Table */}
-                <div className="card-base overflow-hidden bg-white rounded-2xl border shadow-sm">
-                    {loading ? (
-                        <table className="w-full text-right">
-                            <thead className="bg-slate-50 border-b border-slate-200">
-                                <tr>{[1,2,3,4,5,6].map(i => (
-                                    <th key={i} className="p-3"><div className="h-3 bg-slate-200 rounded animate-pulse" /></th>
-                                ))}</tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100">
-                                {[1,2,3,4,5,6,7,8].map(i => (
-                                    <tr key={i}>{[1,2,3,4,5,6].map(j => (
-                                        <td key={j} className="p-3"><div className="h-5 bg-slate-100 rounded animate-pulse" /></td>
-                                    ))}</tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    ) : sorted.length === 0 ? (
-                        <div className="p-12 text-center text-slate-400 italic">לא נמצאו משימות תואמות.</div>
-                    ) : (
-                        <table className="w-full text-right">
-                            <thead className="bg-slate-50 border-b border-slate-200">
-                                <tr>
-                                    <th className="p-3 text-xs font-bold text-slate-600 uppercase tracking-wider w-12 text-center">✓</th>
+                {/* Open / Close all */}
+                {!loading && groupedByClient.length > 0 && (
+                    <div className="flex justify-end gap-4 mb-3">
+                        <button onClick={handleOpenAll} className="cursor-pointer text-xs text-slate-500 hover:text-slate-900 font-bold transition">
+                            פתח הכל ▴
+                        </button>
+                        <button onClick={handleCloseAll} className="cursor-pointer text-xs text-slate-500 hover:text-slate-900 font-bold transition">
+                            סגור הכל ▾
+                        </button>
+                    </div>
+                )}
 
-                                    {/* עמודת משימה לחיצה למיון לפי תאריך/כותרת */}
-                                    <th
-                                        onClick={() => handleSort('title')}
-                                        className="p-3 text-xs font-bold text-slate-600 uppercase tracking-wider cursor-pointer hover:bg-slate-100 transition select-none"
-                                    >
-                                        משימה <span className="text-blue-600 font-black">{getSortIcon('title')}</span>
-                                    </th>
+                {/* Content */}
+                {loading ? (
+                    <div className="space-y-3">
+                        {[1, 2, 3, 4].map(i => (
+                            <div key={i} className="card-base h-16 animate-pulse bg-slate-100 rounded-2xl" />
+                        ))}
+                    </div>
+                ) : groupedByClient.length === 0 ? (
+                    <div className="card-base p-12 text-center text-slate-400 italic">
+                        לא נמצאו משימות תואמות.
+                    </div>
+                ) : (
+                    groupedByClient.map(({ clientId, clientName, rows: clientRows }) => (
+                        <CustomerAccordion
+                            key={clientId}
+                            clientId={clientId}
+                            clientName={clientName}
+                            rows={clientRows}
+                            isOpen={openAccordions.has(clientId)}
+                            onToggle={toggleAccordion}
+                            onRowToggle={onRowToggle}
+                            onSaveTitle={onSaveTitle}
+                            onEditClick={onEditClick}
+                            onPriorityChange={onPriorityChange}
+                        />
+                    ))
+                )}
 
-                                    <th className="p-3 text-xs font-bold text-slate-600 uppercase tracking-wider">לקוח</th>
-                                    <th className="p-3 text-xs font-bold text-slate-600 uppercase tracking-wider">קטגוריה</th>
-
-                                    {/* עמודת עדיפות לחיצה למיון */}
-                                    <th
-                                        onClick={() => handleSort('priority')}
-                                        className="p-3 text-xs font-bold text-slate-600 uppercase tracking-wider cursor-pointer hover:bg-slate-100 transition select-none"
-                                    >
-                                        עדיפות <span className="text-blue-600 font-black">{getSortIcon('priority')}</span>
-                                    </th>
-
-                                    <th className="p-3 text-xs font-bold text-slate-600 uppercase tracking-wider"></th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100">
-                                {sorted.map((row) => (
-                                    <SubtaskTableRow
-                                        key={`${row.taskId}-${row.subtaskId ?? 'parent'}`}
-                                        row={row}
-                                        onToggle={(c) => setSubtaskCompleted(row, c)}
-                                        onSaveTitle={(t) => saveTitle(row, t)}
-                                        onCustomerClick={() => row.clientId && row.clientId !== OFFICE_CUSTOMER_ID && navigate(`/admin/customers/${row.clientId}`)}
-                                        onEditClick={() => setEditingTask(row)}
-                                        onOpenPage={() => navigate(`/admin/tasks/${row.taskId}`)}
-                                        onPriorityChange={(p) => handlePriorityChange(row, p)}
-                                    />
-                                ))}
-                            </tbody>
-                        </table>
-                    )}
-                </div>
             </div>
 
             {(showCreate || editingTask) && (
@@ -405,19 +317,18 @@ const setSubtaskCompleted = useCallback(async (row: SubtaskViewRow, completed: b
                     customers={customers}
                     taskToEdit={editingTask}
                     onClose={() => { setShowCreate(false); setEditingTask(null); }}
-                    onCreated={() => { setShowCreate(false); setEditingTask(null); load(); }} />
+                    onCreated={() => { setShowCreate(false); setEditingTask(null); load(); }}
+                />
             )}
         </div>
     );
 }
 
-// ──────────────────────────────────────────────────────────────────
-// Multi-select dropdown
-// ──────────────────────────────────────────────────────────────────
+// ── MultiSelect ───────────────────────────────────────────────────────
 
 const MultiSelect: React.FC<MultiSelectProps> = React.memo(({ label, options, selected, onChange, searchable }) => {
-    const [open, setOpen] = useState<boolean>(false);
-    const [query, setQuery] = useState<string>('');
+    const [open, setOpen] = useState(false);
+    const [query, setQuery] = useState('');
     const summary = selected.length === 0
         ? 'הכל'
         : selected.length === 1
@@ -430,7 +341,7 @@ const MultiSelect: React.FC<MultiSelectProps> = React.memo(({ label, options, se
     };
 
     const visibleOptions = searchable && query
-        ? options.filter(([_, lbl]) => lbl.toLowerCase().includes(query.toLowerCase()))
+        ? options.filter(([, lbl]) => lbl.toLowerCase().includes(query.toLowerCase()))
         : options;
 
     const handleClose = () => { setOpen(false); setQuery(''); };
@@ -439,8 +350,8 @@ const MultiSelect: React.FC<MultiSelectProps> = React.memo(({ label, options, se
         <div className="relative">
             <button
                 type="button"
-                onClick={() => setOpen(!open)}
-                className="cursor-pointer w-full input-style text-right flex justify-between items-center bg-white border rounded-xl p-2.5 text-sm"
+                onClick={() => setOpen(o => !o)}
+                className="cursor-pointer w-full input-style text-right flex justify-between items-center"
             >
                 <span className="text-xs text-slate-400 font-bold">{label}: </span>
                 <span className="text-sm font-medium truncate mx-1">{summary}</span>
@@ -450,7 +361,7 @@ const MultiSelect: React.FC<MultiSelectProps> = React.memo(({ label, options, se
                 <>
                     <div className="fixed inset-0 z-10" onClick={handleClose} />
                     <div className="absolute top-full mt-1 right-0 left-0 z-20 bg-white border border-slate-200 rounded-xl shadow-xl">
-                        <div className="sticky top-0 bg-white border-b border-slate-100">
+                        <div className="sticky top-0 bg-white">
                             {searchable && (
                                 <div className="p-2 border-b border-slate-100">
                                     <input
@@ -464,7 +375,7 @@ const MultiSelect: React.FC<MultiSelectProps> = React.memo(({ label, options, se
                                     />
                                 </div>
                             )}
-                            <div className="flex justify-between p-2">
+                            <div className="flex justify-between p-2 border-b border-slate-100">
                                 <button type="button" onClick={() => onChange(visibleOptions.map(([v]) => v))} className="cursor-pointer text-[11px] text-blue-600 font-bold hover:underline">בחר הכל</button>
                                 <button type="button" onClick={() => onChange([])} className="cursor-pointer text-[11px] text-slate-500 font-bold hover:underline">נקה</button>
                             </div>
@@ -491,116 +402,3 @@ const MultiSelect: React.FC<MultiSelectProps> = React.memo(({ label, options, se
         </div>
     );
 });
-
-// ──────────────────────────────────────────────────────────────────
-// Single row component (Updated with explicit Priority Selector)
-// ──────────────────────────────────────────────────────────────────
-
-const SubtaskTableRow: React.FC<SubtaskTableRowProps> = React.memo(({
-    row,
-    onToggle,
-    onSaveTitle,
-    onCustomerClick,
-    onEditClick,
-    onOpenPage,
-    onPriorityChange,
-}) => {
-    const [editing, setEditing] = useState<boolean>(false);
-    const [draft, setDraft] = useState<string>(row.subtaskTitle);
-
-    const handleSave = () => {
-        setEditing(false);
-        onSaveTitle(draft);
-    };
-
-    const currentPriority = row.priority || 'medium';
-
-    return (
-        <tr className={`transition ${row.completed ? 'bg-green-50/40' : 'hover:bg-slate-50'}`}>
-            <td className="p-3 text-center">
-                <input
-                    type="checkbox"
-                    checked={row.completed}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => onToggle(e.target.checked)}
-                    className="cursor-pointer w-5 h-5 accent-blue-600"
-                />
-            </td>
-            <td className="p-3">
-                {editing ? (
-                    <div className="flex items-center gap-2">
-                        <input
-                            autoFocus
-                            value={draft}
-                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDraft(e.target.value)}
-                            onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
-                                if (e.key === 'Enter') handleSave();
-                                if (e.key === 'Escape') { setDraft(row.subtaskTitle); setEditing(false); }
-                            }}
-                            className="input-style flex-1"
-                        />
-                        <button type="button" onClick={handleSave} title="שמור" className="cursor-pointer text-green-600 hover:text-green-800 text-lg">💾</button>
-                    </div>
-                ) : (
-                    <div className="flex items-center gap-2">
-                        <span className={`text-sm font-medium ${row.completed ? 'line-through text-slate-400' : 'text-slate-800'}`}>
-                            {row.subtaskTitle}
-                        </span>
-                        {row.subtaskId && row.parentTitle !== row.subtaskTitle && (
-                            <span className="text-[10px] text-slate-400">· {row.parentTitle}</span>
-                        )}
-                        <button
-                            type="button"
-                            onClick={onEditClick}
-                            title="עריכת משימה מלאה"
-                            className="cursor-pointer text-slate-300 hover:text-blue-600 text-sm font-bold px-1"
-                        >
-                            ✎
-                        </button>
-                        <button
-                            type="button"
-                            onClick={onOpenPage}
-                            title="פתח בדף נפרד"
-                            className="cursor-pointer text-slate-300 hover:text-violet-600 text-sm px-1"
-                        >
-                            ⧉
-                        </button>
-                    </div>
-                )}
-                {row.comment && (
-                    <div className="text-[11px] text-blue-600 italic mt-1">💬 {row.comment}</div>
-                )}
-            </td>
-            <td className="p-3">
-                {row.clientId && row.clientId !== OFFICE_CUSTOMER_ID ? (
-                    <button
-                        type="button"
-                        onClick={onCustomerClick}
-                        title="פתח כרטיס לקוח"
-                        className="cursor-pointer text-sm font-medium text-slate-700 hover:text-blue-700 hover:underline transition flex items-center gap-1"
-                    >
-                        {row.customerName || '—'} <span className="text-[10px] opacity-50">↗</span>
-                    </button>
-                ) : (
-                    <span className="text-xs font-bold text-slate-500 bg-slate-100 px-2 py-1 rounded">🏢 משרד</span>
-                )}
-            </td>
-            <td className="p-3">
-                <span className="bg-slate-100 text-slate-700 px-2 py-1 rounded text-[10px] font-mono">
-                    {row.parentTitle || '—'}
-                </span>
-            </td>
-
-            <td className="p-3">
-                <PriorityBadge priority={currentPriority} onChange={onPriorityChange} />
-            </td>
-
-            <td className="p-3 text-left">
-                {row.taskStatus === 'completed' && row.subtaskId !== null && (
-                    <span className="text-[10px] text-green-700 font-bold">משימת אב הושלמה</span>
-                )}
-            </td>
-        </tr>
-    );
-});
-
-// ──────────────────────────────────────────────────────────────────
