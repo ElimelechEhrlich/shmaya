@@ -19,6 +19,7 @@ interface CustomerOption {
 }
 
 interface TaskFilters {
+    statuses: string[];
     categories: string[];
     clients: string[];
     priorities: string[];
@@ -41,6 +42,7 @@ export default function Tasks(): React.ReactElement {
     const [showCreate, setShowCreate] = useState(false);
     const [openAccordions, setOpenAccordions] = useState<Set<string>>(new Set());
     const [filters, setFilters] = useState<TaskFilters>({
+        statuses: ['pending'],
         categories: [],
         clients: [],
         priorities: [],
@@ -85,6 +87,7 @@ export default function Tasks(): React.ReactElement {
 
     // ── Filtering ─────────────────────────────────────────────────────
     const filtered = useMemo(() => rows.filter(r => {
+        if (filters.statuses.length && !filters.statuses.includes(r.completed ? 'completed' : 'pending')) return false;
         if (filters.categories.length && !filters.categories.includes(r.parentTaskId || '')) return false;
         if (filters.priorities.length && !filters.priorities.includes((r.priority || 'medium').toLowerCase())) return false;
         if (filters.clients.length && !filters.clients.includes(r.clientId ?? OFFICE_CUSTOMER_ID)) return false;
@@ -103,7 +106,6 @@ export default function Tasks(): React.ReactElement {
     const groupedByClient = useMemo(() => {
         const map = new Map<string, { clientName: string; rows: SubtaskViewRow[] }>();
         for (const row of filtered) {
-            if (row.completed) continue;
             const key = row.clientId ?? OFFICE_CUSTOMER_ID;
             const name = row.clientId ? (row.customerName ?? '—') : '🏢 משימות משרדיות';
             if (!map.has(key)) map.set(key, { clientName: name, rows: [] });
@@ -199,7 +201,7 @@ export default function Tasks(): React.ReactElement {
     }, []);
 
     const resetFilters = useCallback(() =>
-        setFilters({ categories: [], clients: [], priorities: [], search: '' }),
+        setFilters({ statuses: ['pending'], categories: [], clients: [], priorities: [], search: '' }),
     []);
 
     // ── Render ────────────────────────────────────────────────────────
@@ -223,13 +225,19 @@ export default function Tasks(): React.ReactElement {
 
                 {/* Filter bar */}
                 <div className="card-base p-4 mb-4">
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                    <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
                         <input
                             type="text"
                             placeholder="🔍 חיפוש..."
                             value={filters.search}
                             onChange={e => setFilters(f => ({ ...f, search: e.target.value }))}
                             className="input-style"
+                        />
+                        <MultiSelect
+                            label="סטטוס"
+                            options={[['pending', 'פתוחות'], ['completed', 'הושלמו']]}
+                            selected={filters.statuses}
+                            onChange={s => setFilters(f => ({ ...f, statuses: s }))}
                         />
                         <MultiSelect
                             label="קטגוריה"
