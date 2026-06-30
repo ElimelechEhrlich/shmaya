@@ -219,9 +219,11 @@ getCustomerDisplayName(client).includes(filters.search || '')
                                             {client.isVatActive && <span className="bg-amber-100 text-amber-700 px-2 py-1 rounded font-medium">מע״מ</span>}
                                         </td>
                                         <td className="p-4 text-center">
-                                            {(progressMap.get(client.id) ?? 0) === 100
-                                                ? <span className="text-green-700 bg-green-50 px-3 py-1 rounded-full border border-green-200 text-xs font-bold">✓ הושלם</span>
-                                                : <span className="text-amber-700 bg-amber-50 px-3 py-1 rounded-full border border-amber-200 text-xs font-bold">⏳ בטיפול</span>}
+                                            {isInactive
+                                                ? <span className="text-slate-500 bg-slate-100 px-3 py-1 rounded-full border border-slate-200 text-xs font-bold">לא פעיל</span>
+                                                : (progressMap.get(client.id) ?? 0) === 100
+                                                    ? <span className="text-green-700 bg-green-50 px-3 py-1 rounded-full border border-green-200 text-xs font-bold">✓ הושלם</span>
+                                                    : <span className="text-amber-700 bg-amber-50 px-3 py-1 rounded-full border border-amber-200 text-xs font-bold">⏳ בטיפול</span>}
                                         </td>
                                     </tr>
                                 );

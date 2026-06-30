@@ -760,7 +760,7 @@ export const PersistenceAdapter = {
 
   async fetchCustomerTaskStats(): Promise<DbResult<{ pending: number; completed: number }>> {
     const [customersRes, tasksRes] = await Promise.all([
-      supabase.from('customers').select('id').neq('id', OFFICE_CUSTOMER_ID),
+      supabase.from('customers').select('id, is_active').neq('id', OFFICE_CUSTOMER_ID),
       supabase.from('parent_tasks').select('customer_id, status').neq('customer_id', OFFICE_CUSTOMER_ID),
     ]);
     if (customersRes.error) return { data: null, error: customersRes.error };
@@ -777,6 +777,7 @@ export const PersistenceAdapter = {
 
     let pending = 0, completed = 0;
     for (const c of (customersRes.data ?? [])) {
+      if (!c.is_active) continue;
       const allDone = byCustomer.get(c.id);
       if (allDone === true) completed++;
       else pending++;
