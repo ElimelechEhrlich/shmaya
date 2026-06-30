@@ -482,6 +482,8 @@ export const PersistenceAdapter = {
     if (error) return { data: null, error };
     if (!data) return { data: [], error: null };
 
+    console.log('[DEBUG] raw is_completed values:', data.map(d => d.is_completed));
+
     const rows: PersistedSubtaskRow[] = data.map((item: any) => {
       const parent = item.parent_tasks;
       const customer = parent?.customers;
