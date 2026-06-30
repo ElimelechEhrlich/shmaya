@@ -246,6 +246,15 @@ if (!wasLtd && isNowLtd && editData) {
                 return;
             }
 
+            if (nextStatus !== beforeStatus) {
+                const { error: statusErr } = await PersistenceAdapter.updateTaskStatus(taskId, nextStatus);
+                if (statusErr) {
+                    alert(`שגיאה בעדכון סטטוס המשימה: ${statusErr.message}`);
+                    await reload();
+                    return;
+                }
+            }
+
             await LogService.recordTaskChange(
                 taskId,
                 { subTasks: beforeSubTasks, status: beforeStatus } as unknown as Record<string, unknown>,
