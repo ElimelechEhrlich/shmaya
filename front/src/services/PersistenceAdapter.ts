@@ -209,6 +209,45 @@ export const PersistenceAdapter = {
     return { data: null, error };
   },
 
+  async insertOfficeSubtask(title: string, priority: string, comment: string): Promise<DbResult<null>> {
+    const { data: existing, error: findErr } = await supabase
+      .from('parent_tasks')
+      .select('id')
+      .eq('registry_key', 'OFFICE_GENERAL')
+      .eq('customer_id', OFFICE_CUSTOMER_ID)
+      .maybeSingle();
+
+    if (findErr) return { data: null, error: findErr };
+
+    let parentId = existing?.id;
+
+    if (!parentId) {
+      const { data: created, error: createErr } = await supabase
+        .from('parent_tasks')
+        .insert({
+          customer_id: OFFICE_CUSTOMER_ID,
+          registry_key: 'OFFICE_GENERAL',
+          title: 'משימות משרד כלליות',
+          status: 'pending',
+        })
+        .select('id')
+        .single();
+
+      if (createErr) return { data: null, error: createErr };
+      parentId = created.id;
+    }
+
+    const { error: subErr } = await supabase.from('sub_tasks').insert({
+      parent_task_id: parentId,
+      title: title.trim(),
+      is_completed: false,
+      priority,
+      comment: comment.trim(),
+    });
+
+    return { data: null, error: subErr };
+  },
+
   // ── Customers (read) ──
 
   async fetchAllCustomers(): Promise<DbResult<Customer[]>> {
@@ -573,6 +612,11 @@ export const PersistenceAdapter = {
 
   async deleteTask(id: string): Promise<DbResult<null>> {
     const { error } = await supabase.from('parent_tasks').delete().eq('id', id);
+    return { data: null, error };
+  },
+
+  async deleteSubtask(subtaskId: string): Promise<DbResult<null>> {
+    const { error } = await supabase.from('sub_tasks').delete().eq('id', subtaskId);
     return { data: null, error };
   },
 

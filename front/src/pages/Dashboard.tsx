@@ -1,24 +1,13 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { PersistenceAdapter } from '../services/PersistenceAdapter';
-import type { PersistedTask, PersistedSubTask } from '../services/PersistenceAdapter';
+import type { PersistedTask } from '../services/PersistenceAdapter';
 import { PRIORITY_STYLES } from '../registries/CustomerRegistry';
-import { CATEGORY_ACCENT_COLORS } from '../constants/taskRegistry';
-import { CreateTaskModal } from '../comps/CreateTaskModal';
+import { OfficeTaskModal, type OfficeSubtaskEdit } from '../comps/OfficeTaskModal';
 import { useModal } from '../contexts/ModalContext';
 
-function buildTaskToEdit(task: PersistedTask, sub: PersistedSubTask) {
-    return {
-        taskId: task.id,
-        subtaskId: sub.id,
-        subtaskTitle: sub.title,
-        parentTaskId: task.parentTaskId,
-        parentTitle: task.title,
-        clientId: null as string | null,   // null → modal shows "משימה משרדית כללית"
-        customerName: null as string | null,
-        completed: !!sub.completed,
-        priority: (sub.priority ?? 'medium') as 'low' | 'medium' | 'high' | 'critical',
-        comment: sub.comment ?? '',
-    };
+interface OfficeRow extends OfficeSubtaskEdit {
+    taskId: string;
+    completed: boolean;
 }
 
 export default function Dashboard() {
@@ -27,10 +16,9 @@ export default function Dashboard() {
     const [pendingTasks, setPendingTasks] = useState<number | null>(null);
     const [completedTasks, setCompletedTasks] = useState<number | null>(null);
     const [officeTasks, setOfficeTasks] = useState<PersistedTask[] | null>(null);
-    const [customers, setCustomers] = useState<any[]>([]);
     const [showOpenOnly, setShowOpenOnly] = useState(true);
     const [showCreateOffice, setShowCreateOffice] = useState(false);
-    const [editingOfficeTask, setEditingOfficeTask] = useState<ReturnType<typeof buildTaskToEdit> | null>(null);
+    const [editingSubtask, setEditingSubtask] = useState<OfficeSubtaskEdit | null>(null);
 
     const reloadOfficeTasks = useCallback(() => {
         PersistenceAdapter.fetchOfficeTasks().then(({ data }) => {
@@ -51,9 +39,6 @@ export default function Dashboard() {
             if (error) console.error('[Dashboard] fetchOfficeTasks:', error);
             else setOfficeTasks(data ?? []);
         });
-        PersistenceAdapter.fetchAllCustomers().then(({ data }) => {
-            setCustomers((data as any[]) ?? []);
-        });
     }, []);
 
     const handleSubtaskToggle = useCallback((taskId: string, subtaskId: string, completed: boolean) => {
@@ -68,26 +53,32 @@ export default function Dashboard() {
         PersistenceAdapter.updateSubtaskStatus(taskId, subtaskId, completed);
     }, []);
 
-    const handleDeleteOfficeTask = useCallback(async (task: PersistedTask) => {
-        const confirmed = await modal.confirm(`האם למחוק את המשימה "${task.title}"?\nפעולה זו לא ניתנת לביטול.`);
+    const handleDeleteSubtask = useCallback(async (row: OfficeRow) => {
+        const confirmed = await modal.confirm(`האם למחוק את המשימה "${row.title}"?\nפעולה זו לא ניתנת לביטול.`);
         if (!confirmed) return;
-        setOfficeTasks(prev => prev?.filter(t => t.id !== task.id) ?? null);
-        const { error } = await PersistenceAdapter.deleteTask(task.id);
+        setOfficeTasks(prev => prev?.map(task =>
+            task.id !== row.taskId ? task : { ...task, subTasks: task.subTasks?.filter(s => s.id !== row.id) }
+        ) ?? null);
+        const { error } = await PersistenceAdapter.deleteSubtask(row.id);
         if (error) {
             await modal.alert('שגיאה במחיקת המשימה');
             reloadOfficeTasks();
         }
     }, [reloadOfficeTasks]);
 
-    const visibleTasks = useMemo(() => {
+    const visibleRows = useMemo<OfficeRow[] | null>(() => {
         if (!officeTasks) return null;
-        if (!showOpenOnly) return officeTasks;
-        return officeTasks
-            .map(task => ({
-                ...task,
-                subTasks: (task.subTasks ?? []).filter(s => !s.completed),
+        const rows: OfficeRow[] = officeTasks.flatMap(task =>
+            (task.subTasks ?? []).map(s => ({
+                id: s.id,
+                taskId: task.id,
+                title: s.title,
+                priority: s.priority ?? 'medium',
+                comment: s.comment ?? '',
+                completed: !!s.completed,
             }))
-            .filter(task => task.subTasks.length > 0);
+        );
+        return showOpenOnly ? rows.filter(r => !r.completed) : rows;
     }, [officeTasks, showOpenOnly]);
 
     return (
@@ -149,81 +140,69 @@ export default function Dashboard() {
                 </div>
 
                 {/* body */}
-                {visibleTasks === null ? (
+                {visibleRows === null ? (
                     <div className="p-6">
                         <div className="h-5 w-48 bg-slate-100 rounded animate-pulse" />
                     </div>
-                ) : visibleTasks.length === 0 ? (
+                ) : visibleRows.length === 0 ? (
                     <p className="p-6 text-slate-400 text-sm italic">
                         {showOpenOnly ? 'אין משימות פתוחות כרגע' : 'אין משימות משרדיות כרגע'}
                     </p>
                 ) : (
                     <div className="divide-y divide-slate-100 max-h-120 overflow-y-auto">
-                        {visibleTasks.map(task => {
-                            const accentBg = CATEGORY_ACCENT_COLORS[task.parentTaskId || ''] ?? 'bg-slate-200';
+                        {visibleRows.map(row => {
+                            const pr = PRIORITY_STYLES[row.priority ?? 'medium'];
                             return (
-                                <div key={task.id} className="relative px-6 py-4 hover:bg-slate-50/40 transition-colors">
+                                <div key={row.id} className="relative flex items-center gap-3 px-6 py-3 hover:bg-slate-50/40 transition-colors">
 
-                                    {/* category accent strip */}
-                                    <div className={`absolute inset-y-0 right-0 w-1 ${accentBg} opacity-70`} />
+                                    {/* accent strip */}
+                                    <div className="absolute inset-y-0 right-0 w-1 bg-slate-200 opacity-70" />
 
-                                    {/* task header row */}
-                                    <div className="flex items-center gap-2 mb-3">
-                                        <p className="font-semibold text-slate-700 text-sm flex-1">{task.title}</p>
-                                        {task.parentTaskId === null && (
-                                            <button
-                                                onClick={() => handleDeleteOfficeTask(task)}
-                                                title="מחק משימה ידנית"
-                                                className="cursor-pointer text-slate-300 hover:text-red-500 text-sm px-1 shrink-0 transition-colors"
-                                            >
-                                                🗑
-                                            </button>
+                                    {/* peer checkbox */}
+                                    <label className="cursor-pointer flex items-center shrink-0">
+                                        <input
+                                            type="checkbox"
+                                            checked={row.completed}
+                                            onChange={e => handleSubtaskToggle(row.taskId, row.id, e.target.checked)}
+                                            className="peer sr-only"
+                                        />
+                                        <span className="w-5 h-5 rounded-full border-2 border-slate-300
+                                                         peer-checked:border-blue-500 peer-checked:bg-blue-500
+                                                         transition-all duration-200 flex items-center justify-center
+                                                         text-transparent peer-checked:text-white text-[11px] font-black
+                                                         hover:border-slate-400 shrink-0 select-none">
+                                            ✓
+                                        </span>
+                                    </label>
+
+                                    <div className="flex-1 min-w-0">
+                                        <span className={`text-sm truncate block ${row.completed ? 'line-through text-slate-400' : 'text-slate-700'}`}>
+                                            {row.title}
+                                        </span>
+                                        {row.comment && (
+                                            <div className="text-[11px] text-slate-400 truncate mt-0.5">{row.comment}</div>
                                         )}
                                     </div>
 
-                                    {/* subtask rows */}
-                                    <ul className="space-y-1.5">
-                                        {(task.subTasks ?? []).map(sub => {
-                                            const pr = PRIORITY_STYLES[sub.priority ?? 'medium'];
-                                            return (
-                                                <li key={sub.id} className="flex items-center gap-3 hover:bg-slate-100/60 -mx-2 px-2 py-1.5 rounded-lg transition-colors">
+                                    <span className={`text-xs px-2 py-0.5 rounded-full border shrink-0 ${pr.bg} ${pr.text} ${pr.border}`}>
+                                        {pr.label}
+                                    </span>
 
-                                                    {/* peer checkbox */}
-                                                    <label className="cursor-pointer flex items-center shrink-0">
-                                                        <input
-                                                            type="checkbox"
-                                                            checked={!!sub.completed}
-                                                            onChange={e => handleSubtaskToggle(task.id, sub.id, e.target.checked)}
-                                                            className="peer sr-only"
-                                                        />
-                                                        <span className="w-5 h-5 rounded-full border-2 border-slate-300
-                                                                         peer-checked:border-blue-500 peer-checked:bg-blue-500
-                                                                         transition-all duration-200 flex items-center justify-center
-                                                                         text-transparent peer-checked:text-white text-[11px] font-black
-                                                                         hover:border-slate-400 shrink-0 select-none">
-                                                            ✓
-                                                        </span>
-                                                    </label>
+                                    <button
+                                        onClick={() => setEditingSubtask({ id: row.id, title: row.title, priority: row.priority, comment: row.comment })}
+                                        title="עריכת משימה"
+                                        className="cursor-pointer text-slate-300 hover:text-blue-600 text-sm font-bold px-1 shrink-0 transition-colors"
+                                    >
+                                        ✎
+                                    </button>
 
-                                                    <span className={`text-sm flex-1 min-w-0 truncate ${sub.completed ? 'line-through text-slate-400' : 'text-slate-700'}`}>
-                                                        {sub.title}
-                                                    </span>
-
-                                                    <span className={`text-xs px-2 py-0.5 rounded-full border shrink-0 ${pr.bg} ${pr.text} ${pr.border}`}>
-                                                        {pr.label}
-                                                    </span>
-
-                                                    <button
-                                                        onClick={() => setEditingOfficeTask(buildTaskToEdit(task, sub))}
-                                                        title="עריכת משימה"
-                                                        className="cursor-pointer text-slate-300 hover:text-blue-600 text-sm font-bold px-1 shrink-0 transition-colors"
-                                                    >
-                                                        ✎
-                                                    </button>
-                                                </li>
-                                            );
-                                        })}
-                                    </ul>
+                                    <button
+                                        onClick={() => handleDeleteSubtask(row)}
+                                        title="מחק משימה"
+                                        className="cursor-pointer text-slate-300 hover:text-red-500 text-sm px-1 shrink-0 transition-colors"
+                                    >
+                                        🗑
+                                    </button>
                                 </div>
                             );
                         })}
@@ -231,14 +210,12 @@ export default function Dashboard() {
                 )}
             </div>
 
-            {/* ─── Modals ─── */}
-            {(showCreateOffice || editingOfficeTask) && (
-                <CreateTaskModal
-                    customers={customers}
-                    taskToEdit={editingOfficeTask}
-                    defaultIsOffice={true}
-                    onClose={() => { setShowCreateOffice(false); setEditingOfficeTask(null); }}
-                    onCreated={() => { setShowCreateOffice(false); setEditingOfficeTask(null); reloadOfficeTasks(); }}
+            {/* ─── Modal ─── */}
+            {(showCreateOffice || editingSubtask) && (
+                <OfficeTaskModal
+                    subtaskToEdit={editingSubtask}
+                    onClose={() => { setShowCreateOffice(false); setEditingSubtask(null); }}
+                    onSaved={() => { setShowCreateOffice(false); setEditingSubtask(null); reloadOfficeTasks(); }}
                 />
             )}
         </div>
