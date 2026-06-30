@@ -3,12 +3,9 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router';
 import { OFFICE_CUSTOMER_ID, PersistenceAdapter } from '../services/PersistenceAdapter';
 import { LogService } from '../services/LogService';
-import {
-    PRIORITY_LEVELS,
-    PRIORITY_STYLES,
-} from '../registries/CustomerRegistry';
 import { authService } from '../services/authService';
 import { CreateTaskModal, type CreateTaskModalProps } from '../comps/CreateTaskModal';
+import PriorityBadge from '../comps/PriorityBadge';
 import { AUTO_TASKS_CONFIG } from '../constants/taskRegistry';
 import { translateError } from '../utils/translateError';
 
@@ -516,9 +513,7 @@ const SubtaskTableRow: React.FC<SubtaskTableRowProps> = React.memo(({
         onSaveTitle(draft);
     };
 
-    // ✨ שימוש ב-PRIORITY_STYLES מעודכן
     const currentPriority = row.priority || 'medium';
-    const priorityStyle = PRIORITY_STYLES[currentPriority as 'low' | 'medium' | 'high' | 'critical'] || PRIORITY_STYLES['medium'];
 
     return (
         <tr className={`transition ${row.completed ? 'bg-green-50/40' : 'hover:bg-slate-50'}`}>
@@ -595,22 +590,8 @@ const SubtaskTableRow: React.FC<SubtaskTableRowProps> = React.memo(({
                 </span>
             </td>
 
-            {/* ✨ הפיכת רמת הדחיפות לסלקטור לחיץ וערוך ישירות מתוך השורה (סעיף 1) */}
             <td className="p-3">
-                <div className="relative inline-block">
-                    <select
-                        value={currentPriority}
-                        onChange={(e) => onPriorityChange(e.target.value)}
-                        className={`cursor-pointer text-center font-black uppercase text-[10px] tracking-wider px-2.5 py-0.5 rounded-full border transition appearance-none ${priorityStyle?.bg || 'bg-slate-50'} ${priorityStyle?.text || 'text-slate-600'} ${priorityStyle?.border || 'border-slate-200'}`}
-                        style={{ backgroundImage: 'none' }}
-                    >
-                        {PRIORITY_LEVELS.map((lv: string) => (
-                            <option key={lv} value={lv}>
-                                {PRIORITY_STYLES[lv as 'low' | 'medium' | 'high' | 'critical']?.label || lv}
-                            </option>
-                        ))}
-                    </select>
-                </div>
+                <PriorityBadge priority={currentPriority} onChange={onPriorityChange} />
             </td>
 
             <td className="p-3 text-left">

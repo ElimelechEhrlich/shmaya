@@ -10,9 +10,8 @@ import {
 import {
     calculateWeightedProgress,
     cascadeOnSubtaskSet,
-    PRIORITY_LEVELS,
-    PRIORITY_STYLES,
 } from '../registries/CustomerRegistry';
+import PriorityBadge from '../comps/PriorityBadge';
 import { authService } from '../services/authService';
 import ProgressBar from '../comps/ProgressBar';
 import { translateError } from '../utils/translateError';
@@ -225,7 +224,6 @@ export default function TaskDetails(): React.ReactElement {
                     ) : (
                         <div className="divide-y divide-slate-100">
                             {(task.subTasks as PersistedSubTask[]).map(sub => {
-                                const pStyle = PRIORITY_STYLES[sub.priority as 'low' | 'medium' | 'high' | 'critical'] ?? PRIORITY_STYLES['medium'];
                                 return (
                                     <div
                                         key={sub.id}
@@ -246,18 +244,10 @@ export default function TaskDetails(): React.ReactElement {
 
                                         {/* Priority + comment */}
                                         <div className="flex items-center gap-2 shrink-0">
-                                            <select
-                                                value={sub.priority ?? 'medium'}
-                                                onChange={e => handlePriorityChange(sub.id, e.target.value)}
-                                                className={`cursor-pointer font-black uppercase text-[10px] tracking-wider px-2.5 py-0.5 rounded-full border transition appearance-none ${pStyle.bg} ${pStyle.text} ${pStyle.border}`}
-                                                style={{ backgroundImage: 'none' }}
-                                            >
-                                                {PRIORITY_LEVELS.map(lv => (
-                                                    <option key={lv} value={lv}>
-                                                        {PRIORITY_STYLES[lv as 'low' | 'medium' | 'high' | 'critical']?.label ?? lv}
-                                                    </option>
-                                                ))}
-                                            </select>
+                                            <PriorityBadge
+                                                priority={sub.priority}
+                                                onChange={(p) => handlePriorityChange(sub.id, p)}
+                                            />
                                             <input
                                                 type="text"
                                                 value={commentDrafts[sub.id] ?? ''}

@@ -7,8 +7,6 @@ import {
     isEmployerType as registryIsEmployerType,
     isRepresentationAllowed,
     BUSINESS_TYPE_OPTIONS,
-    PRIORITY_LEVELS,
-    PRIORITY_STYLES,
     getCustomerDisplayName
 } from '../registries/CustomerRegistry';
 import ProgressBar from './ProgressBar';
@@ -17,9 +15,9 @@ import { authService } from '../services/authService'; // ודא שהנתיב ל
 import { useModal } from '../contexts/ModalContext';
 import { branchesList } from '../constants/branches';
 import FilterableSelect from './FilterableSelect';
+import PriorityBadge from './PriorityBadge';
 
 
-type PriorityLevel = 'low' | 'medium' | 'high' | 'critical';
 
 interface SectionProps {
     title: string;
@@ -43,10 +41,6 @@ interface ToggleRowProps {
     onToggle: (checked: boolean) => void;
 }
 
-interface PriorityBadgeProps {
-    priority: string | undefined;
-    onChange: (priority: string) => void;
-}
 
 interface ConfirmModalProps {
     title: string;
@@ -111,27 +105,6 @@ const ToggleRow: React.FC<ToggleRowProps> = React.memo(({ label, active, isEditi
     </div>
 ));
 
-const PriorityBadge: React.FC<PriorityBadgeProps> = React.memo(({ priority, onChange }) => {
-    const p = (priority && PRIORITY_STYLES[priority as PriorityLevel] ? priority : 'medium') as PriorityLevel;
-    const style = PRIORITY_STYLES[p];
-
-    return (
-        <div className="relative">
-            <select
-                value={p}
-                onChange={(e) => onChange(e.target.value)}
-                onClick={(e) => e.stopPropagation()}
-                className={`cursor-pointer ${style?.bg || 'bg-slate-50'} ${style?.text || 'text-slate-700'} ${style?.border || 'border-slate-200'} border px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider appearance-none`}
-                style={{ backgroundImage: 'none' }}
-                title={`עדיפות: ${style?.label || p}`}
-            >
-                {PRIORITY_LEVELS.map((lv: string) => (
-                    <option key={lv} value={lv}>{PRIORITY_STYLES[lv as PriorityLevel]?.label || lv}</option>
-                ))}
-            </select>
-        </div>
-    );
-});
 
 const ConfirmModal: React.FC<ConfirmModalProps> = React.memo(({ title, body, onConfirm, onCancel }) => (
     <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center z-50 backdrop-blur-sm" dir="rtl">
