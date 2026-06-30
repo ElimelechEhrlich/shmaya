@@ -1,6 +1,6 @@
 // src/comps/CustomerList.tsx
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
-import { OFFICE_CUSTOMER_ID, PersistenceAdapter } from '../services/PersistenceAdapter';
+import { PersistenceAdapter } from '../services/PersistenceAdapter';
 import { TaskGeneratorService } from '../services/TaskService';
 import { BUSINESS_TYPE_OPTIONS, calculateWeightedProgress, getCustomerDisplayName } from '../registries/CustomerRegistry';
 import { useNavigate } from 'react-router';
@@ -73,7 +73,7 @@ getCustomerDisplayName(client).includes(filters.search || '')
 
     const exportToExcel = (): void => {
         const headers = ["שם לקוח", "מזהה עסק", "סוג עסק", "ביטוח לאומי", "מס הכנסה", "מע\"מ", "אישור סופי"];
-        const rows = filteredCustomers.filter(c => c.id !== OFFICE_CUSTOMER_ID).map(client => [
+        const rows = filteredCustomers.map(client => [
             getCustomerDisplayName(client),
             client.businessDetails?.businessID || '',
             client.businessDetails?.businessType || '',
@@ -178,7 +178,7 @@ getCustomerDisplayName(client).includes(filters.search || '')
                         </select>
                     </div>
                     <div className="mt-3 flex justify-between items-center">
-                        <span className="text-xs text-slate-500 font-medium">מציג {filteredCustomers.filter(c => c.id !== OFFICE_CUSTOMER_ID).length} מתוך {customers.length} לקוחות</span>
+                        <span className="text-xs text-slate-500 font-medium">מציג {filteredCustomers.length} מתוך {customers.length} לקוחות</span>
                         <button onClick={resetFilters} className="cursor-pointer text-sm text-blue-600 hover:text-blue-800 font-bold transition">
                             ניקוי סינונים
                         </button>
@@ -198,7 +198,7 @@ getCustomerDisplayName(client).includes(filters.search || '')
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
-                            {filteredCustomers.filter(c => c.id !== OFFICE_CUSTOMER_ID).map((client: any) => {
+                            {filteredCustomers.map((client: any) => {
                                 const isApproved = finalizationMap.get(client.id) ?? false;
                                 const isInactive = client.isActive === false;
                                 return (
@@ -228,7 +228,7 @@ getCustomerDisplayName(client).includes(filters.search || '')
                             })}
                         </tbody>
                     </table>
-                    {filteredCustomers.filter(c => c.id !== OFFICE_CUSTOMER_ID).length === 0 && (
+                    {filteredCustomers.length === 0 && (
                         <div className="p-12 text-center text-slate-400 italic">לא נמצאו לקוחות התואמים את הסינון.</div>
                     )}
                 </div>
