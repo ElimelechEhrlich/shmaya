@@ -15,6 +15,9 @@ import ProgressBar from './ProgressBar';
 import { CreateTaskModal } from '../comps/CreateTaskModal';
 import { authService } from '../services/authService'; // ודא שהנתיב לקובץ ה-Auth נכון
 import { useModal } from '../contexts/ModalContext';
+import { branchesList } from '../constants/branches';
+import FilterableSelect from './FilterableSelect';
+
 
 type PriorityLevel = 'low' | 'medium' | 'high' | 'critical';
 
@@ -29,7 +32,7 @@ interface EditableRowProps {
     value: any;
     isEditing: boolean;
     onCh: (value: string) => void;
-    type?: "text" | "select" | "date";
+    type?: "text" | "select" | "date" | "search-select";
     options?: string[];
 }
 
@@ -69,7 +72,14 @@ const EditableRow: React.FC<EditableRowProps> = React.memo(({ label, value, isEd
     <div className="mb-4 last:mb-0">
         <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1 tracking-wide">{label}</label>
         {isEditing ? (
-            type === "select" ? (
+            type === "search-select" ? ( // <-- הוסף את הבלוק הזה
+                <FilterableSelect
+                    options={options} 
+                    value={value || ''} 
+                    onChange={onCh} 
+                    placeholder="הקלד לחיפוש..." 
+                />
+            ) : type === "select" ? (
                 <select className="input-style cursor-pointer" value={value} onChange={(e) => onCh(e.target.value)}>
                     <option value="">בחר...</option>
                     {options.map(o => <option key={o} value={o}>{o === 'yes' ? 'כן' : o === 'no' ? 'לא' : o}</option>)}
@@ -78,7 +88,7 @@ const EditableRow: React.FC<EditableRowProps> = React.memo(({ label, value, isEd
                 <input className="input-style" value={value || ''} onChange={(e) => onCh(e.target.value)} type={type} />
             )
         ) : (
-            type === "select" ? (
+            type === "select" || type === "search-select" ? (
                 <span className="text-sm font-bold text-slate-800">{(value === 'yes' && 'כן') || (value === 'no' && 'לא') || value}</span>
             ) : (
                 <span className="text-sm font-bold text-slate-800">{value || '---'}</span>
@@ -184,7 +194,7 @@ const CustomerCard: React.FC = () => {
                 message: 'לא ניתן להפעיל לקוח מחדש ללא רשות פעילה אחת לפחות. עבור למצב עריכה כדי להפעיל רשות.',
                 buttons: [
                     { label: 'עבור לעריכה', variant: 'primary', onClick: () => actions.setEditMode(true) },
-                    { label: 'ביטול', variant: 'secondary', onClick: () => {} },
+                    { label: 'ביטול', variant: 'secondary', onClick: () => { } },
                 ],
             });
             return;
@@ -210,12 +220,12 @@ const CustomerCard: React.FC = () => {
                     <div className="h-9 w-40 bg-slate-200 rounded-xl mb-6 animate-pulse" />
                     <div className="h-36 bg-slate-100 rounded-2xl mb-6 animate-pulse" />
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        {[1,2,3].map(i => (
+                        {[1, 2, 3].map(i => (
                             <div key={i} className="space-y-3">
-                                {[1,2].map(j => (
+                                {[1, 2].map(j => (
                                     <div key={j} className="card-base p-6">
                                         <div className="h-3 w-24 bg-slate-200 rounded mb-4 animate-pulse" />
-                                        {[1,2,3,4].map(k => <div key={k} className="h-8 bg-slate-100 rounded mb-2 animate-pulse" />)}
+                                        {[1, 2, 3, 4].map(k => <div key={k} className="h-8 bg-slate-100 rounded mb-2 animate-pulse" />)}
                                     </div>
                                 ))}
                             </div>
@@ -279,7 +289,7 @@ const CustomerCard: React.FC = () => {
                 {confirmDelete && (
                     <ConfirmModal
                         title="מחיקת לקוח לצמיתות"
-                        body={`האם למחוק את ${getCustomerDisplayName(editData)|| 'הלקוח'} ואת כל המשימות שלו? פעולה זו אינה הפיכה.`}
+                        body={`האם למחוק את ${getCustomerDisplayName(editData) || 'הלקוח'} ואת כל המשימות שלו? פעולה זו אינה הפיכה.`}
                         onConfirm={() => { setConfirmDelete(false); handleDelete(); }}
                         onCancel={() => setConfirmDelete(false)}
                     />
@@ -325,8 +335,14 @@ const CustomerCard: React.FC = () => {
                             <EditableRow label="מזהה עסק" value={editData.businessDetails?.businessID} isEditing={isEditing} onCh={onCh('businessDetails', 'businessID')} />
                             <EditableRow label="סוג עסק" value={editData.businessDetails?.businessType} isEditing={isEditing} type="select" options={BUSINESS_TYPE_OPTIONS} onCh={onCh('businessDetails', 'businessType')} />
                             <EditableRow label="תאריך פתיחה" value={editData.businessDetails?.openingDate} isEditing={isEditing} type="date" onCh={onCh('businessDetails', 'openingDate')} />
-                            <EditableRow label="משלח יד" value={editData.businessDetails?.occupation} isEditing={isEditing} onCh={onCh('businessDetails', 'occupation')} />
-
+                            <EditableRow
+                                label="משלח יד"
+                                value={editData.businessDetails?.occupation}
+                                isEditing={isEditing}
+                                type="search-select"
+                                options={branchesList}
+                                onCh={onCh('businessDetails', 'occupation')}
+                            />
                             {isEmployerType && (
                                 <div className="mt-4 p-4 bg-blue-50 rounded-xl border border-blue-100 space-y-3">
                                     <EditableRow label="מעסיק עובדים?" value={editData.businessDetails?.employsWorkers} isEditing={isEditing} type="select" options={['yes', 'no']} onCh={onCh('businessDetails', 'employsWorkers')} />

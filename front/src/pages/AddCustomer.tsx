@@ -15,6 +15,8 @@ import {
 import { useModal } from '../contexts/ModalContext';
 import { PersistenceAdapter } from '../services/PersistenceAdapter';
 import { handleLtdCustomerFlow } from '../utils/handleLtdCustomerFlow';
+import FilterableSelect from '../comps/FilterableSelect';
+import { branchesList } from '../constants/branches';
 
 
 interface CustomerFormData {
@@ -79,7 +81,7 @@ export default function AddCustomer(): React.ReactElement {
     }, [formData]);
 
     const handleChange = (
-        category: keyof CustomerFormData | 'root', 
+        category: keyof CustomerFormData | 'root',
         e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
     ): void => {
         const { name, value, type } = e.target;
@@ -120,31 +122,31 @@ export default function AddCustomer(): React.ReactElement {
 
         const hasAuthorities = formData.isIncomeTaxActive || formData.isVatActive || formData.isInsuranceActive;
         let dataToSave = { ...formData };
-        
+
         if (!hasAuthorities) {
             const saveAsInactive = await modal.confirm('לא הגדרת טיפול באף רשות. האם ברצונך לשמור את הלקוח כ"לא פעיל"?');
             if (!saveAsInactive) return;
             dataToSave = { ...dataToSave, isActive: false };
         }
-        
+
         try {
             setIsSaving(true);
             const cleanedData = applyBusinessRules(dataToSave as unknown as Customer);
             const result = await CustomerService.saveCustomer(cleanedData as unknown as CustomerFormData, false);
             if (result.success) {
-    
-if (formData.businessDetails.businessType === 'חברה בע"מ') {
-    await handleLtdCustomerFlow(
-        result.data.id,
-        formData.customerDetails,
-        modal,
-        navigate
-    );
-} else {
-    await modal.alert('הלקוח נוסף ותועד במערכת!');
-    navigate('/admin/customers');
-}
-} else {
+
+                if (formData.businessDetails.businessType === 'חברה בע"מ') {
+                    await handleLtdCustomerFlow(
+                        result.data.id,
+                        formData.customerDetails,
+                        modal,
+                        navigate
+                    );
+                } else {
+                    await modal.alert('הלקוח נוסף ותועד במערכת!');
+                    navigate('/admin/customers');
+                }
+            } else {
                 alert('שגיאה בשמירה: ' + result.error);
             }
         } catch (error: any) {
@@ -195,8 +197,23 @@ if (formData.businessDetails.businessType === 'חברה בע"מ') {
                                         {BUSINESS_TYPE_OPTIONS.map((opt: string) => (<option key={opt} value={opt}>{opt}</option>))}
                                     </select>
                                 </FormField>
-                                <FormField label="משלח יד"><input name="occupation" className="input-style" onChange={(e) => handleChange('businessDetails', e)} /></FormField>
-                                <div className="md:col-span-2">
+                                <FormField label="משלח יד">
+                                    <FilterableSelect
+                                        options={branchesList}
+                                        value={formData.businessDetails.occupation}
+                                        placeholder="הקלד לחיפוש משלח יד..."
+                                        onChange={(val) => {
+                                            // יצירת אובייקט אירוע מדומה כדי להשתלב בצורה שקופה בתוך ה-handleChange הקיים שלך
+                                            handleChange('businessDetails', {
+                                                target: {
+                                                    name: 'occupation',
+                                                    value: val,
+                                                    type: 'text'
+                                                }
+                                            } as React.ChangeEvent<HTMLInputElement>);
+                                        }}
+                                    />
+                                </FormField>                                <div className="md:col-span-2">
                                     <FormField label="תיאור פעילות העסק">
                                         <textarea name="businessDescription" className="input-style h-20" onChange={(e) => handleChange('businessDetails', e)}></textarea>
                                     </FormField>
