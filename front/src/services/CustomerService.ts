@@ -137,7 +137,7 @@ export const CustomerService = {
                 registryKey: t.parentTaskId ?? null,
                 subTasks: t.subTasks.map((s: any) => ({
                     title: s.title,
-                    priority: (t.priority || 'medium') as SubTaskPriority,
+                    priority: (s.priority || 'medium') as SubTaskPriority,
                     comment: s.comment || ''
                 }))
             } as any)));
