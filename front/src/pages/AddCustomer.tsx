@@ -50,6 +50,8 @@ interface ToggleHeaderProps {
 export default function AddCustomer(): React.ReactElement {
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
+    console.log('[AddCustomer mount] searchParams:', searchParams.toString());
+    console.log('[AddCustomer mount] fullName param:', searchParams.get('fullName'));
     const modal = useModal();
 
     const [formData, setFormData] = useState<CustomerFormData>({
