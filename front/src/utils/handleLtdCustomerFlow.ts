@@ -15,7 +15,8 @@ export async function handleLtdCustomerFlow(
     const { data: allCustomers } = await PersistenceAdapter.fetchAllCustomers();
     const existingMatch = allCustomers?.find((c: any) =>
         c.customerDetails.identityId === personalDetails.identityId &&
-        c.id !== customerId
+        c.id !== customerId &&
+        c.businessDetails?.businessType === 'חברה בע"מ'
     );
     if (existingMatch) return;
 
