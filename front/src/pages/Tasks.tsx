@@ -200,6 +200,17 @@ export default function Tasks(): React.ReactElement {
         }
     }, []);
 
+    const onDeleteTask = useCallback(async (row: SubtaskViewRow) => {
+        const taskTitle = row.parentTitle || row.subtaskTitle;
+        if (!window.confirm(`האם למחוק את המשימה "${taskTitle}"?\nפעולה זו לא ניתנת לביטול.`)) return;
+        setRows(prev => prev.filter(r => r.taskId !== row.taskId));
+        const { error } = await PersistenceAdapter.deleteTask(row.taskId);
+        if (error) {
+            alert(`שגיאה במחיקת המשימה: ${translateError(error.message)}`);
+            load();
+        }
+    }, [load]);
+
     const resetFilters = useCallback(() =>
         setFilters({ statuses: ['pending'], categories: [], clients: [], priorities: [], search: '' }),
     []);
@@ -306,6 +317,7 @@ export default function Tasks(): React.ReactElement {
                             onSaveTitle={onSaveTitle}
                             onEditClick={onEditClick}
                             onPriorityChange={onPriorityChange}
+                            onDelete={onDeleteTask}
                         />
                     ))
                 )}

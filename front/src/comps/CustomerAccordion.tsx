@@ -15,6 +15,7 @@ interface CustomerAccordionProps {
     onSaveTitle: (row: SubtaskViewRow, title: string) => void;
     onEditClick: (row: SubtaskViewRow) => void;
     onPriorityChange: (row: SubtaskViewRow, priority: string) => void;
+    onDelete?: (row: SubtaskViewRow) => void;
 }
 
 function getAccordionAccentBg(openCount: number): string {
@@ -34,6 +35,7 @@ const CustomerAccordion: React.FC<CustomerAccordionProps> = React.memo(({
     onSaveTitle,
     onEditClick,
     onPriorityChange,
+    onDelete,
 }) => {
     const navigate = useNavigate();
     const openCount = rows.filter(r => !r.completed).length;
@@ -94,6 +96,7 @@ const CustomerAccordion: React.FC<CustomerAccordionProps> = React.memo(({
                             onSaveTitle={onSaveTitle}
                             onEditClick={onEditClick}
                             onPriorityChange={onPriorityChange}
+                            onDelete={onDelete}
                         />
                     ))}
                 </div>

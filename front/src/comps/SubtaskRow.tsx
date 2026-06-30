@@ -23,6 +23,7 @@ interface SubtaskRowProps {
     onSaveTitle: (row: SubtaskViewRow, title: string) => void;
     onEditClick: (row: SubtaskViewRow) => void;
     onPriorityChange: (row: SubtaskViewRow, priority: string) => void;
+    onDelete?: (row: SubtaskViewRow) => void;
 }
 
 const SubtaskRow: React.FC<SubtaskRowProps> = React.memo(({
@@ -31,6 +32,7 @@ const SubtaskRow: React.FC<SubtaskRowProps> = React.memo(({
     onSaveTitle,
     onEditClick,
     onPriorityChange,
+    onDelete,
 }) => {
     const [editing, setEditing] = useState(false);
     const [draft, setDraft] = useState(row.subtaskTitle);
@@ -110,6 +112,16 @@ const SubtaskRow: React.FC<SubtaskRowProps> = React.memo(({
                         >
                             ✎
                         </button>
+                        {onDelete && row.parentTaskId === null && (
+                            <button
+                                type="button"
+                                onClick={() => onDelete(row)}
+                                title="מחק משימה ידנית"
+                                className="cursor-pointer text-slate-300 hover:text-red-500 text-sm px-1 shrink-0 transition-colors"
+                            >
+                                🗑
+                            </button>
+                        )}
                     </div>
                 )}
                 {row.comment && (
