@@ -30,8 +30,6 @@ export default function Login(): React.ReactElement {
       authService.login(username);
     }
     
-    console.log("Login successful for:", username);
-    
     // ניתוב לדף הבית / דאשבורד הראשי של המערכת
     navigate('/admin/dashboard');
   };

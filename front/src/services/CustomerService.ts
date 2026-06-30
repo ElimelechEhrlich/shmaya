@@ -118,11 +118,9 @@ export const CustomerService = {
     },
 
     syncTasksWithExisting: async (customerId: string, clientForm: CustomerFormData, existing: any[]): Promise<void> => {
-        console.log("=== DEBUG INCOMING DATA ===", { customerId, clientForm, existing }); // 👈 שים את זה בשורה הראשונה!
         const clientPayload = { id: customerId, ...clientForm };
         const generatedTasks = TaskGeneratorService.generateForCustomer(clientPayload as any);
         const plan = planIdempotentSync(generatedTasks as any, existing as any) as any;
-        console.log("=== DEBUG SYNC PLAN ===", plan); // 👈 תוסיף את השורה הזו זמנית
 
         const ops: Promise<any>[] = [];
 
