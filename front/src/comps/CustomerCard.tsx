@@ -14,6 +14,7 @@ import {
 import ProgressBar from './ProgressBar';
 import { CreateTaskModal } from '../comps/CreateTaskModal';
 import { authService } from '../services/authService'; // ודא שהנתיב לקובץ ה-Auth נכון
+import { useModal } from '../contexts/ModalContext';
 
 type PriorityLevel = 'low' | 'medium' | 'high' | 'critical';
 
@@ -152,6 +153,7 @@ const CustomerCard: React.FC = () => {
         actions,
     } = useCustomer(id);
 
+    const modal = useModal();
     const [confirmDelete, setConfirmDelete] = useState<boolean>(false);
     const [editingTask, setEditingTask] = useState<any | null>(null);
     const [isSaving, setIsSaving] = useState<boolean>(false);
@@ -168,12 +170,25 @@ const CustomerCard: React.FC = () => {
     };
 
     const handleDeactivate = async () => {
-        if (!confirm('להעביר את הלקוח לסטטוס לא פעיל? פעולה זו תאפס את הרשויות הפעילות.')) return;
+        const ok = await modal.confirm('להעביר את הלקוח לסטטוס לא פעיל? פעולה זו תאפס את הרשויות הפעילות.');
+        if (!ok) return;
         const r = await actions.deactivate();
         if (!r.success) alert("שגיאה: " + r.error);
     };
 
     const handleReactivate = async () => {
+        const hasAnyAuthority = !!(editData?.isIncomeTaxActive || editData?.isVatActive || editData?.isInsuranceActive);
+        if (!hasAnyAuthority) {
+            modal.custom({
+                title: 'נדרשת הפעלת רשות',
+                message: 'לא ניתן להפעיל לקוח מחדש ללא רשות פעילה אחת לפחות. עבור למצב עריכה כדי להפעיל רשות.',
+                buttons: [
+                    { label: 'עבור לעריכה', variant: 'primary', onClick: () => actions.setEditMode(true) },
+                    { label: 'ביטול', variant: 'secondary', onClick: () => {} },
+                ],
+            });
+            return;
+        }
         const r = await actions.reactivate();
         if (!r.success) alert("שגיאה: " + r.error);
     };
