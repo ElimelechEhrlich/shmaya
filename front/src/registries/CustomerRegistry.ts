@@ -390,10 +390,8 @@ export function applyBusinessRules(c: Customer): Customer {
     }
   }
 
-  // 2. After forced-off cascade, deactivate the customer if no authority remains
-  if (!hasActiveAuthorities(next)) {
-    next.isActive = false;
-  }
+  // 2. After forced-off cascade, sync isActive with authority state
+  next.isActive = hasActiveAuthorities(next) ? (c.isActive ?? true) : false;
 
   // 2. Employer cascade — symmetric (true ↔ false)
   if (isEmployerType(next)) {

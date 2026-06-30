@@ -160,8 +160,11 @@ const CustomerCard: React.FC = () => {
         setIsSaving(true);
         const result = await actions.save();
         setIsSaving(false);
-        if (result.success) alert("הנתונים נשמרו וסונכרנו בהצלחה!");
-        else alert("שגיאה בשמירה: " + result.error);
+        if (result.success) {
+            alert("הנתונים נשמרו וסונכרנו בהצלחה!");
+        } else if (result.error !== 'CANCELLED') {
+            alert("שגיאה בשמירה: " + result.error);
+        }
     };
 
     const handleDeactivate = async () => {

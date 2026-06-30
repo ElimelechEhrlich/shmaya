@@ -139,7 +139,9 @@ export function useCustomer(customerId: string | undefined): UseCustomerResult {
                     'שים לב: כיבית את כל הרשויות בטיפול עבור לקוח זה.\nהאם ברצונך לשמור את השינויים ולהפוך את הלקוח ל"לא פעיל" באופן אוטומטי?'
                 );
                 if (!shouldDeactivate) {
-                    return { success: false, error: 'השמירה בבוטלה על ידי המשתמש.' };
+                    setEditData(customer);
+                    setIsEditing(false);
+                    return { success: false, error: 'CANCELLED' };
                 }
                 updatedData = { ...updatedData, isActive: false };
             }
