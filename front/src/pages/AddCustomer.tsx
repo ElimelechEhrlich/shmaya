@@ -187,7 +187,7 @@ if (formData.businessDetails.businessType === 'חברה בע"מ') {
                         <Card title="פרטי עסק" icon="🏢">
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <FormField label="שם העסק"><input name="businessName" className="input-style" onChange={(e) => handleChange('businessDetails', e)} required /></FormField>
-                                <FormField label="מזהה עסק"><input name="businessID" className="input-style" onChange={(e) => handleChange('businessDetails', e)} required /></FormField>
+                                <FormField label="מזהה עסק"><input name="businessID" className="input-style" onChange={(e) => handleChange('businessDetails', e)} /></FormField>
                                 <FormField label="תאריך פתיחת העסק"><input name="openingDate" type="date" className="input-style" onChange={(e) => handleChange('businessDetails', e)} required /></FormField>
                                 <FormField label="סוג עסק לייצוג">
                                     <select name="businessType" className="input-style" onChange={(e) => handleChange('businessDetails', e)} required>
