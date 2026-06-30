@@ -758,6 +758,32 @@ export const PersistenceAdapter = {
     return { data: count ?? 0, error: error as any };
   },
 
+  async fetchCustomerTaskStats(): Promise<DbResult<{ pending: number; completed: number }>> {
+    const [customersRes, tasksRes] = await Promise.all([
+      supabase.from('customers').select('id').neq('id', OFFICE_CUSTOMER_ID),
+      supabase.from('parent_tasks').select('customer_id, status').neq('customer_id', OFFICE_CUSTOMER_ID),
+    ]);
+    if (customersRes.error) return { data: null, error: customersRes.error };
+    if (tasksRes.error) return { data: null, error: tasksRes.error };
+
+    const byCustomer = new Map<string, boolean>();
+    for (const row of (tasksRes.data ?? [])) {
+      if (!row.customer_id) continue;
+      const prev = byCustomer.get(row.customer_id);
+      byCustomer.set(row.customer_id,
+        prev === undefined ? row.status === 'completed' : prev && row.status === 'completed'
+      );
+    }
+
+    let pending = 0, completed = 0;
+    for (const c of (customersRes.data ?? [])) {
+      const allDone = byCustomer.get(c.id);
+      if (allDone === true) completed++;
+      else pending++;
+    }
+    return { data: { pending, completed }, error: null };
+  },
+
   // ── Logs ──
 
   async insertLog(row: Record<string, unknown>): Promise<DbResult<null>> {

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { OFFICE_CUSTOMER_ID, PersistenceAdapter } from '../services/PersistenceAdapter';
+import { PersistenceAdapter } from '../services/PersistenceAdapter';
 import type { PersistedTask } from '../services/PersistenceAdapter';
-import { calculateWeightedProgress, PRIORITY_STYLES } from '../registries/CustomerRegistry';
+import { PRIORITY_STYLES } from '../registries/CustomerRegistry';
 
 export default function Dashboard() {
     const [activeCustomers, setActiveCustomers] = useState<number | null>(null);
@@ -10,24 +10,19 @@ export default function Dashboard() {
     const [officeTasks, setOfficeTasks] = useState<PersistedTask[] | null>(null);
 
     useEffect(() => {
-        PersistenceAdapter.fetchActiveCustomerCount()
-            .then(r => setActiveCustomers(r.data ?? 0));
-
-        PersistenceAdapter.fetchAllCustomersWithTasks().then(({ data }) => {
-            if (!data) return;
-            const realCustomers = data.filter(c => c.id !== OFFICE_CUSTOMER_ID);
-            let pending = 0, completed = 0;
-            for (const c of realCustomers) {
-                const progress = calculateWeightedProgress(c.tasks as any[] ?? []).percent
-                if (progress === 100) completed++;
-                else pending++;
-            }
-            setPendingTasks(pending);
-            setCompletedTasks(completed);
+        PersistenceAdapter.fetchActiveCustomerCount().then(({ data, error }) => {
+            if (error) console.error('[Dashboard] fetchActiveCustomerCount:', error);
+            else setActiveCustomers(data ?? 0);
         });
 
-        PersistenceAdapter.fetchOfficeTasks().then(({ data }) => {
-            setOfficeTasks(data ?? []);
+        PersistenceAdapter.fetchCustomerTaskStats().then(({ data, error }) => {
+            if (error) console.error('[Dashboard] fetchCustomerTaskStats:', error);
+            else { setPendingTasks(data!.pending); setCompletedTasks(data!.completed); }
+        });
+
+        PersistenceAdapter.fetchOfficeTasks().then(({ data, error }) => {
+            if (error) console.error('[Dashboard] fetchOfficeTasks:', error);
+            else setOfficeTasks(data ?? []);
         });
     }, []);
 
