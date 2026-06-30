@@ -3,12 +3,12 @@ import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { PersistenceAdapter } from '../services/PersistenceAdapter';
 import { TaskGeneratorService } from '../services/TaskService';
 import { BUSINESS_TYPE_OPTIONS, calculateWeightedProgress, getCustomerDisplayName } from '../registries/CustomerRegistry';
+import SearchableMultiSelect from './SearchableMultiSelect';
 import { useNavigate } from 'react-router';
 
-// הגדרת המבנה של פילטרים באפליקציה
 interface CustomerFilters {
     search: string;
-    businessType: string;
+    businessType: string[];
     isInsuranceActive: string;
     isIncomeTaxActive: string;
     isVatActive: string;
@@ -17,7 +17,7 @@ interface CustomerFilters {
 
 const INITIAL_FILTERS: CustomerFilters = {
     search: '',
-    businessType: '',
+    businessType: [],
     isInsuranceActive: 'all',
     isIncomeTaxActive: 'all',
     isVatActive: 'all',
@@ -63,7 +63,7 @@ const CustomerList: React.FC = () => {
 const matchesSearch =
 getCustomerDisplayName(client).includes(filters.search || '')
 || (client.businessDetails?.businessID || '').includes(filters.search || '')        
-    const matchesType = !filters.businessType || client.businessDetails?.businessType === filters.businessType;
+    const matchesType = filters.businessType.length === 0 || filters.businessType.includes(client.businessDetails?.businessType);
         const matchesInsurance = filters.isInsuranceActive === 'all' || String(!!client.isInsuranceActive) === filters.isInsuranceActive;
         const matchesTax = filters.isIncomeTaxActive === 'all' || String(!!client.isIncomeTaxActive) === filters.isIncomeTaxActive;
         const matchesVat = filters.isVatActive === 'all' || String(!!client.isVatActive) === filters.isVatActive;
@@ -150,12 +150,13 @@ getCustomerDisplayName(client).includes(filters.search || '')
                             className="input-style cursor-text"
                             onChange={(e) => setFilters({ ...filters, search: e.target.value })}
                         />
-                        <select className="input-style cursor-pointer" value={filters.businessType} onChange={(e) => setFilters({ ...filters, businessType: e.target.value })}>
-                            <option value="">כל סוגי העסק</option>
-                            {BUSINESS_TYPE_OPTIONS.map((opt) => (
-                                <option key={opt} value={opt}>{opt}</option>
-                            ))}
-                        </select>
+                        <SearchableMultiSelect
+                            label="סוג עסק"
+                            options={BUSINESS_TYPE_OPTIONS.map(o => [o, o] as [string, string])}
+                            selected={filters.businessType}
+                            onChange={(v) => setFilters({ ...filters, businessType: v })}
+                            searchable
+                        />
                         <select className="input-style cursor-pointer" value={filters.isInsuranceActive} onChange={(e) => setFilters({ ...filters, isInsuranceActive: e.target.value })}>
                             <option value="all">ביטוח לאומי (הכל)</option>
                             <option value="true">בטיפול</option>

@@ -47,6 +47,7 @@ interface MultiSelectProps {
     options: [string, string][];
     selected: string[];
     onChange: (selected: string[]) => void;
+    searchable?: boolean;
 }
 
 interface SubtaskTableRowProps {
@@ -311,12 +312,14 @@ const setSubtaskCompleted = useCallback(async (row: SubtaskViewRow, completed: b
                             options={categories}
                             selected={filters.categories}
                             onChange={(s) => setFilters({ ...filters, categories: s })}
+                            searchable
                         />
                         <MultiSelect
                             label="לקוח"
                             options={clientOptions}
                             selected={filters.clients}
                             onChange={(s) => setFilters({ ...filters, clients: s })}
+                            searchable
                         />
                         {/* 👈 הזרקת ה-MultiSelect החדש של הדחיפות בדיוק לפי המבנה שלך */}
                         <MultiSelect
@@ -415,8 +418,9 @@ const setSubtaskCompleted = useCallback(async (row: SubtaskViewRow, completed: b
 // Multi-select dropdown
 // ──────────────────────────────────────────────────────────────────
 
-const MultiSelect: React.FC<MultiSelectProps> = React.memo(({ label, options, selected, onChange }) => {
+const MultiSelect: React.FC<MultiSelectProps> = React.memo(({ label, options, selected, onChange, searchable }) => {
     const [open, setOpen] = useState<boolean>(false);
+    const [query, setQuery] = useState<string>('');
     const summary = selected.length === 0
         ? 'הכל'
         : selected.length === 1
@@ -427,6 +431,12 @@ const MultiSelect: React.FC<MultiSelectProps> = React.memo(({ label, options, se
         if (selected.includes(val)) onChange(selected.filter(v => v !== val));
         else onChange([...selected, val]);
     };
+
+    const visibleOptions = searchable && query
+        ? options.filter(([_, lbl]) => lbl.toLowerCase().includes(query.toLowerCase()))
+        : options;
+
+    const handleClose = () => { setOpen(false); setQuery(''); };
 
     return (
         <div className="relative">
@@ -441,26 +451,43 @@ const MultiSelect: React.FC<MultiSelectProps> = React.memo(({ label, options, se
             </button>
             {open && (
                 <>
-                    <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-                    <div className="absolute top-full mt-1 right-0 left-0 z-20 bg-white border border-slate-200 rounded-xl shadow-xl max-h-60 overflow-y-auto">
-                        <div className="flex justify-between p-2 border-b border-slate-100 sticky top-0 bg-white">
-                            <button type="button" onClick={() => onChange(options.map(([v]) => v))} className="cursor-pointer text-[11px] text-blue-600 font-bold hover:underline">בחר הכל</button>
-                            <button type="button" onClick={() => onChange([])} className="cursor-pointer text-[11px] text-slate-500 font-bold hover:underline">נקה</button>
+                    <div className="fixed inset-0 z-10" onClick={handleClose} />
+                    <div className="absolute top-full mt-1 right-0 left-0 z-20 bg-white border border-slate-200 rounded-xl shadow-xl">
+                        <div className="sticky top-0 bg-white border-b border-slate-100">
+                            {searchable && (
+                                <div className="p-2 border-b border-slate-100">
+                                    <input
+                                        type="text"
+                                        autoFocus
+                                        value={query}
+                                        onChange={e => setQuery(e.target.value)}
+                                        placeholder="חפש..."
+                                        className="input-style text-sm"
+                                        onClick={e => e.stopPropagation()}
+                                    />
+                                </div>
+                            )}
+                            <div className="flex justify-between p-2">
+                                <button type="button" onClick={() => onChange(visibleOptions.map(([v]) => v))} className="cursor-pointer text-[11px] text-blue-600 font-bold hover:underline">בחר הכל</button>
+                                <button type="button" onClick={() => onChange([])} className="cursor-pointer text-[11px] text-slate-500 font-bold hover:underline">נקה</button>
+                            </div>
                         </div>
-                        {options.map(([val, lbl]) => (
-                            <label key={val} className="flex items-center gap-2 px-3 py-2 hover:bg-slate-50 cursor-pointer">
-                                <input
-                                    type="checkbox"
-                                    checked={selected.includes(val)}
-                                    onChange={() => toggle(val)}
-                                    className="cursor-pointer accent-blue-600 w-4 h-4"
-                                />
-                                <span className="text-sm text-slate-700">{lbl}</span>
-                            </label>
-                        ))}
-                        {options.length === 0 && (
-                            <div className="p-4 text-center text-xs text-slate-400 italic">אין אפשרויות</div>
-                        )}
+                        <div className="max-h-60 overflow-y-auto">
+                            {visibleOptions.map(([val, lbl]) => (
+                                <label key={val} className="flex items-center gap-2 px-3 py-2 hover:bg-slate-50 cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        checked={selected.includes(val)}
+                                        onChange={() => toggle(val)}
+                                        className="cursor-pointer accent-blue-600 w-4 h-4"
+                                    />
+                                    <span className="text-sm text-slate-700">{lbl}</span>
+                                </label>
+                            ))}
+                            {visibleOptions.length === 0 && (
+                                <div className="p-4 text-center text-xs text-slate-400 italic">אין תוצאות</div>
+                            )}
+                        </div>
                     </div>
                 </>
             )}

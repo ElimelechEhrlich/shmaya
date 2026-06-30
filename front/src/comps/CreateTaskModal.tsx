@@ -5,6 +5,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { OFFICE_CUSTOMER_ID, PersistenceAdapter } from '../services/PersistenceAdapter';
 import { authService } from '../services/authService';
 import { PRIORITY_LEVELS, PRIORITY_STYLES } from '../registries/CustomerRegistry';
+import FilterableSelect from './FilterableSelect';
 
 interface CustomerOption {
     id: string;
@@ -207,19 +208,15 @@ const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
                                     </label>
 
                                     {!isOffice && (
-                                        <select
-                                            value={clientId}
-                                            onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setClientId(e.target.value)}
-                                            className="input-style cursor-pointer"
-                                            required={!isOffice}
-                                        >
-                                            <option value="">בחר לקוח...</option>
-                                            {customers.map((c: any) => (
-                                                <option key={c.id} value={c.id}>
-                                                    {c.customerDetails?.fullName || c.full_name || '—'}
-                                                </option>
-                                            ))}
-                                        </select>
+                                        <FilterableSelect
+                                            options={customers.map((c: any) => c.customerDetails?.fullName || c.full_name || '—')}
+                                            value={customers.find((c: any) => c.id === clientId)?.customerDetails?.fullName || customers.find((c: any) => c.id === clientId)?.full_name || ''}
+                                            onChange={(name) => {
+                                                const c = customers.find((c: any) => (c.customerDetails?.fullName || c.full_name) === name);
+                                                if (c) setClientId(c.id);
+                                            }}
+                                            placeholder="בחר לקוח..."
+                                        />
                                     )}
                                 </div>
                             )}

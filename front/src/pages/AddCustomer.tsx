@@ -192,10 +192,12 @@ export default function AddCustomer(): React.ReactElement {
                                 <FormField label="מזהה עסק"><input name="businessID" className="input-style" onChange={(e) => handleChange('businessDetails', e)} /></FormField>
                                 <FormField label="תאריך פתיחת העסק"><input name="openingDate" type="date" className="input-style" onChange={(e) => handleChange('businessDetails', e)} required /></FormField>
                                 <FormField label="סוג עסק לייצוג">
-                                    <select name="businessType" className="input-style" onChange={(e) => handleChange('businessDetails', e)} required>
-                                        <option value="">בחר סוג עסק...</option>
-                                        {BUSINESS_TYPE_OPTIONS.map((opt: string) => (<option key={opt} value={opt}>{opt}</option>))}
-                                    </select>
+                                    <FilterableSelect
+                                        options={BUSINESS_TYPE_OPTIONS}
+                                        value={formData.businessDetails.businessType}
+                                        onChange={(v) => setFormData(prev => ({ ...prev, businessDetails: { ...prev.businessDetails, businessType: v } }))}
+                                        placeholder="בחר סוג עסק..."
+                                    />
                                 </FormField>
                                 <FormField label="משלח יד">
                                     <FilterableSelect

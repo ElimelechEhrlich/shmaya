@@ -333,7 +333,7 @@ const CustomerCard: React.FC = () => {
                         <Section title="פרטי עסק" icon="🏢">
                             <EditableRow label="שם העסק" value={editData.businessDetails?.businessName} isEditing={isEditing} onCh={onCh('businessDetails', 'businessName')} />
                             <EditableRow label="מזהה עסק" value={editData.businessDetails?.businessID} isEditing={isEditing} onCh={onCh('businessDetails', 'businessID')} />
-                            <EditableRow label="סוג עסק" value={editData.businessDetails?.businessType} isEditing={isEditing} type="select" options={BUSINESS_TYPE_OPTIONS} onCh={onCh('businessDetails', 'businessType')} />
+                            <EditableRow label="סוג עסק" value={editData.businessDetails?.businessType} isEditing={isEditing} type="search-select" options={BUSINESS_TYPE_OPTIONS} onCh={onCh('businessDetails', 'businessType')} />
                             <EditableRow label="תאריך פתיחה" value={editData.businessDetails?.openingDate} isEditing={isEditing} type="date" onCh={onCh('businessDetails', 'openingDate')} />
                             <EditableRow
                                 label="משלח יד"
