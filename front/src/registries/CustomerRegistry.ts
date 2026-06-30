@@ -391,7 +391,7 @@ export function applyBusinessRules(c: Customer): Customer {
   }
 
   // 2. After forced-off cascade, sync isActive with authority state
-  next.isActive = hasActiveAuthorities(next) ? (c.isActive ?? true) : false;
+  next.isActive = hasActiveAuthorities(next);
 
   // 2. Employer cascade — symmetric (true ↔ false)
   if (isEmployerType(next)) {
