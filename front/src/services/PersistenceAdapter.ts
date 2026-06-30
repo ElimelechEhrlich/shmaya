@@ -504,41 +504,6 @@ export const PersistenceAdapter = {
     return { data: rows, error: null };
   },
 
-  async insertTasks(tasks: Partial<PersistedTask>[]): Promise<DbResult<null>> {
-    if (tasks.length === 0) return { data: null, error: null };
-
-    for (const t of tasks) {
-      const parentRow: Record<string, unknown> = {
-        customer_id: t.clientId,
-        title: t.title,
-        status: t.status || 'pending',
-      };
-      if (t.parentTaskId) {
-        parentRow.registry_key = t.parentTaskId;
-      }
-      const { data: parent, error: pErr } = await supabase
-        .from('parent_tasks')
-        .insert(parentRow)
-        .select('id')
-        .single();
-
-      if (pErr) return { data: null, error: pErr };
-
-      if (t.subTasks && t.subTasks.length > 0) {
-        const subRows = t.subTasks.map((s) => ({
-          parent_task_id: parent.id,
-          title: s.title,
-          is_completed: s.completed || false,
-          comment: s.comment || '',
-          priority: s.priority || 'medium'
-        }));
-        const { error: sErr } = await supabase.from('sub_tasks').insert(subRows);
-        if (sErr) return { data: null, error: sErr };
-      }
-    }
-    return { data: null, error: null };
-  },
-
   async insertSingleTask(taskData: {
     title: string;
     clientId: string | null;
