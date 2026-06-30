@@ -112,7 +112,7 @@ const SubtaskRow: React.FC<SubtaskRowProps> = React.memo(({
                         >
                             ✎
                         </button>
-                        {onDelete && row.parentTaskId === null && (
+                        {onDelete && !row.parentTaskId && (
                             <button
                                 type="button"
                                 onClick={() => onDelete(row)}
