@@ -145,7 +145,6 @@ const CustomerCard: React.FC = () => {
     const navigate = useNavigate();
 
     const {
-        customer,
         editData,
         loading,
         isEditing,
@@ -416,11 +415,11 @@ const CustomerCard: React.FC = () => {
                     {/* ✨ סעיף 3: אזור המשימות המעודכן, הפרופורציונלי והחסין להרשאות עובדים */}
                     <div className="space-y-6">
                         <Section title="משימות" icon="📋">
-                            {(!customer?.tasks || customer.tasks.length === 0) ? (
+                            {(!editData?.tasks || editData.tasks.length === 0) ? (
                                 <p className="text-sm text-slate-400 italic text-center py-8">לא נוצרו משימות עדיין.</p>
                             ) : (
                                 <div className="space-y-4">
-                                    {customer.tasks.map((task: any) => (
+                                    {editData.tasks.map((task: any) => (
                                         <div key={task.id} className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
                                             {/* כותרת קבוצת משימת האב וסעיף 2 סימון גורף */}
                                             <div className="flex justify-between items-center border-b border-slate-100 pb-2 mb-3">
