@@ -1,6 +1,6 @@
 // src/App.tsx
 import React from 'react';
-import { Navigate, Route, Routes, useLocation } from 'react-router';
+import { Navigate, Route, Routes } from 'react-router';
 import Layout from './comps/Layout';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
@@ -19,7 +19,6 @@ import { ModalProvider } from './contexts/ModalContext';
 
 
 function App(): React.ReactElement {
-  const location = useLocation();
   return (
   <ModalProvider>
     <Routes>
@@ -36,7 +35,7 @@ function App(): React.ReactElement {
         <Route index element={<Navigate to="dashboard" />} />
         <Route path="dashboard" element={<Dashboard />} />
         <Route path="customers" element={<Customers />} />
-        <Route path="customers/new" element={<AddCustomer key={location.search} />} />
+        <Route path="customers/new" element={<AddCustomer />} />
         <Route path="customers/:id" element={<CustomerCard />} />
         <Route path="tasks" element={<Tasks />} />
         <Route path="tasks/:id" element={<TaskDetails />} />

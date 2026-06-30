@@ -1,7 +1,7 @@
 // src/comps/AddCustomer.tsx
 import React, { useEffect, useState } from 'react';
 import { TaskGeneratorService } from '../services/TaskService';
-import { useNavigate } from 'react-router';
+import { useNavigate, useLocation } from 'react-router';
 import FormField from '../comps/FormField';
 import TaskCard from '../comps/TaskCard';
 import { CustomerService } from '../services/CustomerService';
@@ -14,7 +14,6 @@ import {
 } from '../registries/CustomerRegistry';
 import { useModal } from '../contexts/ModalContext';
 import { PersistenceAdapter } from '../services/PersistenceAdapter';
-import { useSearchParams } from 'react-router';
 import { handleLtdCustomerFlow } from '../utils/handleLtdCustomerFlow';
 
 
@@ -49,19 +48,18 @@ interface ToggleHeaderProps {
 
 export default function AddCustomer(): React.ReactElement {
     const navigate = useNavigate();
-    const [searchParams] = useSearchParams();
-    console.log('[AddCustomer mount] searchParams:', searchParams.toString());
-    console.log('[AddCustomer mount] fullName param:', searchParams.get('fullName'));
+    const location = useLocation();
+    const prefill = (location.state as { fullName?: string; identityId?: string; phoneNumber?: string; address?: string; email?: string }) || {};
     const modal = useModal();
 
     const [formData, setFormData] = useState<CustomerFormData>({
         customerDetails: {
-    fullName: searchParams.get('fullName') || '',
-    identityId: searchParams.get('identityId') || '',
-    phoneNumber: searchParams.get('phoneNumber') || '',
-    address: searchParams.get('address') || '',
-    email: searchParams.get('email') || '',
-},
+            fullName: prefill.fullName || '',
+            identityId: prefill.identityId || '',
+            phoneNumber: prefill.phoneNumber || '',
+            address: prefill.address || '',
+            email: prefill.email || '',
+        },
         businessDetails: {
             businessName: '', businessID: '', businessType: '', openingDate: '', occupation: '', businessDescription: '', employsWorkers: 'no', deductionsId: ''
         },

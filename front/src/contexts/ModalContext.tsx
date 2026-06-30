@@ -28,7 +28,7 @@ export function ModalProvider({ children }: { children: React.ReactNode }): Reac
         return new Promise((resolve) => {
             setOptions({
                 title, message, autoCloseMs,
-                buttons: [{ label: 'אישור', variant: 'primary', onClick: () => { close(); resolve(); } }],
+                buttons: autoCloseMs ? [] : [{ label: 'אישור', variant: 'primary', onClick: () => { close(); resolve(); } }],
             });
             if (autoCloseMs) {
                 timerRef.current = setTimeout(() => { close(); resolve(); }, autoCloseMs);

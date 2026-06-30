@@ -34,12 +34,8 @@ export async function handleLtdCustomerFlow(
                 label: 'הוסף תיק לקוח',
                 variant: 'primary',
                 onClick: () => {
-                    const params = new URLSearchParams(personalDetails);
-                    console.log('[LTD] personalDetails:', personalDetails);
-                    console.log('[LTD] params.toString():', params.toString());
-                    console.log('[LTD] navigating to:', `/admin/customers/new?${params.toString()}`);
                     modal.alert('שומר תיק לקוח ועובר לרישום תיק לקוח חדש...', undefined, 2000).then(() => {
-                        navigate(`/admin/customers/new?${params.toString()}`);
+                        navigate('/admin/customers/new', { state: personalDetails });
                     });
                 },
             },
