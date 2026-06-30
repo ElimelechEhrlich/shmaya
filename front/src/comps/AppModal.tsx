@@ -13,6 +13,7 @@ export interface ModalOptions {
     title?: string;
     message: string;
     buttons: ModalButton[];
+    autoCloseMs?: number;
 }
 
 interface AppModalProps {

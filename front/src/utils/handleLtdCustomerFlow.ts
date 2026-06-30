@@ -35,7 +35,7 @@ export async function handleLtdCustomerFlow(
                 variant: 'primary',
                 onClick: () => {
                     const params = new URLSearchParams(personalDetails);
-                    modal.alert('שומר תיק לקוח ועובר לרישום תיק לקוח חדש...').then(() => {
+                    modal.alert('שומר תיק לקוח ועובר לרישום תיק לקוח חדש...', undefined, 2000).then(() => {
                         navigate(`/admin/customers/new?${params.toString()}`);
                     });
                 },

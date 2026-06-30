@@ -13,25 +13,26 @@ const ModalContext = createContext<ModalContextValue | null>(null);
 export function ModalProvider({ children }: { children: React.ReactNode }): React.ReactElement {
     const [options, setOptions] = useState<ModalOptions | null>(null);
     const resolveRef = useRef<((value: boolean) => void) | null>(null);
+    const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const close = useCallback(() => {
+        if (timerRef.current) {
+            clearTimeout(timerRef.current);
+            timerRef.current = null;
+        }
         setOptions(null);
         resolveRef.current = null;
     }, []);
 
-    const alert = useCallback((message: string, title?: string): Promise<void> => {
+    const alert = useCallback((message: string, title?: string, autoCloseMs?: number): Promise<void> => {
         return new Promise((resolve) => {
             setOptions({
-                title,
-                message,
-                buttons: [
-                    {
-                        label: 'אישור',
-                        variant: 'primary',
-                        onClick: () => { close(); resolve(); },
-                    },
-                ],
+                title, message, autoCloseMs,
+                buttons: [{ label: 'אישור', variant: 'primary', onClick: () => { close(); resolve(); } }],
             });
+            if (autoCloseMs) {
+                timerRef.current = setTimeout(() => { close(); resolve(); }, autoCloseMs);
+            }
         });
     }, [close]);
 
