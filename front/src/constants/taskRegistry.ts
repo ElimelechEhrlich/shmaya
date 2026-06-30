@@ -109,8 +109,6 @@ export const AUTO_TASKS_CONFIG: RegistryParentTask[] = [
     {
         id: 'INSURANCE',
         title: 'טיפול מול ביטוח לאומי',
-        // -- הגנה ברמת האב: מופעל רק אם קיימת שורה פעילה בטבלת ביטוח לאומי
-        condition: (c: RegistryCustomer): boolean => !!c.isInsuranceActive,
         subTasks: [
             { 
                 id: 'rep', 

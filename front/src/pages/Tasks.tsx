@@ -60,13 +60,6 @@ interface SubtaskTableRowProps {
 }
 
 
-// ✨ משקולות לצורך מיון דחיפות פנימי (מהגבוה לנמוך)
-const PRIORITY_WEIGHTS = {
-    critical: 4,
-    high: 3,
-    medium: 2,
-    low: 1
-};
 
 
 export default function Tasks(): React.ReactElement {
