@@ -1,7 +1,7 @@
 // src/services/authService.ts
 
 // ✨ עדכון: רשימת המשתמשים המורשים במשרד (סעיף 6)
-const ALLOWED_USERS: string[] = ["מוישי", "יוחנן", "שמוליק"];
+export const ALLOWED_USERS: string[] = ["מוישי", "יוחנן", "שמוליק"];
 
 // הגדרת המבנה (Interface) של שירות ה-Auth - נשאר זהה לחלוטין
 export interface AuthService {

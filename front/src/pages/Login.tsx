@@ -1,10 +1,7 @@
 // src/pages/Login.tsx
 import React, { useState } from "react";
 import { useNavigate } from "react-router";
-import { authService } from "../services/authService";
-
-// הגדרת רשימת המשתמשים המורשים במערכת
-const ALLOWED_USERS = ["מוישי", "יוחנן", "שמוליק"];
+import { authService, ALLOWED_USERS } from "../services/authService";
 
 export default function Login(): React.ReactElement {
   // נגדיר את ברירת המחדל למשתמש הראשון ברשימה
