@@ -135,8 +135,8 @@ export function useCustomer(customerId: string | undefined): UseCustomerResult {
             let updatedData = { ...editData };
 
             if (isCurrentlyActive && !hasAnyAuthority) {
-                const shouldDeactivate = window.confirm(
-                    '❓ שים לב: כיבית את כל הרשויות בטיפול עבור לקוח זה.\nהאם ברצונך לשמור את השינויים ולהפוך את הלקוח ל"לא פעיל" באופן אוטומטי?'
+                const shouldDeactivate = await modal.confirm(
+                    'שים לב: כיבית את כל הרשויות בטיפול עבור לקוח זה.\nהאם ברצונך לשמור את השינויים ולהפוך את הלקוח ל"לא פעיל" באופן אוטומטי?'
                 );
                 if (!shouldDeactivate) {
                     return { success: false, error: 'השמירה בבוטלה על ידי המשתמש.' };

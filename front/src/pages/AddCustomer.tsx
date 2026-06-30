@@ -122,7 +122,7 @@ export default function AddCustomer(): React.ReactElement {
         let dataToSave = { ...formData };
         
         if (!hasAuthorities) {
-            const saveAsInactive = window.confirm('⚠️ לא הגדרת טיפול באף רשות. האם ברצונך לשמור את הלקוח כ"לא פעיל"?');
+            const saveAsInactive = await modal.confirm('לא הגדרת טיפול באף רשות. האם ברצונך לשמור את הלקוח כ"לא פעיל"?');
             if (!saveAsInactive) return;
             dataToSave = { ...dataToSave, isActive: false };
         }
