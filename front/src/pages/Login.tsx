@@ -1,6 +1,4 @@
 // src/pages/Login.tsx
-import { supabase } from '../supabaseClient';
-import { USER_MAP } from '../services/authService';
 import React, { useState } from "react";
 import { useNavigate } from "react-router";
 import { authService, ALLOWED_USERS } from "../services/authService";
@@ -11,27 +9,13 @@ export default function Login(): React.ReactElement {
   const [error, setError] = useState<boolean>(false);
   const navigate = useNavigate();
 
-const [errorMsg, setErrorMsg] = useState<string>('');
-
 const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
   e.preventDefault();
   setError(false);
-  setErrorMsg('');
   if (!ALLOWED_USERS.includes(username)) { setError(true); return; }
-  try {
-    const { error } = await supabase.auth.signInWithPassword(
-      USER_MAP[username.trim()]
-    );
-    if (error) {
-      setErrorMsg(error.message);
-      setError(true);
-      return;
-    }
-    navigate('/admin/dashboard');
-  } catch(e: any) {
-    setErrorMsg(e.message);
-    setError(true);
-  }
+  const ok = await authService.login(username);
+  if (!ok) { setError(true); return; }
+  navigate('/admin/dashboard');
 };
   return (
     <div className="h-screen w-full flex items-center justify-center bg-slate-900" dir="rtl">
@@ -68,7 +52,6 @@ const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
               שגיאה: משתמש לא מורשה במערכת!
             </p>
           )}
-          {errorMsg && <p className="text-red-400 text-xs text-center mt-1">{errorMsg}</p>}
           
           <button 
             type="submit" 
