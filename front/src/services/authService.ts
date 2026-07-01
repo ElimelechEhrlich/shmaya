@@ -1,43 +1,51 @@
-import { supabase } from '../supabaseClient.js';
-
 export const ALLOWED_USERS: string[] = ["מוישי", "יוחנן", "שמוליק"];
 
-const USER_MAP: Record<string, { email: string; password: string }> = {
-  'מוישי':   { email: 'moishi@shmaya.internal',   password: 'moishi123'   },
-  'יוחנן':   { email: 'yochanan@shmaya.internal', password: 'Yochanan@Shmaya2025!' },
-  'שמוליק':  { email: 'shmulik@shmaya.internal',  password: 'Shmulik@Shmaya2025!'  },
-};
+export interface AuthService {
+  login(username: string | null | undefined): boolean;
+  isAuthenticated(): boolean;
+  logout(): void;
+  getCurrentUser(): string | null;
+  canDelete(): boolean;
+  canApproveFinal(title: string): boolean;
+}
 
-export const authService = {
-  async login(username: string): Promise<boolean> {
-    const creds = USER_MAP[username?.trim()];
-    if (!creds) return false;
-    const { error } = await supabase.auth.signInWithPassword(creds);
-    return !error;
+export const authService: AuthService = {
+  login(username: string | null | undefined): boolean {
+    const cleanUsername: string = username ? username.trim() : "";
+    if (ALLOWED_USERS.includes(cleanUsername)) {
+      localStorage.setItem('user_name', cleanUsername);
+      localStorage.setItem('is_authenticated', 'true');
+      return true;
+    }
+    this.logout();
+    return false;
   },
 
-  async isAuthenticated(): Promise<boolean> {
-    const { data } = await supabase.auth.getSession();
-    return !!data.session;
+  isAuthenticated(): boolean {
+    return localStorage.getItem('is_authenticated') === 'true';
   },
 
-  async logout(): Promise<void> {
-    await supabase.auth.signOut();
+  logout(): void {
+    localStorage.removeItem('user_name');
+    localStorage.removeItem('is_authenticated');
   },
 
-  async getCurrentUser(): Promise<string | null> {
-    const { data } = await supabase.auth.getSession();
-    return data.session?.user?.user_metadata?.username ?? null;
+  getCurrentUser(): string | null {
+    return localStorage.getItem('user_name');
   },
 
-  async canDelete(): Promise<boolean> {
-    const user = await this.getCurrentUser();
-    return user === 'מוישי';
+  canDelete(): boolean {
+    const user = this.getCurrentUser();
+    if (user === 'יוחנן' || user === 'שמוליק') return false;
+    return true;
   },
 
   canApproveFinal(subtaskTitle: string): boolean {
-    // נשאר sync — נקרא ממקומות sync בקוד
-    // יתוקן בשלב הבא עם RLS
+    const user = this.getCurrentUser();
+    const isFinalApproval = subtaskTitle?.toLowerCase().includes("אישור ניהול סופי");
+    if (isFinalApproval && (user === 'יוחנן' || user === 'שמוליק')) {
+        return false;
+    }
     return true;
   },
 };
