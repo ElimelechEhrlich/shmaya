@@ -9,28 +9,14 @@ export default function Login(): React.ReactElement {
   const [error, setError] = useState<boolean>(false);
   const navigate = useNavigate();
 
-  const handleLogin = (e: React.FormEvent<HTMLFormElement>): void => {
-    e.preventDefault();
-    setError(false);
-
-    // וידאו הגנה קל שהמשתמש שנבחר אכן חוקי במערכת
-    if (!ALLOWED_USERS.includes(username)) {
-      setError(true);
-      return;
-    }
-
-    // שמירת היוזר ב-localStorage (משתמש במפתח user_name שמוגדר ב-Header)
-    localStorage.setItem('user_name', username);
-    
-    // במידה ויש לוגיקה ייעודית פנימית ב-authService שלך
-    if (typeof authService?.login === 'function') {
-      authService.login(username);
-    }
-    
-    // ניתוב לדף הבית / דאשבורד הראשי של המערכת
-    navigate('/admin/dashboard');
-  };
-
+const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
+  e.preventDefault();
+  setError(false);
+  if (!ALLOWED_USERS.includes(username)) { setError(true); return; }
+  const ok = await authService.login(username);
+  if (!ok) { setError(true); return; }
+  navigate('/admin/dashboard');
+};
   return (
     <div className="h-screen w-full flex items-center justify-center bg-slate-900" dir="rtl">
       <div className="bg-white p-10 rounded-2xl shadow-2xl w-full max-w-sm border-b-8 border-blue-600">

@@ -1,18 +1,23 @@
-// src/comps/ProtectedRoute.tsx
-import React from 'react';
-import { authService } from '../services/authService';
+import React, { useEffect, useState } from 'react';
 import { Navigate } from 'react-router';
+import { supabase } from '../supabaseClient.js';
 
-// הגדרת הטיפוס עבור נתיב מוגן במערכת
-interface ProtectedRouteProps {
-    children: React.ReactNode;
-}
+export default function ProtectedRoute({ children }: { children: React.ReactNode }) {
+  const [loading, setLoading] = useState(true);
+  const [authenticated, setAuthenticated] = useState(false);
 
-export default function ProtectedRoute({ children }: ProtectedRouteProps): React.ReactElement | null {
-    if (!authService.isAuthenticated()) {
-        return <Navigate to="/" replace />;
-    }
-    
-    // כפיית טיפוס קלה כדי להבטיח ש-TypeScript מקבל את ה-children כאלמנט ויזואלי תקין לחזרה
-    return children as React.ReactElement;
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      setAuthenticated(!!data.session);
+      setLoading(false);
+    });
+  }, []);
+
+  if (loading) return (
+    <div className="h-screen flex items-center justify-center">
+      <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
+    </div>
+  );
+
+  return authenticated ? <>{children}</> : <Navigate to="/" replace />;
 }
