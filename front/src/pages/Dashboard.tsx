@@ -41,7 +41,7 @@ export default function Dashboard() {
         });
     }, []);
 
-    const handleSubtaskToggle = useCallback((taskId: string, subtaskId: string, completed: boolean) => {
+    const handleSubtaskToggle = useCallback(async (taskId: string, subtaskId: string, completed: boolean) => {
         setOfficeTasks(prev => prev?.map(task =>
             task.id !== taskId ? task : {
                 ...task,
@@ -50,8 +50,9 @@ export default function Dashboard() {
                 ),
             }
         ) ?? null);
-        PersistenceAdapter.updateSubtaskStatus(taskId, subtaskId, completed);
-    }, []);
+        const { error } = await PersistenceAdapter.updateSubtaskStatus(taskId, subtaskId, completed);
+        if (error) reloadOfficeTasks();
+    }, [reloadOfficeTasks]);
 
     const handleDeleteSubtask = useCallback(async (row: OfficeRow) => {
         const confirmed = await modal.confirm(`האם למחוק את המשימה "${row.title}"?\nפעולה זו לא ניתנת לביטול.`);

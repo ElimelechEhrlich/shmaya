@@ -616,8 +616,28 @@ export const PersistenceAdapter = {
   },
 
   async deleteSubtask(subtaskId: string): Promise<DbResult<null>> {
-    const { error } = await supabase.from('sub_tasks').delete().eq('id', subtaskId);
-    return { data: null, error };
+    const { data: deleted, error } = await supabase
+      .from('sub_tasks')
+      .delete()
+      .eq('id', subtaskId)
+      .select('parent_task_id')
+      .single();
+
+    if (error) return { data: null, error };
+
+    const parentId: string = deleted.parent_task_id;
+
+    const { count } = await supabase
+      .from('sub_tasks')
+      .select('*', { count: 'exact', head: true })
+      .eq('parent_task_id', parentId);
+
+    if (count === 0) {
+      // best-effort: clean up orphaned parent row; FK violation if race — silently ignored
+      await supabase.from('parent_tasks').delete().eq('id', parentId);
+    }
+
+    return { data: null, error: null };
   },
 
   async updateTaskStatus(taskId: string, status: 'pending' | 'completed'): Promise<DbResult<null>> {
