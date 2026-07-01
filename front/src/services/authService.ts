@@ -1,8 +1,8 @@
-import { supabase } from '../supabaseClient.js';
+import { supabase } from '../supabaseClient.ts';
 
 export const ALLOWED_USERS: string[] = ["מוישי", "יוחנן", "שמוליק"];
 
-const USER_MAP: Record<string, { email: string; password: string }> = {
+export const USER_MAP: Record<string, { email: string; password: string }> = {
   'מוישי':   { email: 'moishi@shmaya.internal',   password: 'moishi123'   },
   'יוחנן':   { email: 'yochanan@shmaya.internal', password: 'Yochanan@Shmaya2025!' },
   'שמוליק':  { email: 'shmulik@shmaya.internal',  password: 'Shmulik@Shmaya2025!'  },
