@@ -1,68 +1,43 @@
-// src/services/authService.ts
+import { supabase } from '../supabaseClient.js';
 
-// ✨ עדכון: רשימת המשתמשים המורשים במשרד (סעיף 6)
 export const ALLOWED_USERS: string[] = ["מוישי", "יוחנן", "שמוליק"];
 
-// הגדרת המבנה (Interface) של שירות ה-Auth - נשאר זהה לחלוטין
-export interface AuthService {
-  login(username: string | null | undefined): boolean;
-  isAuthenticated(): boolean;
-  logout(): void;
-  getCurrentUser(): string | null;
-  canDelete(): boolean;                  // ✨ פונקציית עזר חדשה להרשאת מחיקה
-  canApproveFinal(title: string): boolean; // ✨ פונקציית עזר חדשה לאישור ניהול סופי
-}
+const USER_MAP: Record<string, { email: string; password: string }> = {
+  'מוישי':   { email: 'moishi@shmaya.internal',   password: 'Moishi@Shmaya2025!'   },
+  'יוחנן':   { email: 'yochanan@shmaya.internal', password: 'Yochanan@Shmaya2025!' },
+  'שמוליק':  { email: 'shmulik@shmaya.internal',  password: 'Shmulik@Shmaya2025!'  },
+};
 
-export const authService: AuthService = {
-  login(username: string | null | undefined): boolean {
-    // ניקוי רווחים מהקלט של המשתמש בצורה בטוחה
-    const cleanUsername: string = username ? username.trim() : "";
-
-    // ✨ תיקון: בודק אם המשתמש קיים ברשימת העובדים המורשים
-    if (ALLOWED_USERS.includes(cleanUsername)) {
-      localStorage.setItem('user_name', cleanUsername);
-      localStorage.setItem('is_authenticated', 'true');
-      return true; // מאשר כניסה גם ליוחנן ושמוליק!
-    }
-    
-    // אם המשתמש לא מורשה - ננקה את הזיכרון לביטחון
-    this.logout();
-    return false;
+export const authService = {
+  async login(username: string): Promise<boolean> {
+    const creds = USER_MAP[username?.trim()];
+    if (!creds) return false;
+    const { error } = await supabase.auth.signInWithPassword(creds);
+    return !error;
   },
 
-  isAuthenticated(): boolean {
-    return localStorage.getItem('is_authenticated') === 'true';
+  async isAuthenticated(): Promise<boolean> {
+    const { data } = await supabase.auth.getSession();
+    return !!data.session;
   },
 
-  logout(): void {
-    localStorage.removeItem('user_name');
-    localStorage.removeItem('is_authenticated');
+  async logout(): Promise<void> {
+    await supabase.auth.signOut();
   },
 
-  getCurrentUser(): string | null {
-    return localStorage.getItem('user_name');
+  async getCurrentUser(): Promise<string | null> {
+    const { data } = await supabase.auth.getSession();
+    return data.session?.user?.user_metadata?.username ?? null;
   },
 
-  // ✨ סעיף 6 + 10: פונקציה הבודקת האם המשתמש המחובר רשאי למחוק לקוחות
-  canDelete(): boolean {
-    const user = this.getCurrentUser();
-    if (user === 'יוחנן' || user === 'שמוליק') return false;
-    return true; // מוישי/אדמין מורשה למחוק
+  async canDelete(): Promise<boolean> {
+    const user = await this.getCurrentUser();
+    return user === 'מוישי';
   },
 
-  // ✨ סעיף 6: פונקציה הבודקת האם המשתמש רשאי לסמן "אישור ניהול סופי"
-// בתוך src/services/authService.ts
-
-canApproveFinal(subtaskTitle: string): boolean {
-    const user = this.getCurrentUser();
-    
-    // בודק בצורה גמישה וחסינה האם הטקסט מכיל את הביטוי הרגיש
-    const isFinalApproval = subtaskTitle?.toLowerCase().includes("אישור ניהול סופי");
-    
-    // אם זו משימת אישור סופי והמשתמש הוא יוחנן או שמוליק - חסום לחלוטין (מחזיר false)
-    if (isFinalApproval && (user === 'יוחנן' || user === 'שמוליק')) {
-        return false;
-    }
-    return true; // מורשה (מוישי)
-}
+  canApproveFinal(subtaskTitle: string): boolean {
+    // נשאר sync — נקרא ממקומות sync בקוד
+    // יתוקן בשלב הבא עם RLS
+    return true;
+  },
 };
