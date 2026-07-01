@@ -1,4 +1,4 @@
-import { supabase } from '../supabaseClient.js';
+import { supabase } from '../supabaseClient.ts';
 
 export const ALLOWED_USERS: string[] = ["מוישי", "יוחנן", "שמוליק"];
 
