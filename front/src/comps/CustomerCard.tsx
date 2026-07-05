@@ -29,7 +29,9 @@ interface EditableRowProps {
     label: string;
     value: any;
     isEditing: boolean;
-    onCh: (value: string) => void;
+    category: string;
+    field: string;
+    onChange: (category: string, field: string, value: any) => void;
     type?: "text" | "select" | "date" | "search-select";
     options?: string[];
 }
@@ -38,7 +40,9 @@ interface ToggleRowProps {
     label: string;
     active: boolean | undefined;
     isEditing: boolean;
-    onToggle: (checked: boolean) => void;
+    category: string | null;
+    field: string;
+    onChange: (category: string | null, field: string, value: any) => void;
 }
 
 
@@ -62,24 +66,24 @@ const Section: React.FC<SectionProps> = React.memo(({ title, icon, children }) =
     </div>
 ));
 
-const EditableRow: React.FC<EditableRowProps> = React.memo(({ label, value, isEditing, onCh, type = "text", options = [] }) => (
+const EditableRow: React.FC<EditableRowProps> = React.memo(({ label, value, isEditing, category, field, onChange, type = "text", options = [] }) => (
     <div className="mb-4 last:mb-0">
         <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1 tracking-wide">{label}</label>
         {isEditing ? (
             type === "search-select" ? ( // <-- הוסף את הבלוק הזה
                 <FilterableSelect
-                    options={options} 
-                    value={value || ''} 
-                    onChange={onCh} 
-                    placeholder="הקלד לחיפוש..." 
+                    options={options}
+                    value={value || ''}
+                    onChange={(v) => onChange(category, field, v)}
+                    placeholder="הקלד לחיפוש..."
                 />
             ) : type === "select" ? (
-                <select className="input-style cursor-pointer" value={value} onChange={(e) => onCh(e.target.value)}>
+                <select className="input-style cursor-pointer" value={value} onChange={(e) => onChange(category, field, e.target.value)}>
                     <option value="">בחר...</option>
                     {options.map(o => <option key={o} value={o}>{o === 'yes' ? 'כן' : o === 'no' ? 'לא' : o}</option>)}
                 </select>
             ) : (
-                <input className="input-style" value={value || ''} onChange={(e) => onCh(e.target.value)} type={type} />
+                <input className="input-style" value={value || ''} onChange={(e) => onChange(category, field, e.target.value)} type={type} />
             )
         ) : (
             type === "select" || type === "search-select" ? (
@@ -92,14 +96,14 @@ const EditableRow: React.FC<EditableRowProps> = React.memo(({ label, value, isEd
     </div>
 ));
 
-const ToggleRow: React.FC<ToggleRowProps> = React.memo(({ label, active, isEditing, onToggle }) => (
+const ToggleRow: React.FC<ToggleRowProps> = React.memo(({ label, active, isEditing, category, field, onChange }) => (
     <div className={`flex justify-between items-center p-3 rounded-xl border transition ${active ? 'bg-blue-50 border-blue-100' : 'bg-white border-slate-100 hover:border-slate-200'}`}>
         <span className={`text-sm font-bold ${active ? 'text-blue-700' : 'text-slate-500'}`}>{label}</span>
         <input
             type="checkbox"
             checked={!!active}
             disabled={!isEditing}
-            onChange={(e) => onToggle(e.target.checked)}
+            onChange={(e) => onChange(category, field, e.target.checked)}
             className={`w-5 h-5 accent-blue-600 ${isEditing ? 'cursor-pointer' : 'cursor-not-allowed'}`}
         />
     </div>
@@ -216,9 +220,6 @@ const CustomerCard: React.FC = () => {
     const monthlyFeeNum = parseFloat(String(editData.paymentDetails?.monthlyFee ?? ''));
     const directDebitDisabled = !editData.paymentDetails?.monthlyFee || isNaN(monthlyFeeNum) || monthlyFeeNum <= 0;
 
-    const onCh = (category: string, field: string) => (value: string) =>
-        actions.updateField(category, field, value);
-
     return (
         <div className="p-6 min-h-screen" dir="rtl">
             <div className="max-w-7xl mx-auto">
@@ -296,29 +297,31 @@ const CustomerCard: React.FC = () => {
                     {/* Column 1 */}
                     <div className="space-y-6">
                         <Section title="פרטים אישיים" icon="👤">
-                            <EditableRow label="שם מלא" value={editData.customerDetails?.fullName} isEditing={isEditing} onCh={onCh('customerDetails', 'fullName')} />
-                            <EditableRow label="תעודת זהות" value={editData.customerDetails?.identityId} isEditing={isEditing} onCh={onCh('customerDetails', 'identityId')} />
-                            <EditableRow label="טלפון" value={editData.customerDetails?.phoneNumber} isEditing={isEditing} onCh={onCh('customerDetails', 'phoneNumber')} />
-                            <EditableRow label="כתובת מגורים" value={editData.customerDetails?.address} isEditing={isEditing} onCh={onCh('customerDetails', 'address')} />
-                            <EditableRow label="אימייל" value={editData.customerDetails?.email} isEditing={isEditing} onCh={onCh('customerDetails', 'email')} />
+                            <EditableRow label="שם מלא" value={editData.customerDetails?.fullName} isEditing={isEditing} category="customerDetails" field="fullName" onChange={actions.updateField} />
+                            <EditableRow label="תעודת זהות" value={editData.customerDetails?.identityId} isEditing={isEditing} category="customerDetails" field="identityId" onChange={actions.updateField} />
+                            <EditableRow label="טלפון" value={editData.customerDetails?.phoneNumber} isEditing={isEditing} category="customerDetails" field="phoneNumber" onChange={actions.updateField} />
+                            <EditableRow label="כתובת מגורים" value={editData.customerDetails?.address} isEditing={isEditing} category="customerDetails" field="address" onChange={actions.updateField} />
+                            <EditableRow label="אימייל" value={editData.customerDetails?.email} isEditing={isEditing} category="customerDetails" field="email" onChange={actions.updateField} />
                         </Section>
 
                         <Section title="פרטי עסק" icon="🏢">
-                            <EditableRow label="שם העסק" value={editData.businessDetails?.businessName} isEditing={isEditing} onCh={onCh('businessDetails', 'businessName')} />
-                            <EditableRow label="מזהה עסק" value={editData.businessDetails?.businessID} isEditing={isEditing} onCh={onCh('businessDetails', 'businessID')} />
-                            <EditableRow label="סוג עסק" value={editData.businessDetails?.businessType} isEditing={isEditing} type="search-select" options={BUSINESS_TYPE_OPTIONS} onCh={onCh('businessDetails', 'businessType')} />
-                            <EditableRow label="תאריך פתיחה" value={editData.businessDetails?.openingDate} isEditing={isEditing} type="date" onCh={onCh('businessDetails', 'openingDate')} />
+                            <EditableRow label="שם העסק" value={editData.businessDetails?.businessName} isEditing={isEditing} category="businessDetails" field="businessName" onChange={actions.updateField} />
+                            <EditableRow label="מזהה עסק" value={editData.businessDetails?.businessID} isEditing={isEditing} category="businessDetails" field="businessID" onChange={actions.updateField} />
+                            <EditableRow label="סוג עסק" value={editData.businessDetails?.businessType} isEditing={isEditing} type="search-select" options={BUSINESS_TYPE_OPTIONS} category="businessDetails" field="businessType" onChange={actions.updateField} />
+                            <EditableRow label="תאריך פתיחה" value={editData.businessDetails?.openingDate} isEditing={isEditing} type="date" category="businessDetails" field="openingDate" onChange={actions.updateField} />
                             <EditableRow
                                 label="משלח יד"
                                 value={editData.businessDetails?.occupation}
                                 isEditing={isEditing}
                                 type="search-select"
                                 options={branchesList}
-                                onCh={onCh('businessDetails', 'occupation')}
+                                category="businessDetails"
+                                field="occupation"
+                                onChange={actions.updateField}
                             />
                             {isEmployerType && (
                                 <div className="mt-4 p-4 bg-blue-50 rounded-xl border border-blue-100 space-y-3">
-                                    <EditableRow label="מעסיק עובדים?" value={editData.businessDetails?.employsWorkers} isEditing={isEditing} type="select" options={['yes', 'no']} onCh={onCh('businessDetails', 'employsWorkers')} />
+                                    <EditableRow label="מעסיק עובדים?" value={editData.businessDetails?.employsWorkers} isEditing={isEditing} type="select" options={['yes', 'no']} category="businessDetails" field="employsWorkers" onChange={actions.updateField} />
                                     {editData.businessDetails?.employsWorkers === 'yes' && (
                                         <div className="flex items-center gap-3">
                                             <span className="text-xs font-bold text-blue-700">תיק ניכויים נדרש?</span>
@@ -334,11 +337,11 @@ const CustomerCard: React.FC = () => {
                     <div className="space-y-6">
                         <Section title="סטטוס רשויות" icon="🛡️">
                             <div className="space-y-2">
-                                <ToggleRow label="ביטוח לאומי" active={editData.isInsuranceActive} isEditing={isEditing} onToggle={(v) => actions.updateField(null, 'isInsuranceActive', v)} />
+                                <ToggleRow label="ביטוח לאומי" active={editData.isInsuranceActive} isEditing={isEditing} category={null} field="isInsuranceActive" onChange={actions.updateField} />
                                 {editData.isInsuranceActive && editData.insuranceDetails && (
                                     <div className="pr-4 border-r-2 border-blue-100 space-y-3 mt-2 mb-3">
-                                        <EditableRow label="מקדמות ב״ל" value={editData.insuranceDetails?.insurancePrepayment} isEditing={isEditing} onCh={onCh('insuranceDetails', 'insurancePrepayment')} />
-                                        <EditableRow label="שעות עבודה" value={editData.insuranceDetails?.workHours} isEditing={isEditing} type="select" options={['9', '25']} onCh={onCh('insuranceDetails', 'workHours')} />
+                                        <EditableRow label="מקדמות ב״ל" value={editData.insuranceDetails?.insurancePrepayment} isEditing={isEditing} category="insuranceDetails" field="insurancePrepayment" onChange={actions.updateField} />
+                                        <EditableRow label="שעות עבודה" value={editData.insuranceDetails?.workHours} isEditing={isEditing} type="select" options={['9', '25']} category="insuranceDetails" field="workHours" onChange={actions.updateField} />
                                         <div className="flex items-center gap-3">
                                             <span className="text-xs font-bold text-blue-700">תיק ביטוח לאומי חדש</span>
                                             <input type="checkbox" checked={!!editData.insuranceDetails?.newInsuranceCase} disabled={!isEditing} onChange={(e) => actions.updateField('insuranceDetails', 'newInsuranceCase', e.target.checked)} className={`w-5 h-5 accent-blue-600 ${isEditing ? 'cursor-pointer' : 'cursor-not-allowed'}`} />
@@ -346,12 +349,12 @@ const CustomerCard: React.FC = () => {
                                     </div>
                                 )}
 
-                                <ToggleRow label="מס הכנסה" active={editData.isIncomeTaxActive} isEditing={isEditing} onToggle={(v) => actions.updateField(null, 'isIncomeTaxActive', v)} />
+                                <ToggleRow label="מס הכנסה" active={editData.isIncomeTaxActive} isEditing={isEditing} category={null} field="isIncomeTaxActive" onChange={actions.updateField} />
                                 {editData.isIncomeTaxActive && (
                                     <div className="pr-4 border-r-2 border-emerald-100 space-y-3 mt-2 mb-3">
-                                        <EditableRow label="מקדמות מס" value={editData.incomeTaxDetails?.incomeTaxPrepayment} isEditing={isEditing} onCh={onCh('incomeTaxDetails', 'incomeTaxPrepayment')} />
-                                        <EditableRow label="מחזור צפוי" value={editData.incomeTaxDetails?.annualTurnover} isEditing={isEditing} onCh={onCh('incomeTaxDetails', 'annualTurnover')} />
-                                        <EditableRow label="סוג ייצוג" value={editData.incomeTaxDetails?.repType} isEditing={isEditing} type="select" options={['ראשי', 'משני']} onCh={onCh('incomeTaxDetails', 'repType')} />
+                                        <EditableRow label="מקדמות מס" value={editData.incomeTaxDetails?.incomeTaxPrepayment} isEditing={isEditing} category="incomeTaxDetails" field="incomeTaxPrepayment" onChange={actions.updateField} />
+                                        <EditableRow label="מחזור צפוי" value={editData.incomeTaxDetails?.annualTurnover} isEditing={isEditing} category="incomeTaxDetails" field="annualTurnover" onChange={actions.updateField} />
+                                        <EditableRow label="סוג ייצוג" value={editData.incomeTaxDetails?.repType} isEditing={isEditing} type="select" options={['ראשי', 'משני']} category="incomeTaxDetails" field="repType" onChange={actions.updateField} />
                                         <div className="flex items-center gap-3">
                                             <span className="text-xs font-bold text-emerald-700">תיק מס הכנסה חדש</span>
                                             <input type="checkbox" checked={!!editData.incomeTaxDetails?.newItCase} disabled={!isEditing} onChange={(e) => actions.updateField('incomeTaxDetails', 'newItCase', e.target.checked)} className={`w-5 h-5 accent-emerald-600 ${isEditing ? 'cursor-pointer' : 'cursor-not-allowed'}`} />
@@ -365,7 +368,7 @@ const CustomerCard: React.FC = () => {
 
                                 {isVatRelevant && (
                                     <>
-                                        <ToggleRow label="מע״מ" active={editData.isVatActive} isEditing={isEditing} onToggle={(v) => actions.updateField(null, 'isVatActive', v)} />
+                                        <ToggleRow label="מע״מ" active={editData.isVatActive} isEditing={isEditing} category={null} field="isVatActive" onChange={actions.updateField} />
                                         {editData.isVatActive && (
                                             <div className="pr-4 border-r-2 border-amber-100 space-y-3 mt-2 mb-3">
                                                 <div className="flex items-center gap-3">
@@ -380,7 +383,7 @@ const CustomerCard: React.FC = () => {
                         </Section>
 
                         <Section title="תשלומים למשרד" icon="💰">
-                            <EditableRow label="פתיחת תיק (₪)" value={editData.paymentDetails?.setupFee} isEditing={isEditing} onCh={onCh('paymentDetails', 'setupFee')} />
+                            <EditableRow label="פתיחת תיק (₪)" value={editData.paymentDetails?.setupFee} isEditing={isEditing} category="paymentDetails" field="setupFee" onChange={actions.updateField} />
                             {parseFloat(String(editData.paymentDetails?.setupFee ?? '')) > 0 && (
                                 <div className="flex items-center gap-3 pr-1 pb-1">
                                     <span className="text-xs font-bold text-green-700">שולם</span>
@@ -393,7 +396,7 @@ const CustomerCard: React.FC = () => {
                                     />
                                 </div>
                             )}
-                            <EditableRow label="ריטיינר חודשי (₪)" value={editData.paymentDetails?.monthlyFee} isEditing={isEditing} onCh={onCh('paymentDetails', 'monthlyFee')} />
+                            <EditableRow label="ריטיינר חודשי (₪)" value={editData.paymentDetails?.monthlyFee} isEditing={isEditing} category="paymentDetails" field="monthlyFee" onChange={actions.updateField} />
                             <div className={`mt-3 p-3 rounded-xl flex justify-between items-center border ${editData.paymentDetails?.directDebit ? 'bg-green-50 border-green-200 text-green-700' : 'bg-slate-50 border-slate-200 text-slate-500'}`}>
                                 <span className="text-xs font-bold uppercase tracking-wide">הוראת קבע</span>
                                 {isEditing ? (
