@@ -183,10 +183,10 @@ const CustomerCard: React.FC = () => {
     const handleDelete = async () => {
         const r = await actions.remove();
         if (r.success) {
-            alert('הלקוח נמחק.');
+            await modal.alert('הלקוח נמחק.');
             navigate('/admin/customers');
         } else {
-            alert("שגיאה במחיקה: " + r.error);
+            await modal.alert("שגיאה במחיקה: " + r.error);
         }
     };
 
