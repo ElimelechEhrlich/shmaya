@@ -110,7 +110,8 @@ const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
                     title: title.trim(),
                     clientId: isOffice ? OFFICE_CUSTOMER_ID : clientId,
                     priority,
-                    subTasks: []
+                    subTasks: [],
+                    isManual: true
                 } as any);
                 
                 if (insertResult.error) throw insertResult.error;

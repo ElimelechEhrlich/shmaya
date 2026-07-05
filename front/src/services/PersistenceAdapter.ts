@@ -42,6 +42,7 @@ export interface PersistedTask {
   status: 'pending' | 'completed';
   createdAt?: string;
   subTasks?: PersistedSubTask[];
+  isManual?: boolean;              // maps to parent_tasks.is_manual
 }
 
 export interface CustomerWithTasks extends Customer {
@@ -160,6 +161,7 @@ function mapTaskRow(t: any): PersistedTask {
     title: t.title,
     status: t.status,
     createdAt: t.created_at,
+    isManual: !!t.is_manual,
     // ✨ תיקון: שליפת ה-priority ישירות מתוך שורת תת המשימה הספציפית ב-DB
     subTasks: (t.sub_tasks ?? []).map((s: any) => ({
       id: s.id,
@@ -550,6 +552,7 @@ export const PersistenceAdapter = {
     registryKey?: string | null;
     priority?: string;
     subTasks: { title: string }[];
+    isManual?: boolean;
   }) {
     try {
       const finalClientId = taskData.clientId || OFFICE_CUSTOMER_ID;
@@ -557,6 +560,7 @@ export const PersistenceAdapter = {
         title: taskData.title,
         customer_id: finalClientId,
         status: 'pending',
+        is_manual: taskData.isManual ?? false,
       };
       if (taskData.registryKey) {
         parentInsert.registry_key = taskData.registryKey;

@@ -644,7 +644,7 @@ export function getCustomerDisplayName(customer: Customer): string {
  */
 export function planIdempotentSync(
   generated: MergeableTask[],
-  existing: { id: string; title: string; parentTaskId?: string | null; status: 'pending' | 'completed'; subTasks?: MergeableTask['subTasks'] }[]
+  existing: { id: string; title: string; parentTaskId?: string | null; status: 'pending' | 'completed'; subTasks?: MergeableTask['subTasks']; isManual?: boolean }[]
 ): IdempotentSyncPlan {
   const existingByParent = new Map<string, typeof existing[number]>();
   const existingByTitle = new Map<string, typeof existing[number]>();
@@ -701,6 +701,7 @@ export function planIdempotentSync(
   const toDeletePendingIds: string[] = [];
   for (const e of existing) {
     if (e.status !== 'pending') continue;
+    if (e.isManual) continue;
     const existingKey = e.parentTaskId ?? e.title;
     if (!existingKey) continue;
     if (!generatedParentIds.has(existingKey) && !generatedTitles.has(existingKey)) {
