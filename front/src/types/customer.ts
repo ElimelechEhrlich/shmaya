@@ -12,6 +12,7 @@ export interface BusinessDetails {
     businessName: string;
     businessID: string;
     businessType: string;
+    isNewBusiness: boolean;
     openingDate: string;
     occupation: string;
     businessDescription: string;
