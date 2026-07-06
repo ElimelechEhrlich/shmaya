@@ -391,7 +391,7 @@ export const PersistenceAdapter = {
       flatRow.business_name = c.businessDetails.businessName;
       flatRow.business_id = c.businessDetails.businessID;
       flatRow.business_type = c.businessDetails.businessType;
-      flatRow.is_new_business: c.businessDetails.isNewBusiness ?? false;
+      flatRow.is_new_business = c.businessDetails.isNewBusiness ?? false;
       flatRow.opening_date = c.businessDetails.openingDate || null;
       flatRow.occupation = c.businessDetails.occupation;
       flatRow.business_description = c.businessDetails.businessDescription;
