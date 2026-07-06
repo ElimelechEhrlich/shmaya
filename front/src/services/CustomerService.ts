@@ -85,6 +85,10 @@ export const CustomerService = {
                 if (error) throw new Error(error.message);
                 customerId = data?.id ?? null;
                 if (!customerId) throw new Error('נכשלה הפקת מזהה לקוח ייחודי');
+                await PersistenceAdapter.insertLog(
+    'system', 'הוספת לקוח', 'customer',
+    customerId, formData.customerDetails?.fullName ?? ''
+);
                 await CustomerService.syncTasks(customerId, formData, false);
             }
 

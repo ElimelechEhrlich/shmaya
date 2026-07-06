@@ -858,20 +858,27 @@ export const PersistenceAdapter = {
 
   // ── Logs ──
 
-  async insertLog(row: Record<string, unknown>): Promise<DbResult<null>> {
-    const dbRow = {
-      actor: typeof row.actor === 'string' && row.actor ? row.actor : 'unknown',
-      action: typeof row.action === 'string' && row.action ? row.action : 'unknown',
-      entity_type: typeof row.entityType === 'string' && row.entityType ? row.entityType : 'system',
-      entity_id: isUuid(row.entityId) ? row.entityId : null,
-      payload: (row.payload && typeof row.payload === 'object') ? row.payload : {},
-    };
-    const { error } = await supabase.from('logs').insert([dbRow]);
-    if (error) {
-      console.error('[PersistenceAdapter.insertLog] insert failed:', error.message, dbRow);
+  async insertLog(actor: string, action: string, entityType: string, entityId: string, details: string): Promise<void> {
+    try {
+        await supabase.from('logs').insert({
+            actor,
+            action,
+            entity_type: entityType,
+            entity_id: entityId,
+            payload: { details }
+        });
+    } catch {
+        // לוגים לא חוסמים את הפעולה הראשית
     }
-    return { data: null, error };
-  },
+},
+  async fetchLogs(): Promise<DbResult<any[]>> {
+    const { data, error } = await supabase
+        .from('logs')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(500);
+    return { data, error };
+},
 
   async fetchAllLogs(limit: number = 500): Promise<DbResult<PersistedLog[]>> {
     const { data, error } = await supabase
