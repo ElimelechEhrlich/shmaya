@@ -158,6 +158,15 @@ export const AUTO_TASKS_CONFIG: RegistryParentTask[] = [
                 title: 'מס הכנסה ייצוגים'
             },
             {
+    id: 'it_deductions',
+    title: 'ייצוגים ניכויים מס הכנסה',
+    condition: (c: RegistryCustomer): boolean => 
+        !!c.isIncomeTaxActive && !!c.needsDeductionsFile,
+    getDetails: (c: RegistryCustomer): Record<string, any> => ({
+        'מספר תיק ניכויים': c.businessDetails?.deductionsId || 'טרם הוזן'
+    }),
+},
+            {
                 id: 'it_open',
                 title: 'פתיחת תיק מס הכנסה',
                 condition: (c: RegistryCustomer): boolean => !!c.incomeTaxDetails?.newItCase
@@ -166,6 +175,7 @@ export const AUTO_TASKS_CONFIG: RegistryParentTask[] = [
                 id: 'taxCoordination',
                 title: 'תיאום מס'
             },
+            
         ],
     },
     {
