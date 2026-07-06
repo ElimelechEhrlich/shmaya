@@ -190,15 +190,6 @@ export default function AddCustomer(): React.ReactElement {
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <FormField label="שם העסק"><input name="businessName" className="input-style" onChange={(e) => handleChange('businessDetails', e)} required /></FormField>
                                 <FormField label="מזהה עסק"><input name="businessID" className="input-style" onChange={(e) => handleChange('businessDetails', e)} /></FormField>
-                                <FormField label="תאריך פתיחת העסק"><input name="openingDate" type="date" className="input-style" onChange={(e) => handleChange('businessDetails', e)} required={formData.businessDetails.isNewBusiness} /></FormField>                  
-                                    <FormField label="סוג עסק לייצוג">
-                                    <FilterableSelect
-                                        options={BUSINESS_TYPE_OPTIONS}
-                                        value={formData.businessDetails.businessType}
-                                        onChange={(v) => setFormData(prev => ({ ...prev, businessDetails: { ...prev.businessDetails, businessType: v } }))}
-                                        placeholder="בחר סוג עסק..."
-                                    />
-                                </FormField>
                                 <FormField label="עסק חדש">
     <label className="flex items-center gap-2 cursor-pointer mt-1">
         <input
@@ -218,6 +209,16 @@ export default function AddCustomer(): React.ReactElement {
         </span>
     </label>
 </FormField>
+                                <FormField label="תאריך פתיחת העסק"><input name="openingDate" type="date" className="input-style" onChange={(e) => handleChange('businessDetails', e)} required={formData.businessDetails.isNewBusiness} /></FormField>                  
+                                    <FormField label="סוג עסק לייצוג">
+                                    <FilterableSelect
+                                        options={BUSINESS_TYPE_OPTIONS}
+                                        value={formData.businessDetails.businessType}
+                                        onChange={(v) => setFormData(prev => ({ ...prev, businessDetails: { ...prev.businessDetails, businessType: v } }))}
+                                        placeholder="בחר סוג עסק..."
+                                    />
+                                </FormField>
+                                
                                 <FormField label="משלח יד">
                                     <FilterableSelect
                                         options={branchesList}
