@@ -871,6 +871,14 @@ export const PersistenceAdapter = {
         // לוגים לא חוסמים את הפעולה הראשית
     }
 },
+  async fetchLogs(): Promise<DbResult<any[]>> {
+    const { data, error } = await supabase
+        .from('logs')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(500);
+    return { data, error };
+},
 
   async fetchAllLogs(limit: number = 500): Promise<DbResult<PersistedLog[]>> {
     const { data, error } = await supabase
