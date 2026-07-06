@@ -119,7 +119,16 @@ export default function Tasks(): React.ReactElement {
                 if (bId === OFFICE_CUSTOMER_ID) return 1;
                 return aName.localeCompare(bName, 'he');
             })
-            .map(([clientId, { clientName, rows: clientRows }]) => ({ clientId, clientName, rows: clientRows }));
+            .map(([clientId, { clientName, rows: clientRows }]) => ({ 
+    clientId, 
+    clientName, 
+    rows: [...clientRows].sort((a, b) => {
+        const order = ['ADMIN_SETUP', 'INSURANCE', 'INCOME_TAX', 'VAT', 'DIRECT_DEBIT', 'FINAL_APPROVAL'];
+        const ai = order.indexOf(a.parentTaskId ?? '');
+        const bi = order.indexOf(b.parentTaskId ?? '');
+        return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+    })
+}));
     }, [filtered]);
 
     // ── Accordion controls ────────────────────────────────────────────
