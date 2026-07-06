@@ -16,6 +16,7 @@ interface CustomerAccordionProps {
     onEditClick: (row: SubtaskViewRow) => void;
     onPriorityChange: (row: SubtaskViewRow, priority: string) => void;
     onDelete?: (row: SubtaskViewRow) => void;
+    comments?: string;
 }
 
 function getAccordionAccentBg(openCount: number): string {
@@ -88,6 +89,11 @@ const CustomerAccordion: React.FC<CustomerAccordionProps> = React.memo(({
             {/* ─── Body ─── */}
             {isOpen && (
                 <div className="divide-y divide-slate-100 border-t border-slate-100">
+                    {comments && (
+    <div className="px-4 py-2 bg-blue-50 border-b border-blue-100 text-[12px] text-blue-700">
+        📋 {comments}
+    </div>
+)}
                     {rows.map(row => (
                         <SubtaskRow
                             key={`${row.taskId}-${row.subtaskId ?? 'parent'}`}
