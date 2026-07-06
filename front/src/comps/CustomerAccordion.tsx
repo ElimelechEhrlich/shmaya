@@ -37,6 +37,7 @@ const CustomerAccordion: React.FC<CustomerAccordionProps> = React.memo(({
     onEditClick,
     onPriorityChange,
     onDelete,
+    comments,
 }) => {
     const navigate = useNavigate();
     const openCount = rows.filter(r => !r.completed).length;
