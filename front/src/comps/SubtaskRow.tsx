@@ -124,9 +124,11 @@ const SubtaskRow: React.FC<SubtaskRowProps> = React.memo(({
                         )}
                     </div>
                 )}
-                {row.comment && (
-                    <div className="text-[11px] text-blue-600 italic mt-0.5">💬 {row.comment}</div>
-                )}
+{row.comment && (
+    <div className="text-[11px] text-slate-400 mt-0.5 truncate max-w-xs">
+        💬 {row.comment}
+    </div>
+)}
             </div>
 
             {/* Priority */}
