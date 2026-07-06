@@ -112,14 +112,14 @@ export const AUTO_TASKS_CONFIG: RegistryParentTask[] = [
         subTasks: [
             { 
                 id: 'rep', 
-                title: 'ייצוגים', 
+                title: 'ביטוח לאומי ייצוגים', 
                 getDetails: (c: RegistryCustomer): Record<string, any> => ({ 
                     'מספר תיק': c.insuranceDetails?.insuranceId || 'טרם הוזן' 
                 }) 
             },
             {
                 id: 'open',
-                title: 'פתיחת תיק',
+                title: 'פתיחת תיק ביטוח לאומי',
                 condition: (c: RegistryCustomer): boolean => !!c.insuranceDetails?.newInsuranceCase,
                 getDetails: (c: RegistryCustomer): Record<string, any> => ({ 
                     'סטטוס': c.insuranceDetails?.insuranceStatus || 'לא ידוע' 
@@ -127,7 +127,7 @@ export const AUTO_TASKS_CONFIG: RegistryParentTask[] = [
             },
             {
                 id: 'deductions',
-                title: 'ייצוג תיק ניכויים',
+                title: 'ביטוח לאומי ייצוג תיק ניכויים',
                 condition: (c: RegistryCustomer): boolean => !!c.needsDeductionsFile,
                 getDetails: (c: RegistryCustomer): Record<string, any> => ({ 
                     'מספר תיק ניכויים': c.businessDetails?.deductionsId || 'טרם הוזן' 
@@ -155,11 +155,11 @@ export const AUTO_TASKS_CONFIG: RegistryParentTask[] = [
         subTasks: [
             {
                 id: 'it_rep',
-                title: 'מס הכנסה ייצוגים'
+                title: 'ייצוגים מס הכנסה'
             },
             {
     id: 'it_deductions',
-    title: 'ייצוגים ניכויים מס הכנסה',
+    title: 'מס הכנסה ייצוג ניכויים',
     condition: (c: RegistryCustomer): boolean => 
         !!c.isIncomeTaxActive && !!c.needsDeductionsFile,
     getDetails: (c: RegistryCustomer): Record<string, any> => ({
