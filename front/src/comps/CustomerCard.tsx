@@ -308,6 +308,14 @@ const CustomerCard: React.FC = () => {
                             <EditableRow label="שם העסק" value={editData.businessDetails?.businessName} isEditing={isEditing} category="businessDetails" field="businessName" onChange={actions.updateField} />
                             <EditableRow label="מזהה עסק" value={editData.businessDetails?.businessID} isEditing={isEditing} category="businessDetails" field="businessID" onChange={actions.updateField} />
                             <EditableRow label="סוג עסק" value={editData.businessDetails?.businessType} isEditing={isEditing} type="search-select" options={BUSINESS_TYPE_OPTIONS} category="businessDetails" field="businessType" onChange={actions.updateField} />
+                            <ToggleRow 
+    label="עסק חדש" 
+    value={editData.businessDetails?.isNewBusiness ?? false} 
+    isEditing={isEditing} 
+    category="businessDetails" 
+    field="isNewBusiness" 
+    onChange={actions.updateField} 
+/>
                             <EditableRow label="תאריך פתיחה" value={editData.businessDetails?.openingDate} isEditing={isEditing} type="date" category="businessDetails" field="openingDate" onChange={actions.updateField} />
                             <EditableRow
                                 label="משלח יד"
