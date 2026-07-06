@@ -322,7 +322,7 @@ export default function Tasks(): React.ReactElement {
                         לא נמצאו משימות תואמות.
                     </div>
                 ) : (
-                    groupedByClient.map(({ clientId, clientName, rows: clientRows }) => (
+                    groupedByClient.map(({ clientId, clientName, rows: clientRows, comments }) => (
                         <CustomerAccordion
                             key={clientId}
                             clientId={clientId}
@@ -335,6 +335,7 @@ export default function Tasks(): React.ReactElement {
                             onEditClick={onEditClick}
                             onPriorityChange={onPriorityChange}
                             onDelete={onDeleteTask}
+                            comments={comments}
                         />
                     ))
                 )}
