@@ -15,6 +15,7 @@ export interface SubtaskViewRow {
     priority: 'low' | 'medium' | 'high' | 'critical';
     comment?: string | null;
     taskStatus?: 'pending' | 'completed';
+    customerComments?: string;
 }
 
 interface SubtaskRowProps {
