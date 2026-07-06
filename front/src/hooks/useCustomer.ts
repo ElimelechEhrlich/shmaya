@@ -147,8 +147,24 @@ export function useCustomer(customerId: string | undefined): UseCustomerResult {
             }
 
             const { tasks: _, ...cleanFormData } = updatedData as any;
+            const prevInsurance = customer?.isInsuranceActive;
+const prevIncomeTax = customer?.isIncomeTaxActive;
+const prevVat = customer?.isVatActive;
+const customerName = editData.customerDetails?.fullName ?? '';
             const result = await CustomerService.saveCustomer(cleanFormData, true, customerId);
             if (result.success) {
+                if (prevInsurance !== editData.isInsuranceActive)
+    await PersistenceAdapter.insertLog(authService.getCurrentUser() ?? 'unknown',
+        editData.isInsuranceActive ? 'הפעלת ביטוח לאומי' : 'כיבוי ביטוח לאומי',
+        'customer', customerId, customerName);
+if (prevIncomeTax !== editData.isIncomeTaxActive)
+    await PersistenceAdapter.insertLog(authService.getCurrentUser() ?? 'unknown',
+        editData.isIncomeTaxActive ? 'הפעלת מס הכנסה' : 'כיבוי מס הכנסה',
+        'customer', customerId, customerName);
+if (prevVat !== editData.isVatActive)
+    await PersistenceAdapter.insertLog(authService.getCurrentUser() ?? 'unknown',
+        editData.isVatActive ? 'הפעלת מע"מ' : 'כיבוי מע"מ',
+        'customer', customerId, customerName);
                 setIsEditing(false);
                 await reload();
                 const wasLtd = customer?.businessDetails?.businessType === 'חברה בע"מ';
@@ -257,6 +273,13 @@ if (!wasLtd && isNowLtd && editData) {
                 }
             }
 
+            await PersistenceAdapter.insertLog(
+    authService.getCurrentUser() ?? 'unknown',
+    completed ? 'ביצוע משימה' : 'ביטול ביצוע משימה',
+    'task', taskId,
+    `${targetSub.title} — ${customer?.customerDetails?.fullName ?? ''}`
+);
+
             await LogService.recordTaskChange(
                 taskId,
                 { subTasks: beforeSubTasks, status: beforeStatus } as unknown as Record<string, unknown>,
@@ -309,6 +332,11 @@ if (!wasLtd && isNowLtd && editData) {
         async (): Promise<{ success: boolean; error?: string }> => {
             if (!customerId) return { success: false, error: 'No customer loaded' };
             const r = await CustomerService.deactivateCustomer(customerId);
+            if (r.success) await PersistenceAdapter.insertLog(
+    authService.getCurrentUser() ?? 'unknown',
+    'השבתת לקוח', 'customer', customerId,
+    customer?.customerDetails?.fullName ?? ''
+);
             if (r.success) await reload();
             return r;
         },
@@ -328,7 +356,13 @@ if (!wasLtd && isNowLtd && editData) {
     const remove = useCallback(
         async (): Promise<{ success: boolean; error?: string }> => {
             if (!customerId) return { success: false, error: 'No customer loaded' };
-            return await CustomerService.deleteCustomer(customerId);
+            const result = await CustomerService.deleteCustomer(customerId);
+if (result.success) await PersistenceAdapter.insertLog(
+    authService.getCurrentUser() ?? 'unknown',
+    'מחיקת לקוח', 'customer', customerId,
+    customer?.customerDetails?.fullName ?? ''
+);
+return result;
         },
         [customerId]
     );
