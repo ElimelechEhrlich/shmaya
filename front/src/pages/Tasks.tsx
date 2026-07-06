@@ -106,12 +106,16 @@ export default function Tasks(): React.ReactElement {
 
     // ── Grouping: office first, then A-Z by client name ───────────────
     const groupedByClient = useMemo(() => {
-        const map = new Map<string, { clientName: string; rows: SubtaskViewRow[] }>();
+        const map = new Map<string, { clientName: string; rows: SubtaskViewRow[], comments: string }>();
         for (const row of filtered) {
             const key = row.clientId ?? OFFICE_CUSTOMER_ID;
             const name = row.clientId ? (row.customerName ?? '—') : '🏢 משימות משרדיות';
-            if (!map.has(key)) map.set(key, { clientName: name, rows: [] });
+            if (!map.has(key)) map.set(key, { clientName: name, rows: [], comments: '' });
             map.get(key)!.rows.push(row);
+            if (!map.get(key)!.comments && row.customerComments) {
+                map.get(key)!.comments = row.customerComments;
+            }
+            
         }
         return Array.from(map.entries())
             .sort(([aId, { clientName: aName }], [bId, { clientName: bName }]) => {
@@ -119,9 +123,10 @@ export default function Tasks(): React.ReactElement {
                 if (bId === OFFICE_CUSTOMER_ID) return 1;
                 return aName.localeCompare(bName, 'he');
             })
-            .map(([clientId, { clientName, rows: clientRows }]) => ({ 
+            .map(([clientId, { clientName, rows: clientRows, comments }]) => ({
     clientId, 
     clientName, 
+     comments,           
     rows: [...clientRows].sort((a, b) => {
         const order = ['ADMIN_SETUP', 'INSURANCE', 'INCOME_TAX', 'VAT', 'DIRECT_DEBIT', 'FINAL_APPROVAL'];
         const ai = order.indexOf(a.parentTaskId ?? '');
