@@ -67,6 +67,7 @@ export interface PersistedSubtaskRow {
   taskStatus: 'pending' | 'completed';
   clientId: string | null;
   customerName: string;
+  customerComments?: string;
 }
 
 export interface PersistedLog {
@@ -520,7 +521,7 @@ export const PersistenceAdapter = {
   async fetchAllSubtasksView(): Promise<DbResult<PersistedSubtaskRow[]>> {
     const { data, error } = await supabase
       .from('sub_tasks')
-     .select('*, parent_tasks(id, title, status, customer_id, registry_key, customers(id, full_name, business_name, business_type))')
+     .select('*, parent_tasks(id, title, status, customer_id, registry_key, customers(id, full_name, business_name, business_type, comments))')
       .order('created_at', { ascending: false });
 
     if (error) return { data: null, error };
@@ -542,6 +543,7 @@ export const PersistenceAdapter = {
         taskStatus: (parent?.status || 'pending') as 'pending' | 'completed',
         clientId: parent?.customer_id || null,
         customerName: getDisplayName(customer),
+        customerComments: customer?.comments || '',
       };
     });
 
