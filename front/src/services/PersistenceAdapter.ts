@@ -116,6 +116,7 @@ function dbRowToCustomer(row: any): Customer {
       businessName: row.business_name || '',
       businessID: row.business_id || '',
       businessType: (row.business_type || '') as any,
+      isNewBusiness: (row.is_new_business || false),
       openingDate: row.opening_date || '',
       occupation: row.occupation || '',
       businessDescription: row.business_description || '',
@@ -338,6 +339,7 @@ export const PersistenceAdapter = {
       business_name: c.businessDetails?.businessName ?? '',
       business_id: c.businessDetails?.businessID ?? '',
       business_type: c.businessDetails?.businessType ?? '',
+      is_new_business: c.businessDetails?.isNewBusiness ?? false,
       opening_date: c.businessDetails?.openingDate || null,
       occupation: c.businessDetails?.occupation ?? '',
       business_description: c.businessDetails?.businessDescription ?? '',
@@ -389,6 +391,7 @@ export const PersistenceAdapter = {
       flatRow.business_name = c.businessDetails.businessName;
       flatRow.business_id = c.businessDetails.businessID;
       flatRow.business_type = c.businessDetails.businessType;
+      flatRow.is_new_business = c.businessDetails.isNewBusiness ?? false;
       flatRow.opening_date = c.businessDetails.openingDate || null;
       flatRow.occupation = c.businessDetails.occupation;
       flatRow.business_description = c.businessDetails.businessDescription;

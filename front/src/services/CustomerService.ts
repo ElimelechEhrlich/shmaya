@@ -66,9 +66,11 @@ function formDataToCustomer(formData: CustomerFormData): Partial<Customer> {
 export const CustomerService = {
     saveCustomer: async (formData: CustomerFormData, isEdit: boolean = false, clientId: string | null = null): Promise<ServiceResponse> => {
         try {
+            if (formData.businessDetails?.isNewBusiness && !formData.businessDetails?.openingDate) {
+    return { success: false, error: 'עסק חדש מחייב תאריך פתיחת עסק' };
+            }
             const customerPayload = formDataToCustomer(formData);
             let customerId = clientId;
-
             if (isEdit && customerId) {
                 // Run customer update and existing-task fetch in parallel — they touch separate tables
                 const [updateResult, existingTasksResult] = await Promise.all([
