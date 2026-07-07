@@ -86,6 +86,7 @@ export interface BusinessDetails {
   businessDescription: string;
   employsWorkers: YesNo;
   deductionsId: string;
+  isNewBusiness: boolean;
 }
 
 export interface InsuranceDetails {
