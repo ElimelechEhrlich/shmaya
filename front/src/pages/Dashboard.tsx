@@ -83,7 +83,7 @@ export default function Dashboard() {
     }, [officeTasks, showOpenOnly]);
 
     return (
-        <div className="p-6 max-w-7xl mx-auto" dir="rtl">
+        <div className="p-4 md:p-6 max-w-7xl mx-auto" dir="rtl">
             <h1 className="text-3xl font-black text-slate-900 mb-6">לוח בקרה</h1>
 
             {/* ─── Stats ─── */}

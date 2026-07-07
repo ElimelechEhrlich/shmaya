@@ -29,6 +29,7 @@ const CustomerList: React.FC = () => {
     const [customers, setCustomers] = useState<any[]>([]);
     const [loading, setLoading] = useState<boolean>(true);
     const [filters, setFilters] = useState<CustomerFilters>(INITIAL_FILTERS);
+    const [showFilters, setShowFilters] = useState(false);
 
     const fetchCustomers = useCallback(async (): Promise<void> => {
         setLoading(true);
@@ -100,10 +101,10 @@ getCustomerDisplayName(client).includes(filters.search || '')
 
     if (loading) {
         return (
-            <div className="p-6 min-h-screen" dir="rtl">
+            <div className="p-4 md:p-6 min-h-screen" dir="rtl">
                 <div className="max-w-7xl mx-auto">
                     <div className="h-9 w-48 bg-slate-200 rounded-xl mb-6 animate-pulse" />
-                    <div className="card-base overflow-hidden">
+                    <div className="card-base overflow-x-auto">
                         <table className="w-full text-right border-collapse">
                             <thead className="bg-slate-50 border-b border-slate-200">
                                 <tr>{[1,2,3,4,5].map(i => (
@@ -142,6 +143,15 @@ getCustomerDisplayName(client).includes(filters.search || '')
 
                 {/* Filter bar */}
                 <div className="card-base p-4 mb-6">
+                    <button
+                        className="md:hidden w-full flex justify-between items-center
+                                   p-3 bg-white rounded-xl border border-slate-200 mb-2"
+                        onClick={() => setShowFilters(p => !p)}
+                    >
+                        <span className="font-medium text-slate-600">סינון</span>
+                        <span>{showFilters ? '▴' : '▾'}</span>
+                    </button>
+                    <div className={`${showFilters ? 'block' : 'hidden'} md:block`}>
                     <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-3">
                         <input
                             type="text"
@@ -178,6 +188,7 @@ getCustomerDisplayName(client).includes(filters.search || '')
                             <option value="false">לא מאושר</option>
                         </select>
                     </div>
+                    </div>
                     <div className="mt-3 flex justify-between items-center">
                         <span className="text-xs text-slate-500 font-medium">מציג {filteredCustomers.length} מתוך {customers.length} לקוחות</span>
                         <button onClick={resetFilters} className="cursor-pointer text-sm text-blue-600 hover:text-blue-800 font-bold transition">
@@ -187,7 +198,7 @@ getCustomerDisplayName(client).includes(filters.search || '')
                 </div>
 
                 {/* Data table */}
-                <div className="card-base overflow-hidden">
+                <div className="card-base overflow-x-auto">
                     <table className="w-full text-right border-collapse">
                         <thead className="bg-slate-50 border-b border-slate-200">
                             <tr>
@@ -208,7 +219,7 @@ getCustomerDisplayName(client).includes(filters.search || '')
                                         onClick={() => navigate(`/admin/customers/${client.id}`)}
                                         className={`cursor-pointer hover:bg-blue-50/50 transition group ${isInactive ? 'opacity-60' : ''}`}
                                     >
-                                        <td className="p-4 font-bold text-slate-800 group-hover:text-blue-700 transition ">
+                                        <td title={getCustomerDisplayName(client) || ''} className="p-4 font-bold text-slate-800 group-hover:text-blue-700 transition truncate max-w-[200px]">
                                             {getCustomerDisplayName(client) || '—'}
                                             {isInactive && <span className="text-[10px] text-slate-400 mr-2">(לא פעיל)</span>}
                                         </td>

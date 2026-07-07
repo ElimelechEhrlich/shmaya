@@ -32,7 +32,7 @@ export default function Logs(): React.ReactElement {
   };
 
   return (
-    <div className="p-6 max-w-5xl mx-auto" dir="rtl">
+    <div className="p-4 md:p-6 max-w-5xl mx-auto" dir="rtl">
       <h1 className="text-2xl font-black text-slate-800 mb-6">יומן פעולות</h1>
 
       {loading ? (
@@ -42,7 +42,7 @@ export default function Logs(): React.ReactElement {
       ) : logs.length === 0 ? (
         <p className="text-slate-400 text-center py-20">אין פעולות מתועדות עדיין</p>
       ) : (
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-slate-50 border-b border-slate-100">
               <tr>
