@@ -5,6 +5,7 @@ import { TaskGeneratorService } from './TaskService';
 import { planIdempotentSync } from '../registries/CustomerRegistry';
 import { CustomerFormData } from '../types/customer';
 import type { Customer } from '../registries/CustomerRegistry';
+import { authService } from './authService';
 
 export interface ServiceResponse<T = any> {
     success: boolean;
@@ -86,7 +87,7 @@ export const CustomerService = {
                 customerId = data?.id ?? null;
                 if (!customerId) throw new Error('נכשלה הפקת מזהה לקוח ייחודי');
                 await PersistenceAdapter.insertLog(
-    'system', 'הוספת לקוח', 'customer',
+    authService.getCurrentUser() ?? 'unknown', 'הוספת לקוח', 'customer',
     customerId, formData.customerDetails?.fullName ?? ''
 );
                 await CustomerService.syncTasks(customerId, formData, false);
