@@ -100,10 +100,10 @@ getCustomerDisplayName(client).includes(filters.search || '')
 
     if (loading) {
         return (
-            <div className="p-6 min-h-screen" dir="rtl">
+            <div className="p-4 md:p-6 min-h-screen" dir="rtl">
                 <div className="max-w-7xl mx-auto">
                     <div className="h-9 w-48 bg-slate-200 rounded-xl mb-6 animate-pulse" />
-                    <div className="card-base overflow-hidden">
+                    <div className="card-base overflow-x-auto">
                         <table className="w-full text-right border-collapse">
                             <thead className="bg-slate-50 border-b border-slate-200">
                                 <tr>{[1,2,3,4,5].map(i => (
@@ -187,7 +187,7 @@ getCustomerDisplayName(client).includes(filters.search || '')
                 </div>
 
                 {/* Data table */}
-                <div className="card-base overflow-hidden">
+                <div className="card-base overflow-x-auto">
                     <table className="w-full text-right border-collapse">
                         <thead className="bg-slate-50 border-b border-slate-200">
                             <tr>
@@ -208,7 +208,7 @@ getCustomerDisplayName(client).includes(filters.search || '')
                                         onClick={() => navigate(`/admin/customers/${client.id}`)}
                                         className={`cursor-pointer hover:bg-blue-50/50 transition group ${isInactive ? 'opacity-60' : ''}`}
                                     >
-                                        <td className="p-4 font-bold text-slate-800 group-hover:text-blue-700 transition ">
+                                        <td title={getCustomerDisplayName(client) || ''} className="p-4 font-bold text-slate-800 group-hover:text-blue-700 transition truncate max-w-[200px]">
                                             {getCustomerDisplayName(client) || '—'}
                                             {isInactive && <span className="text-[10px] text-slate-400 mr-2">(לא פעיל)</span>}
                                         </td>

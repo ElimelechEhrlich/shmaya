@@ -113,7 +113,7 @@ export default function TaskDetails(): React.ReactElement {
     // ── Loading ──────────────────────────────────────────────────────
     if (loading) {
         return (
-            <div className="p-6 min-h-screen" dir="rtl">
+            <div className="p-4 md:p-6 min-h-screen" dir="rtl">
                 <div className="max-w-3xl mx-auto space-y-4">
                     <div className="h-8 w-40 bg-slate-200 rounded-xl animate-pulse" />
                     <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-3">
@@ -134,7 +134,7 @@ export default function TaskDetails(): React.ReactElement {
     // ── Not found / error ─────────────────────────────────────────────
     if (notFound || errorMsg || !task) {
         return (
-            <div className="p-6 min-h-screen flex flex-col items-center justify-center" dir="rtl">
+            <div className="p-4 md:p-6 min-h-screen flex flex-col items-center justify-center" dir="rtl">
                 <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-10 max-w-md w-full text-center space-y-4">
                     <span className="text-5xl">{errorMsg ? '⚠️' : '🔍'}</span>
                     <h2 className="text-xl font-black text-slate-900">

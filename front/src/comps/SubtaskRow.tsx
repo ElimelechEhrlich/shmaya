@@ -95,7 +95,9 @@ const SubtaskRow: React.FC<SubtaskRowProps> = React.memo(({
                     </div>
                 ) : (
                     <div className="flex items-center gap-2 min-w-0">
-                        <span className={`text-sm font-medium truncate ${
+                        <span
+                            title={row.subtaskTitle}
+                            className={`text-sm font-medium truncate ${
                             row.completed ? 'line-through text-slate-400' : 'text-slate-800'
                         }`}>
                             {row.subtaskTitle}
@@ -109,7 +111,7 @@ const SubtaskRow: React.FC<SubtaskRowProps> = React.memo(({
                             type="button"
                             onClick={() => onEditClick(row)}
                             title="עריכת משימה מלאה"
-                            className="cursor-pointer text-slate-300 hover:text-blue-600 text-sm font-bold px-1 shrink-0"
+                            className="cursor-pointer text-slate-300 hover:text-blue-600 text-sm font-bold px-2 py-2 shrink-0"
                         >
                             ✎
                         </button>
@@ -118,7 +120,7 @@ const SubtaskRow: React.FC<SubtaskRowProps> = React.memo(({
                                 type="button"
                                 onClick={() => onDelete(row)}
                                 title="מחק משימה ידנית"
-                                className="cursor-pointer text-slate-300 hover:text-red-500 text-sm px-1 shrink-0 transition-colors"
+                                className="cursor-pointer text-slate-300 hover:text-red-500 text-sm px-2 py-2 shrink-0 transition-colors"
                             >
                                 🗑
                             </button>
@@ -126,7 +128,7 @@ const SubtaskRow: React.FC<SubtaskRowProps> = React.memo(({
                     </div>
                 )}
 {row.comment && (
-    <div className="text-[11px] text-slate-400 mt-0.5 truncate max-w-xs">
+    <div title={row.comment} className="text-[11px] text-slate-400 mt-0.5 truncate max-w-xs">
         💬 {row.comment}
     </div>
 )}

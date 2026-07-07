@@ -36,7 +36,7 @@ export default function AppModal({ options }: AppModalProps): React.ReactElement
 
             {/* Modal */}
             <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-4
-                            animate-[modalIn_0.2s_ease_both]">
+                            animate-[modalIn_0.2s_ease_both] max-h-[90vh] overflow-y-auto">
 
                 {/* כותרת */}
                 {options.title && (
@@ -56,7 +56,7 @@ export default function AppModal({ options }: AppModalProps): React.ReactElement
                         <button
                             key={i}
                             onClick={btn.onClick}
-                            className={`flex-1 py-2.5 px-4 rounded-xl text-sm font-bold transition
+                            className={`flex-1 py-3 px-4 rounded-xl text-sm font-bold transition
                                         ${variantClass[btn.variant ?? 'secondary']}`}
                         >
                             {btn.label}

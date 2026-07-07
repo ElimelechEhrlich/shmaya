@@ -99,13 +99,15 @@ const EditableRow: React.FC<EditableRowProps> = React.memo(({ label, value, isEd
 const ToggleRow: React.FC<ToggleRowProps> = React.memo(({ label, active, isEditing, category, field, onChange }) => (
     <div className={`flex justify-between items-center p-3 rounded-xl border transition ${active ? 'bg-blue-50 border-blue-100' : 'bg-white border-slate-100 hover:border-slate-200'}`}>
         <span className={`text-sm font-bold ${active ? 'text-blue-700' : 'text-slate-500'}`}>{label}</span>
-        <input
-            type="checkbox"
-            checked={!!active}
-            disabled={!isEditing}
-            onChange={(e) => onChange(category, field, e.target.checked)}
-            className={`w-5 h-5 accent-blue-600 ${isEditing ? 'cursor-pointer' : 'cursor-not-allowed'}`}
-        />
+        <label className="p-2 -m-2 cursor-pointer">
+            <input
+                type="checkbox"
+                checked={!!active}
+                disabled={!isEditing}
+                onChange={(e) => onChange(category, field, e.target.checked)}
+                className={`w-5 h-5 accent-blue-600 ${isEditing ? 'cursor-pointer' : 'cursor-not-allowed'}`}
+            />
+        </label>
     </div>
 ));
 
@@ -192,7 +194,7 @@ const CustomerCard: React.FC = () => {
 
     if (loading || !editData) {
         return (
-            <div className="p-6 min-h-screen" dir="rtl">
+            <div className="p-4 md:p-6 min-h-screen" dir="rtl">
                 <div className="max-w-7xl mx-auto">
                     <div className="h-9 w-40 bg-slate-200 rounded-xl mb-6 animate-pulse" />
                     <div className="h-36 bg-slate-100 rounded-2xl mb-6 animate-pulse" />
@@ -225,7 +227,7 @@ const CustomerCard: React.FC = () => {
             <div className="max-w-7xl mx-auto">
 
                 {/* Actions Bar */}
-                <div className="flex justify-between items-center mb-6">
+                <div className="flex flex-wrap justify-between items-center gap-2 mb-6">
                     <button
                         onClick={() => navigate('/admin/customers')}
                         className="cursor-pointer text-slate-500 font-bold hover:text-slate-800 transition flex items-center gap-1.5"

@@ -234,7 +234,7 @@ export default function Tasks(): React.ReactElement {
 
     // ── Render ────────────────────────────────────────────────────────
     return (
-        <div className="p-6 min-h-screen" dir="rtl">
+        <div className="p-4 md:p-6 min-h-screen" dir="rtl">
             <div className="max-w-4xl mx-auto">
 
                 {/* Header */}

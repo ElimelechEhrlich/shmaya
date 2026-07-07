@@ -28,7 +28,7 @@ export default function Layout(): React.ReactElement {
             {/* תוכן ראשי */}
             <div className="flex flex-col flex-1 overflow-hidden">
                 <Header onMenuClick={() => setSidebarOpen(prev => !prev)} />
-                <main className="flex-1 overflow-y-auto p-6">
+                <main className="flex-1 overflow-y-auto">
                     <Outlet />
                 </main>
             </div>

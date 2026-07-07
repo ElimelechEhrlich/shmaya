@@ -161,7 +161,7 @@ export default function AddCustomer(): React.ReactElement {
     const directDebitDisabled = !formData.paymentDetails.monthlyFee || parseFloat(formData.paymentDetails.monthlyFee) <= 0;
 
     return (
-        <div className="p-6 bg-slate-50 min-h-screen" dir="rtl">
+        <div className="p-4 md:p-6 bg-slate-50 min-h-screen" dir="rtl">
             <div className="max-w-7xl mx-auto">
                 <div className="flex justify-between items-center mb-6">
                     <div>

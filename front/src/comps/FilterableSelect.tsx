@@ -37,7 +37,7 @@ const FilterableSelect: React.FC<FilterableSelectProps> = ({ options, value, onC
                 <>
                     <div className="fixed inset-0 z-10" onClick={close} />
 
-                    <div className="absolute top-full mt-1 right-0 left-0 z-20 bg-white border border-slate-200 rounded-xl shadow-xl">
+                    <div className="absolute top-full mt-1 right-0 left-0 z-[100] bg-white border border-slate-200 rounded-xl shadow-xl">
                         <div className="p-2 border-b border-slate-100 sticky top-0 bg-white">
                             <input
                                 type="text"

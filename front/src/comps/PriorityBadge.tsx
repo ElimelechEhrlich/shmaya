@@ -13,7 +13,7 @@ const PriorityBadge: React.FC<PriorityBadgeProps> = React.memo(({ priority, onCh
     const style = PRIORITY_STYLES[p];
 
     return (
-        <div className="relative inline-block">
+        <div className="relative inline-block min-h-[44px] min-w-[44px] flex items-center">
             <select
                 value={p}
                 onChange={(e) => onChange(e.target.value)}
