@@ -29,6 +29,7 @@ const CustomerList: React.FC = () => {
     const [customers, setCustomers] = useState<any[]>([]);
     const [loading, setLoading] = useState<boolean>(true);
     const [filters, setFilters] = useState<CustomerFilters>(INITIAL_FILTERS);
+    const [showFilters, setShowFilters] = useState(false);
 
     const fetchCustomers = useCallback(async (): Promise<void> => {
         setLoading(true);
@@ -142,6 +143,15 @@ getCustomerDisplayName(client).includes(filters.search || '')
 
                 {/* Filter bar */}
                 <div className="card-base p-4 mb-6">
+                    <button
+                        className="md:hidden w-full flex justify-between items-center
+                                   p-3 bg-white rounded-xl border border-slate-200 mb-2"
+                        onClick={() => setShowFilters(p => !p)}
+                    >
+                        <span className="font-medium text-slate-600">סינון</span>
+                        <span>{showFilters ? '▴' : '▾'}</span>
+                    </button>
+                    <div className={`${showFilters ? 'block' : 'hidden'} md:block`}>
                     <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-3">
                         <input
                             type="text"
@@ -177,6 +187,7 @@ getCustomerDisplayName(client).includes(filters.search || '')
                             <option value="true">מאושר</option>
                             <option value="false">לא מאושר</option>
                         </select>
+                    </div>
                     </div>
                     <div className="mt-3 flex justify-between items-center">
                         <span className="text-xs text-slate-500 font-medium">מציג {filteredCustomers.length} מתוך {customers.length} לקוחות</span>

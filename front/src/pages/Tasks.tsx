@@ -43,6 +43,7 @@ export default function Tasks(): React.ReactElement {
     const [editingTask, setEditingTask] = useState<SubtaskViewRow | null>(null);
     const [showCreate, setShowCreate] = useState(false);
     const [openAccordions, setOpenAccordions] = useState<Set<string>>(new Set());
+    const [showFilters, setShowFilters] = useState(false);
     const [filters, setFilters] = useState<TaskFilters>({
         statuses: ['pending'],
         categories: [],
@@ -253,6 +254,15 @@ export default function Tasks(): React.ReactElement {
 
                 {/* Filter bar */}
                 <div className="card-base p-4 mb-4">
+                    <button
+                        className="md:hidden w-full flex justify-between items-center
+                                   p-3 bg-white rounded-xl border border-slate-200 mb-2"
+                        onClick={() => setShowFilters(p => !p)}
+                    >
+                        <span className="font-medium text-slate-600">סינון</span>
+                        <span>{showFilters ? '▴' : '▾'}</span>
+                    </button>
+                    <div className={`${showFilters ? 'block' : 'hidden'} md:block`}>
                     <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
                         <input
                             type="text"
@@ -287,6 +297,7 @@ export default function Tasks(): React.ReactElement {
                             selected={filters.priorities}
                             onChange={s => setFilters(f => ({ ...f, priorities: s }))}
                         />
+                    </div>
                     </div>
                     <div className="mt-3 flex justify-between items-center">
                         <span className="text-xs text-slate-500 font-medium">
