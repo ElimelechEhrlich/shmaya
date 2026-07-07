@@ -104,33 +104,37 @@ export const AUTO_TASKS_CONFIG: RegistryParentTask[] = [
                     'סטטוס': c.paymentDetails?.setupFeePaid ? 'שולם' : 'טרם שולם',
                 }),
             },
+            {
+                id: 'ardeni_open',
+                title: 'פתיחה בארדני',
+            },
         ],
     },
     {
         id: 'INSURANCE',
         title: 'טיפול מול ביטוח לאומי',
         subTasks: [
-            { 
-                id: 'rep', 
-                title: 'ביטוח לאומי ייצוגים', 
-                getDetails: (c: RegistryCustomer): Record<string, any> => ({ 
-                    'מספר תיק': c.insuranceDetails?.insuranceId || 'טרם הוזן' 
-                }) 
+            {
+                id: 'rep',
+                title: 'ביטוח לאומי ייצוגים',
+                getDetails: (c: RegistryCustomer): Record<string, any> => ({
+                    'מספר תיק': c.insuranceDetails?.insuranceId || 'טרם הוזן'
+                })
             },
             {
                 id: 'open',
                 title: 'פתיחת תיק ביטוח לאומי',
                 condition: (c: RegistryCustomer): boolean => !!c.insuranceDetails?.newInsuranceCase,
-                getDetails: (c: RegistryCustomer): Record<string, any> => ({ 
-                    'סטטוס': c.insuranceDetails?.insuranceStatus || 'לא ידוע' 
+                getDetails: (c: RegistryCustomer): Record<string, any> => ({
+                    'סטטוס': c.insuranceDetails?.insuranceStatus || 'לא ידוע'
                 }),
             },
             {
                 id: 'deductions',
                 title: 'ביטוח לאומי ייצוג תיק ניכויים',
                 condition: (c: RegistryCustomer): boolean => !!c.needsDeductionsFile,
-                getDetails: (c: RegistryCustomer): Record<string, any> => ({ 
-                    'מספר תיק ניכויים': c.businessDetails?.deductionsId || 'טרם הוזן' 
+                getDetails: (c: RegistryCustomer): Record<string, any> => ({
+                    'מספר תיק ניכויים': c.businessDetails?.deductionsId || 'טרם הוזן'
                 }),
             },
         ],
@@ -158,14 +162,14 @@ export const AUTO_TASKS_CONFIG: RegistryParentTask[] = [
                 title: 'ייצוגים מס הכנסה'
             },
             {
-    id: 'it_deductions',
-    title: 'מס הכנסה ייצוג ניכויים',
-    condition: (c: RegistryCustomer): boolean => 
-        !!c.isIncomeTaxActive && !!c.needsDeductionsFile,
-    getDetails: (c: RegistryCustomer): Record<string, any> => ({
-        'מספר תיק ניכויים': c.businessDetails?.deductionsId || 'טרם הוזן'
-    }),
-},
+                id: 'it_deductions',
+                title: 'מס הכנסה ייצוג ניכויים',
+                condition: (c: RegistryCustomer): boolean =>
+                    !!c.isIncomeTaxActive && !!c.needsDeductionsFile,
+                getDetails: (c: RegistryCustomer): Record<string, any> => ({
+                    'מספר תיק ניכויים': c.businessDetails?.deductionsId || 'טרם הוזן'
+                }),
+            },
             {
                 id: 'it_open',
                 title: 'פתיחת תיק מס הכנסה',
@@ -175,7 +179,7 @@ export const AUTO_TASKS_CONFIG: RegistryParentTask[] = [
                 id: 'taxCoordination',
                 title: 'תיאום מס'
             },
-            
+
         ],
     },
     {
@@ -183,15 +187,15 @@ export const AUTO_TASKS_CONFIG: RegistryParentTask[] = [
         title: 'הסדרת הוראות קבע',
         condition: directDebitCondition,
         subTasks: [
-            { 
-                id: 'dd_nii_personal', 
-                title: 'הסדרת הו"ק ביטוח לאומי אישי', 
-                condition: (c: RegistryCustomer): boolean => !!c.isInsuranceActive 
+            {
+                id: 'dd_nii_personal',
+                title: 'הסדרת הו"ק ביטוח לאומי אישי',
+                condition: (c: RegistryCustomer): boolean => !!c.isInsuranceActive
             },
-            { 
-                id: 'dd_vat', 
-                title: 'הסדרת הו"ק מע"מ', 
-                condition: (c: RegistryCustomer): boolean => !!c.isVatActive 
+            {
+                id: 'dd_vat',
+                title: 'הסדרת הו"ק מע"מ',
+                condition: (c: RegistryCustomer): boolean => !!c.isVatActive
             },
             {
                 id: 'dd_it',
@@ -204,8 +208,8 @@ export const AUTO_TASKS_CONFIG: RegistryParentTask[] = [
                 title: 'הסדרת הו"ק משרד',
                 isAutoUpdate: true,
                 condition: (c: RegistryCustomer): boolean => !c.paymentDetails?.directDebit && Number(c.paymentDetails?.monthlyFee) > 0,
-                getDetails: (c: RegistryCustomer): Record<string, any> => ({ 
-                    'סכום חודשי': `${c.paymentDetails?.monthlyFee || 0} ש"ח` 
+                getDetails: (c: RegistryCustomer): Record<string, any> => ({
+                    'סכום חודשי': `${c.paymentDetails?.monthlyFee || 0} ש"ח`
                 }),
             },
         ],
@@ -223,10 +227,10 @@ export const AUTO_TASKS_CONFIG: RegistryParentTask[] = [
 
 // bg classes for the 3-4px accent strip (absolute-positioned, right side in RTL)
 export const CATEGORY_ACCENT_COLORS: Record<string, string> = {
-    ADMIN_SETUP:    'bg-slate-400',
-    INSURANCE:      'bg-sky-400',
-    INCOME_TAX:     'bg-blue-500',
-    VAT:            'bg-indigo-400',
-    DIRECT_DEBIT:   'bg-teal-400',
+    ADMIN_SETUP: 'bg-slate-400',
+    INSURANCE: 'bg-sky-400',
+    INCOME_TAX: 'bg-blue-500',
+    VAT: 'bg-indigo-400',
+    DIRECT_DEBIT: 'bg-teal-400',
     FINAL_APPROVAL: 'bg-emerald-500',
 };
