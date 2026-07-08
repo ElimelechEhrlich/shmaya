@@ -137,6 +137,12 @@ export interface Customer {
   isActive?: boolean;
 
   comments: string;
+
+  /** Storage paths inside the private `customer-files` bucket — NOT public URLs.
+   *  Resolve to a usable link via PersistenceAdapter.getSignedFileUrl(path). */
+  idPhotoUrl?: string | null;
+  bankApprovalUrl?: string | null;
+  agreementUrl?: string | null;
 }
 
 // ──────────────────────────────────────────────────────────────────

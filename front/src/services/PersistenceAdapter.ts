@@ -152,6 +152,10 @@ function dbRowToCustomer(row: any): Customer {
     isIncomeTaxActive: !!row.is_income_tax_active,
     isVatActive: !!row.is_vat_active,
     needsDeductionsFile: row.needs_deductions_file ?? false,
+
+    idPhotoUrl: row.id_photo_url ?? null,
+    bankApprovalUrl: row.bank_approval_url ?? null,
+    agreementUrl: row.agreement_url ?? null,
   };
 }
 
@@ -365,6 +369,9 @@ export const PersistenceAdapter = {
       is_income_tax_active: c.isIncomeTaxActive ?? false,
       is_vat_active: c.isVatActive ?? false,
       is_insurance_active: c.isInsuranceActive ?? false,
+      id_photo_url: c.idPhotoUrl ?? null,
+      bank_approval_url: c.bankApprovalUrl ?? null,
+      agreement_url: c.agreementUrl ?? null,
     };
 
     const { data: inserted, error } = await supabase
@@ -433,6 +440,9 @@ export const PersistenceAdapter = {
     if (c.needsDeductionsFile !== undefined) flatRow.needs_deductions_file = c.needsDeductionsFile;
     if (c.comments !== undefined) flatRow.comments = c.comments;
     if (c.isActive !== undefined) flatRow.is_active = c.isActive;
+    if (c.idPhotoUrl !== undefined) flatRow.id_photo_url = c.idPhotoUrl;
+    if (c.bankApprovalUrl !== undefined) flatRow.bank_approval_url = c.bankApprovalUrl;
+    if (c.agreementUrl !== undefined) flatRow.agreement_url = c.agreementUrl;
 
     if (Object.keys(flatRow).length === 0) {
       return { data: { id } as unknown as Customer, error: null };
@@ -451,6 +461,37 @@ export const PersistenceAdapter = {
 
   async deleteCustomer(id: string): Promise<DbResult<null>> {
     const { error } = await supabase.from('customers').delete().eq('id', id);
+    return { data: null, error };
+  },
+
+  // ── Customer files (private `customer-files` Storage bucket) ──
+  // Returns the storage PATH, not a URL — the bucket is private, so callers
+  // must resolve a usable link via getSignedFileUrl() at click-time.
+
+  async uploadCustomerFile(
+    customerId: string,
+    file: File,
+    fileType: 'id_photo' | 'bank_approval' | 'agreement'
+  ): Promise<DbResult<string>> {
+    const ext = file.name.split('.').pop();
+    const path = `customers/${customerId}/${fileType}.${ext}`;
+    const { error } = await supabase.storage
+      .from('customer-files')
+      .upload(path, file, { upsert: true });
+    if (error) return { data: null, error };
+    return { data: path, error: null };
+  },
+
+  async getSignedFileUrl(path: string): Promise<DbResult<string>> {
+    const { data, error } = await supabase.storage
+      .from('customer-files')
+      .createSignedUrl(path, 60 * 5); // 5 minutes — generated fresh per download click
+    if (error) return { data: null, error };
+    return { data: data.signedUrl, error: null };
+  },
+
+  async deleteCustomerFile(path: string): Promise<DbResult<null>> {
+    const { error } = await supabase.storage.from('customer-files').remove([path]);
     return { data: null, error };
   },
 

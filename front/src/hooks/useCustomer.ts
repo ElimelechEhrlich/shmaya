@@ -46,6 +46,16 @@ export interface UseCustomerActions {
     reactivate: () => Promise<{ success: boolean; error?: string }>;
     remove: () => Promise<{ success: boolean; error?: string }>;
     reload: () => Promise<void>;
+    uploadFile: (
+        field: 'idPhotoUrl' | 'bankApprovalUrl' | 'agreementUrl',
+        fileType: 'id_photo' | 'bank_approval' | 'agreement',
+        file: File
+    ) => Promise<{ success: boolean; error?: string }>;
+    getFileDownloadUrl: (path: string) => Promise<{ success: boolean; url?: string; error?: string }>;
+    removeFile: (
+        field: 'idPhotoUrl' | 'bankApprovalUrl' | 'agreementUrl',
+        path: string
+    ) => Promise<{ success: boolean; error?: string }>;
 }
 
 export interface UseCustomerResult {
@@ -367,6 +377,43 @@ return result;
         [customerId]
     );
 
+    const uploadFile = useCallback(
+        async (
+            field: 'idPhotoUrl' | 'bankApprovalUrl' | 'agreementUrl',
+            fileType: 'id_photo' | 'bank_approval' | 'agreement',
+            file: File
+        ): Promise<{ success: boolean; error?: string }> => {
+            if (!customerId) return { success: false, error: 'No customer loaded' };
+            const { data: path, error } = await PersistenceAdapter.uploadCustomerFile(customerId, file, fileType);
+            if (error || !path) return { success: false, error: error?.message ?? 'שגיאה בהעלאת הקובץ' };
+            updateField(null, field, path);
+            return { success: true };
+        },
+        [customerId, updateField]
+    );
+
+    const getFileDownloadUrl = useCallback(
+        async (path: string): Promise<{ success: boolean; url?: string; error?: string }> => {
+            const { data: url, error } = await PersistenceAdapter.getSignedFileUrl(path);
+            if (error || !url) return { success: false, error: error?.message ?? 'שגיאה בהפקת קישור להורדה' };
+            return { success: true, url };
+        },
+        []
+    );
+
+    const removeFile = useCallback(
+        async (
+            field: 'idPhotoUrl' | 'bankApprovalUrl' | 'agreementUrl',
+            path: string
+        ): Promise<{ success: boolean; error?: string }> => {
+            const { error } = await PersistenceAdapter.deleteCustomerFile(path);
+            if (error) return { success: false, error: error.message ?? 'שגיאה במחיקת הקובץ' };
+            updateField(null, field, null);
+            return { success: true };
+        },
+        [updateField]
+    );
+
     const tasks = editData?.tasks;
 
     const progress = useMemo(
@@ -390,6 +437,9 @@ return result;
         reactivate,
         remove,
         reload,
+        uploadFile,
+        getFileDownloadUrl,
+        removeFile,
     };
 
     return {

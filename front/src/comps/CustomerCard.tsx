@@ -1,6 +1,6 @@
 // src/comps/CustomerCard.tsx
 
-import React, { useState } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import { useCustomer } from '../hooks/useCustomer';
 import {
@@ -45,6 +45,23 @@ interface ToggleRowProps {
     onChange: (category: string | null, field: string, value: any) => void;
 }
 
+
+type DocumentField = 'idPhotoUrl' | 'bankApprovalUrl' | 'agreementUrl';
+type DocumentFileType = 'id_photo' | 'bank_approval' | 'agreement';
+
+interface DocumentRowProps {
+    label: string;
+    path: string | null | undefined;
+    isEditing: boolean;
+    uploading: boolean;
+    downloading: boolean;
+    removing: boolean;
+    field: DocumentField;
+    fileType: DocumentFileType;
+    onUpload: (field: DocumentField, fileType: DocumentFileType, file: File) => void;
+    onDownload: (field: DocumentField, path: string) => void;
+    onRemove: (field: DocumentField, path: string) => void;
+}
 
 interface ConfirmModalProps {
     title: string;
@@ -112,6 +129,66 @@ const ToggleRow: React.FC<ToggleRowProps> = React.memo(({ label, active, isEditi
 ));
 
 
+const DocumentRow: React.FC<DocumentRowProps> = React.memo(({ label, path, isEditing, uploading, downloading, removing, field, fileType, onUpload, onDownload, onRemove }) => {
+    const inputRef = useRef<HTMLInputElement>(null);
+    const busy = uploading || downloading || removing;
+
+    return (
+        <div className="flex justify-between items-center p-3 rounded-xl border bg-white border-slate-100 mb-2 last:mb-0">
+            <span className="text-sm font-bold text-slate-700">{label}</span>
+            <div className="flex items-center gap-2">
+                {busy ? (
+                    <span className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                ) : (
+                    <>
+                        {path && (
+                            <button
+                                type="button"
+                                onClick={() => onDownload(field, path)}
+                                className="cursor-pointer text-xs font-bold text-blue-600 hover:text-blue-800 px-2 py-1.5 rounded-lg transition"
+                            >
+                                הורדה
+                            </button>
+                        )}
+                        {isEditing && (
+                            <>
+                                <button
+                                    type="button"
+                                    onClick={() => inputRef.current?.click()}
+                                    className="cursor-pointer text-xs font-bold text-slate-600 hover:text-slate-900 px-2 py-1.5 rounded-lg border border-slate-200 transition"
+                                >
+                                    העלאה
+                                </button>
+                                <input
+                                    ref={inputRef}
+                                    type="file"
+                                    accept=".pdf,.jpg,.jpeg,.png"
+                                    className="hidden"
+                                    onChange={(e) => {
+                                        const file = e.target.files?.[0];
+                                        e.target.value = '';
+                                        if (file) onUpload(field, fileType, file);
+                                    }}
+                                />
+                                {path && (
+                                    <button
+                                        type="button"
+                                        onClick={() => onRemove(field, path)}
+                                        title="הסרת קובץ"
+                                        className="cursor-pointer text-xs font-bold text-red-500 hover:text-red-700 px-2 py-1.5 rounded-lg transition"
+                                    >
+                                        הסרה
+                                    </button>
+                                )}
+                            </>
+                        )}
+                    </>
+                )}
+            </div>
+        </div>
+    );
+});
+
 const ConfirmModal: React.FC<ConfirmModalProps> = React.memo(({ title, body, onConfirm, onCancel }) => (
     <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center z-50 backdrop-blur-sm" dir="rtl">
         <div className="bg-white rounded-2xl shadow-2xl p-7 max-w-md w-full mx-4 border border-slate-200">
@@ -146,6 +223,36 @@ const CustomerCard: React.FC = () => {
     const [confirmDelete, setConfirmDelete] = useState<boolean>(false);
     const [editingTask, setEditingTask] = useState<any | null>(null);
     const [isSaving, setIsSaving] = useState<boolean>(false);
+    const [uploadingFiles, setUploadingFiles] = useState<Record<string, boolean>>({});
+    const [downloadingFiles, setDownloadingFiles] = useState<Record<string, boolean>>({});
+    const [removingFiles, setRemovingFiles] = useState<Record<string, boolean>>({});
+
+    const handleFileUpload = useCallback(async (field: DocumentField, fileType: DocumentFileType, file: File) => {
+        setUploadingFiles(prev => ({ ...prev, [field]: true }));
+        const r = await actions.uploadFile(field, fileType, file);
+        setUploadingFiles(prev => ({ ...prev, [field]: false }));
+        if (!r.success) await modal.alert('שגיאה בהעלאת הקובץ: ' + (r.error ?? ''));
+    }, [actions.uploadFile, modal]);
+
+    const handleFileRemove = useCallback(async (field: DocumentField, path: string) => {
+        const ok = await modal.confirm('למחוק את הקובץ? פעולה זו אינה הפיכה.');
+        if (!ok) return;
+        setRemovingFiles(prev => ({ ...prev, [field]: true }));
+        const r = await actions.removeFile(field, path);
+        setRemovingFiles(prev => ({ ...prev, [field]: false }));
+        if (!r.success) await modal.alert('שגיאה בהסרת הקובץ: ' + (r.error ?? ''));
+    }, [actions.removeFile, modal]);
+
+    const handleFileDownload = useCallback(async (field: DocumentField, path: string) => {
+        setDownloadingFiles(prev => ({ ...prev, [field]: true }));
+        const r = await actions.getFileDownloadUrl(path);
+        setDownloadingFiles(prev => ({ ...prev, [field]: false }));
+        if (!r.success || !r.url) {
+            await modal.alert('שגיאה בהפקת קישור להורדה: ' + (r.error ?? ''));
+            return;
+        }
+        window.open(r.url, '_blank', 'noopener,noreferrer');
+    }, [actions.getFileDownloadUrl, modal]);
 
     const handleSave = async () => {
         setIsSaving(true);
@@ -340,6 +447,48 @@ const CustomerCard: React.FC = () => {
                                     )}
                                 </div>
                             )}
+                        </Section>
+
+                        <Section title="מסמכים" icon="📎">
+                            <DocumentRow
+                                label="צילום ת.ז."
+                                path={editData.idPhotoUrl}
+                                isEditing={isEditing}
+                                uploading={!!uploadingFiles.idPhotoUrl}
+                                downloading={!!downloadingFiles.idPhotoUrl}
+                                removing={!!removingFiles.idPhotoUrl}
+                                field="idPhotoUrl"
+                                fileType="id_photo"
+                                onUpload={handleFileUpload}
+                                onDownload={handleFileDownload}
+                                onRemove={handleFileRemove}
+                            />
+                            <DocumentRow
+                                label="אישור ניהול חשבון"
+                                path={editData.bankApprovalUrl}
+                                isEditing={isEditing}
+                                uploading={!!uploadingFiles.bankApprovalUrl}
+                                downloading={!!downloadingFiles.bankApprovalUrl}
+                                removing={!!removingFiles.bankApprovalUrl}
+                                field="bankApprovalUrl"
+                                fileType="bank_approval"
+                                onUpload={handleFileUpload}
+                                onDownload={handleFileDownload}
+                                onRemove={handleFileRemove}
+                            />
+                            <DocumentRow
+                                label="הסכם התקשרות"
+                                path={editData.agreementUrl}
+                                isEditing={isEditing}
+                                uploading={!!uploadingFiles.agreementUrl}
+                                downloading={!!downloadingFiles.agreementUrl}
+                                removing={!!removingFiles.agreementUrl}
+                                field="agreementUrl"
+                                fileType="agreement"
+                                onUpload={handleFileUpload}
+                                onDownload={handleFileDownload}
+                                onRemove={handleFileRemove}
+                            />
                         </Section>
                     </div>
 

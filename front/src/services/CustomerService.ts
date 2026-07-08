@@ -26,6 +26,7 @@ function formDataToCustomer(formData: CustomerFormData): Partial<Customer> {
             businessName: formData.businessDetails.businessName,
             businessID: formData.businessDetails.businessID,
             businessType: formData.businessDetails.businessType as any,
+            isNewBusiness: formData.businessDetails.isNewBusiness,
             openingDate: formData.businessDetails.openingDate,
             occupation: formData.businessDetails.occupation,
             businessDescription: formData.businessDetails.businessDescription,
@@ -61,6 +62,9 @@ function formDataToCustomer(formData: CustomerFormData): Partial<Customer> {
         needsDeductionsFile: formData.needsDeductionsFile,
         comments: formData.comments,
         isActive: formData.isActive,
+        idPhotoUrl: formData.idPhotoUrl,
+        bankApprovalUrl: formData.bankApprovalUrl,
+        agreementUrl: formData.agreementUrl,
     };
 }
 

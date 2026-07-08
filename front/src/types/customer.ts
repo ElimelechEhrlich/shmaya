@@ -58,4 +58,7 @@ export interface CustomerFormData {
     needsDeductionsFile: boolean;
     comments: string;
     isActive: boolean;
+    idPhotoUrl?: string;
+    bankApprovalUrl?: string;
+    agreementUrl?: string;
 }

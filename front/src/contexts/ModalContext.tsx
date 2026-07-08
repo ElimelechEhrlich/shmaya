@@ -1,5 +1,5 @@
 // src/contexts/ModalContext.tsx
-import React, { createContext, useContext, useState, useCallback, useRef } from 'react';
+import React, { createContext, useContext, useState, useCallback, useRef, useMemo } from 'react';
 import AppModal, { type ModalOptions } from '../comps/AppModal';
 
 interface ModalContextValue {
@@ -69,8 +69,10 @@ export function ModalProvider({ children }: { children: React.ReactNode }): Reac
     setOptions({ ...opts, buttons: wrappedButtons });
 }, [close]);
 
+    const value = useMemo(() => ({ alert, confirm, custom }), [alert, confirm, custom]);
+
     return (
-        <ModalContext.Provider value={{ alert, confirm, custom }}>
+        <ModalContext.Provider value={value}>
             {children}
             <AppModal options={options} />
         </ModalContext.Provider>

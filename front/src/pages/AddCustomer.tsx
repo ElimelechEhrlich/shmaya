@@ -1,5 +1,5 @@
 // src/comps/AddCustomer.tsx
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { TaskGeneratorService } from '../services/TaskService';
 import { useNavigate, useLocation } from 'react-router';
 import FormField from '../comps/FormField';
@@ -48,6 +48,15 @@ interface ToggleHeaderProps {
     onChange: (checked: boolean) => void;
 }
 
+type PendingFileField = 'idPhotoUrl' | 'bankApprovalUrl' | 'agreementUrl';
+
+interface PendingFileRowProps {
+    label: string;
+    file: File | undefined;
+    onSelect: (file: File) => void;
+    onRemove: () => void;
+}
+
 export default function AddCustomer(): React.ReactElement {
     const navigate = useNavigate();
     const location = useLocation();
@@ -74,6 +83,19 @@ export default function AddCustomer(): React.ReactElement {
 
     const [previewTasks, setPreviewTasks] = useState<any[]>([]);
     const [isSaving, setIsSaving] = useState<boolean>(false);
+    const [pendingFiles, setPendingFiles] = useState<Partial<Record<PendingFileField, File>>>({});
+
+    const handleFileSelect = (field: PendingFileField, file: File): void => {
+        setPendingFiles(prev => ({ ...prev, [field]: file }));
+    };
+
+    const handleFileRemove = (field: PendingFileField): void => {
+        setPendingFiles(prev => {
+            const next = { ...prev };
+            delete next[field];
+            return next;
+        });
+    };
 
     // תצוגה מקדימה של משימות בלבד - ללא הפעלת לולאת שינוי הסטייט של הלקוח
     useEffect(() => {
@@ -134,6 +156,31 @@ export default function AddCustomer(): React.ReactElement {
             const cleanedData = applyBusinessRules(dataToSave as unknown as Customer);
             const result = await CustomerService.saveCustomer(cleanedData as unknown as CustomerFormData, false);
             if (result.success) {
+                const newCustomerId = result.data.id;
+                const fileEntries = Object.entries(pendingFiles) as [PendingFileField, File][];
+
+                if (fileEntries.length > 0) {
+                    const FILE_TYPE_MAP: Record<PendingFileField, 'id_photo' | 'bank_approval' | 'agreement'> = {
+                        idPhotoUrl: 'id_photo',
+                        bankApprovalUrl: 'bank_approval',
+                        agreementUrl: 'agreement',
+                    };
+                    const uploadResults = await Promise.all(
+                        fileEntries.map(async ([field, file]) => {
+                            const { data: path, error } = await PersistenceAdapter.uploadCustomerFile(newCustomerId, file, FILE_TYPE_MAP[field]);
+                            return { field, path, error };
+                        })
+                    );
+                    const patch: Partial<Pick<Customer, 'idPhotoUrl' | 'bankApprovalUrl' | 'agreementUrl'>> = {};
+                    uploadResults.forEach(r => { if (r.path) patch[r.field] = r.path; });
+                    if (Object.keys(patch).length > 0) {
+                        await PersistenceAdapter.updateCustomer(newCustomerId, patch);
+                    }
+                    const failed = uploadResults.filter(r => r.error || !r.path);
+                    if (failed.length > 0) {
+                        await modal.alert('הלקוח נשמר בהצלחה, אך העלאת חלק מהמסמכים נכשלה. ניתן להעלות אותם מחדש מתוך כרטיס הלקוח.');
+                    }
+                }
 
                 if (formData.businessDetails.businessType === 'חברה בע"מ') {
                     await handleLtdCustomerFlow(
@@ -240,6 +287,29 @@ export default function AddCustomer(): React.ReactElement {
                                         <textarea name="businessDescription" className="input-style h-20" onChange={(e) => handleChange('businessDetails', e)}></textarea>
                                     </FormField>
                                 </div>
+                            </div>
+                        </Card>
+
+                        <Card title="מסמכים" icon="📎">
+                            <div className="space-y-2">
+                                <PendingFileRow
+                                    label="צילום ת.ז."
+                                    file={pendingFiles.idPhotoUrl}
+                                    onSelect={(file) => handleFileSelect('idPhotoUrl', file)}
+                                    onRemove={() => handleFileRemove('idPhotoUrl')}
+                                />
+                                <PendingFileRow
+                                    label="אישור ניהול חשבון"
+                                    file={pendingFiles.bankApprovalUrl}
+                                    onSelect={(file) => handleFileSelect('bankApprovalUrl', file)}
+                                    onRemove={() => handleFileRemove('bankApprovalUrl')}
+                                />
+                                <PendingFileRow
+                                    label="הסכם התקשרות"
+                                    file={pendingFiles.agreementUrl}
+                                    onSelect={(file) => handleFileSelect('agreementUrl', file)}
+                                    onRemove={() => handleFileRemove('agreementUrl')}
+                                />
                             </div>
                         </Card>
 
@@ -446,6 +516,47 @@ const Card: React.FC<CardProps> = ({ title, icon, children }) => (
         {children}
     </div>
 );
+
+const PendingFileRow: React.FC<PendingFileRowProps> = ({ label, file, onSelect, onRemove }) => {
+    const inputRef = useRef<HTMLInputElement>(null);
+    return (
+        <div className="flex items-center justify-between p-3 rounded-xl border border-slate-200 bg-slate-50">
+            <div className="min-w-0">
+                <span className="text-sm font-bold text-slate-700 block">{label}</span>
+                {file && <span className="text-xs text-slate-500 truncate block max-w-[220px]">{file.name}</span>}
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+                <button
+                    type="button"
+                    onClick={() => inputRef.current?.click()}
+                    className="cursor-pointer text-xs font-bold text-slate-600 hover:text-slate-900 px-2 py-1.5 rounded-lg border border-slate-200 transition"
+                >
+                    {file ? 'החלפה' : 'בחירה'}
+                </button>
+                {file && (
+                    <button
+                        type="button"
+                        onClick={onRemove}
+                        className="cursor-pointer text-xs font-bold text-red-500 hover:text-red-700 px-2 py-1.5 rounded-lg transition"
+                    >
+                        הסרה
+                    </button>
+                )}
+                <input
+                    ref={inputRef}
+                    type="file"
+                    accept=".pdf,.jpg,.jpeg,.png"
+                    className="hidden"
+                    onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        e.target.value = '';
+                        if (f) onSelect(f);
+                    }}
+                />
+            </div>
+        </div>
+    );
+};
 
 const ToggleHeader: React.FC<ToggleHeaderProps> = ({ label, checked, onChange }) => (
     <label className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition ${checked ? 'bg-blue-50 border-blue-200' : 'bg-slate-50 border-slate-200 hover:border-slate-300'}`}>
