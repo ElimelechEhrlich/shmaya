@@ -107,13 +107,13 @@ getCustomerDisplayName(client).includes(filters.search || '')
                     <div className="card-base overflow-x-auto">
                         <table className="w-full text-right border-collapse">
                             <thead className="bg-slate-50 border-b border-slate-200">
-                                <tr>{[1,2,3,4,5].map(i => (
+                                <tr>{[1,2,3,4,5,6].map(i => (
                                     <th key={i} className="p-4"><div className="h-3 bg-slate-200 rounded animate-pulse" /></th>
                                 ))}</tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100">
                                 {[1,2,3,4,5,6,7].map(i => (
-                                    <tr key={i}>{[1,2,3,4,5].map(j => (
+                                    <tr key={i}>{[1,2,3,4,5,6].map(j => (
                                         <td key={j} className="p-4"><div className="h-5 bg-slate-100 rounded animate-pulse" /></td>
                                     ))}</tr>
                                 ))}
@@ -207,6 +207,7 @@ getCustomerDisplayName(client).includes(filters.search || '')
                                 <th className="p-4 text-xs font-bold text-slate-600 uppercase tracking-wider text-center">סוג עסק</th>
                                 <th className="p-4 text-xs font-bold text-slate-600 uppercase tracking-wider text-center">רשויות</th>
                                 <th className="p-4 text-xs font-bold text-slate-600 uppercase tracking-wider text-center">סטטוס</th>
+                                <th className="p-4 text-xs font-bold text-slate-600 uppercase tracking-wider text-center">תאריך יצירה</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
@@ -237,6 +238,7 @@ getCustomerDisplayName(client).includes(filters.search || '')
                                                     ? <span className="text-green-700 bg-green-50 px-3 py-1 rounded-full border border-green-200 text-xs font-bold">✓ הושלם</span>
                                                     : <span className="text-amber-700 bg-amber-50 px-3 py-1 rounded-full border border-amber-200 text-xs font-bold">⏳ בטיפול</span>}
                                         </td>
+                                        <td className="p-4 text-sm text-slate-600 text-center">{client.createdAt ? new Date(client.createdAt).toLocaleDateString('he-IL') : '—'}</td>
                                     </tr>
                                 );
                             })}
