@@ -83,6 +83,12 @@ const Section: React.FC<SectionProps> = React.memo(({ title, icon, children }) =
     </div>
 ));
 
+function formatDateDisplay(iso: string): string {
+    const [y, m, d] = iso.split('-');
+    if (!y || !m || !d) return iso;
+    return `${d}/${m}/${y}`;
+}
+
 const EditableRow: React.FC<EditableRowProps> = React.memo(({ label, value, isEditing, category, field, onChange, type = "text", options = [] }) => (
     <div className="mb-4 last:mb-0">
         <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1 tracking-wide">{label}</label>
@@ -105,6 +111,8 @@ const EditableRow: React.FC<EditableRowProps> = React.memo(({ label, value, isEd
         ) : (
             type === "select" || type === "search-select" ? (
                 <span className="text-sm font-bold text-slate-800">{(value === 'yes' && 'כן') || (value === 'no' && 'לא') || value}</span>
+            ) : type === "date" ? (
+                <span className="text-sm font-bold text-slate-800">{value ? formatDateDisplay(value) : '---'}</span>
             ) : (
                 <span className="text-sm font-bold text-slate-800">{value || '---'}</span>
             )
@@ -417,14 +425,23 @@ const CustomerCard: React.FC = () => {
                             <EditableRow label="שם העסק" value={editData.businessDetails?.businessName} isEditing={isEditing} category="businessDetails" field="businessName" onChange={actions.updateField} />
                             <EditableRow label="מזהה עסק" value={editData.businessDetails?.businessID} isEditing={isEditing} category="businessDetails" field="businessID" onChange={actions.updateField} />
                             <EditableRow label="סוג עסק" value={editData.businessDetails?.businessType} isEditing={isEditing} type="search-select" options={BUSINESS_TYPE_OPTIONS} category="businessDetails" field="businessType" onChange={actions.updateField} />
-                            <ToggleRow
-                                label="עסק חדש"
-                                active={editData.businessDetails?.isNewBusiness ?? false}
-                                isEditing={isEditing}
-                                category="businessDetails"
-                                field="isNewBusiness"
-                                onChange={actions.updateField}
-                            />
+                            <div className="mb-4 last:mb-0">
+                                <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1 tracking-wide">עסק חדש</label>
+                                {isEditing ? (
+                                    <select
+                                        className="input-style cursor-pointer"
+                                        value={editData.businessDetails?.isNewBusiness ? 'true' : 'false'}
+                                        onChange={(e) => actions.updateField('businessDetails', 'isNewBusiness', e.target.value === 'true')}
+                                    >
+                                        <option value="true">עסק חדש</option>
+                                        <option value="false">עסק קיים</option>
+                                    </select>
+                                ) : (
+                                    <span className="text-sm font-bold text-slate-800">
+                                        {editData.businessDetails?.isNewBusiness ? 'עסק חדש' : 'עסק קיים'}
+                                    </span>
+                                )}
+                            </div>
                             <EditableRow label="תאריך פתיחה" value={editData.businessDetails?.openingDate} isEditing={isEditing} type="date" category="businessDetails" field="openingDate" onChange={actions.updateField} />
                             <EditableRow
                                 label="משלח יד"
