@@ -237,25 +237,22 @@ export default function AddCustomer(): React.ReactElement {
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <FormField label="שם העסק"><input name="businessName" className="input-style" onChange={(e) => handleChange('businessDetails', e)} required /></FormField>
                                 <FormField label="מזהה עסק"><input name="businessID" className="input-style" onChange={(e) => handleChange('businessDetails', e)} /></FormField>
-                                <FormField label="עסק חדש">
-    <label className="flex items-center gap-2 cursor-pointer mt-1">
-        <input
-            type="checkbox"
-            className="w-5 h-5 cursor-pointer accent-emerald-600"
-            checked={formData.businessDetails.isNewBusiness}
-            onChange={(e) => setFormData({ 
-                ...formData, 
-                businessDetails: { 
-                    ...formData.businessDetails, 
-                    isNewBusiness: e.target.checked 
-                } 
-            })}
-        />
-        <span className="text-sm text-slate-600">
-            {formData.businessDetails.isNewBusiness ? 'כן' : 'לא'}
-        </span>
-    </label>
-</FormField>
+                                <div className="flex flex-col gap-1">
+                                    <select
+                                        className="input-style cursor-pointer"
+                                        value={formData.businessDetails.isNewBusiness ? 'true' : 'false'}
+                                        onChange={(e) => setFormData({
+                                            ...formData,
+                                            businessDetails: {
+                                                ...formData.businessDetails,
+                                                isNewBusiness: e.target.value === 'true'
+                                            }
+                                        })}
+                                    >
+                                        <option value="true">עסק חדש</option>
+                                        <option value="false">עסק קיים</option>
+                                    </select>
+                                </div>
                                 <FormField label="תאריך פתיחת העסק"><input name="openingDate" type="date" className="input-style" onChange={(e) => handleChange('businessDetails', e)} required={formData.businessDetails.isNewBusiness} /></FormField>                  
                                     <FormField label="סוג עסק לייצוג">
                                     <FilterableSelect
