@@ -426,7 +426,6 @@ const CustomerCard: React.FC = () => {
                             <EditableRow label="מזהה עסק" value={editData.businessDetails?.businessID} isEditing={isEditing} category="businessDetails" field="businessID" onChange={actions.updateField} />
                             <EditableRow label="סוג עסק" value={editData.businessDetails?.businessType} isEditing={isEditing} type="search-select" options={BUSINESS_TYPE_OPTIONS} category="businessDetails" field="businessType" onChange={actions.updateField} />
                             <div className="mb-4 last:mb-0">
-                                <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1 tracking-wide">עסק חדש</label>
                                 {isEditing ? (
                                     <select
                                         className="input-style cursor-pointer"
