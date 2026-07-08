@@ -55,10 +55,12 @@ interface DocumentRowProps {
     isEditing: boolean;
     uploading: boolean;
     downloading: boolean;
+    removing: boolean;
     field: DocumentField;
     fileType: DocumentFileType;
     onUpload: (field: DocumentField, fileType: DocumentFileType, file: File) => void;
     onDownload: (field: DocumentField, path: string) => void;
+    onRemove: (field: DocumentField, path: string) => void;
 }
 
 interface ConfirmModalProps {
@@ -127,9 +129,9 @@ const ToggleRow: React.FC<ToggleRowProps> = React.memo(({ label, active, isEditi
 ));
 
 
-const DocumentRow: React.FC<DocumentRowProps> = React.memo(({ label, path, isEditing, uploading, downloading, field, fileType, onUpload, onDownload }) => {
+const DocumentRow: React.FC<DocumentRowProps> = React.memo(({ label, path, isEditing, uploading, downloading, removing, field, fileType, onUpload, onDownload, onRemove }) => {
     const inputRef = useRef<HTMLInputElement>(null);
-    const busy = uploading || downloading;
+    const busy = uploading || downloading || removing;
 
     return (
         <div className="flex justify-between items-center p-3 rounded-xl border bg-white border-slate-100 mb-2 last:mb-0">
@@ -168,6 +170,16 @@ const DocumentRow: React.FC<DocumentRowProps> = React.memo(({ label, path, isEdi
                                         if (file) onUpload(field, fileType, file);
                                     }}
                                 />
+                                {path && (
+                                    <button
+                                        type="button"
+                                        onClick={() => onRemove(field, path)}
+                                        title="הסרת קובץ"
+                                        className="cursor-pointer text-xs font-bold text-red-500 hover:text-red-700 px-2 py-1.5 rounded-lg transition"
+                                    >
+                                        הסרה
+                                    </button>
+                                )}
                             </>
                         )}
                     </>
@@ -213,6 +225,7 @@ const CustomerCard: React.FC = () => {
     const [isSaving, setIsSaving] = useState<boolean>(false);
     const [uploadingFiles, setUploadingFiles] = useState<Record<string, boolean>>({});
     const [downloadingFiles, setDownloadingFiles] = useState<Record<string, boolean>>({});
+    const [removingFiles, setRemovingFiles] = useState<Record<string, boolean>>({});
 
     const handleFileUpload = useCallback(async (field: DocumentField, fileType: DocumentFileType, file: File) => {
         setUploadingFiles(prev => ({ ...prev, [field]: true }));
@@ -220,6 +233,15 @@ const CustomerCard: React.FC = () => {
         setUploadingFiles(prev => ({ ...prev, [field]: false }));
         if (!r.success) await modal.alert('שגיאה בהעלאת הקובץ: ' + (r.error ?? ''));
     }, [actions.uploadFile, modal]);
+
+    const handleFileRemove = useCallback(async (field: DocumentField, path: string) => {
+        const ok = await modal.confirm('למחוק את הקובץ? פעולה זו אינה הפיכה.');
+        if (!ok) return;
+        setRemovingFiles(prev => ({ ...prev, [field]: true }));
+        const r = await actions.removeFile(field, path);
+        setRemovingFiles(prev => ({ ...prev, [field]: false }));
+        if (!r.success) await modal.alert('שגיאה בהסרת הקובץ: ' + (r.error ?? ''));
+    }, [actions.removeFile, modal]);
 
     const handleFileDownload = useCallback(async (field: DocumentField, path: string) => {
         setDownloadingFiles(prev => ({ ...prev, [field]: true }));
@@ -434,10 +456,12 @@ const CustomerCard: React.FC = () => {
                                 isEditing={isEditing}
                                 uploading={!!uploadingFiles.idPhotoUrl}
                                 downloading={!!downloadingFiles.idPhotoUrl}
+                                removing={!!removingFiles.idPhotoUrl}
                                 field="idPhotoUrl"
                                 fileType="id_photo"
                                 onUpload={handleFileUpload}
                                 onDownload={handleFileDownload}
+                                onRemove={handleFileRemove}
                             />
                             <DocumentRow
                                 label="אישור ניהול חשבון"
@@ -445,10 +469,12 @@ const CustomerCard: React.FC = () => {
                                 isEditing={isEditing}
                                 uploading={!!uploadingFiles.bankApprovalUrl}
                                 downloading={!!downloadingFiles.bankApprovalUrl}
+                                removing={!!removingFiles.bankApprovalUrl}
                                 field="bankApprovalUrl"
                                 fileType="bank_approval"
                                 onUpload={handleFileUpload}
                                 onDownload={handleFileDownload}
+                                onRemove={handleFileRemove}
                             />
                             <DocumentRow
                                 label="הסכם התקשרות"
@@ -456,10 +482,12 @@ const CustomerCard: React.FC = () => {
                                 isEditing={isEditing}
                                 uploading={!!uploadingFiles.agreementUrl}
                                 downloading={!!downloadingFiles.agreementUrl}
+                                removing={!!removingFiles.agreementUrl}
                                 field="agreementUrl"
                                 fileType="agreement"
                                 onUpload={handleFileUpload}
                                 onDownload={handleFileDownload}
+                                onRemove={handleFileRemove}
                             />
                         </Section>
                     </div>

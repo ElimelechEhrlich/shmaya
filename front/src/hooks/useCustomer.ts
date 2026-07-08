@@ -52,6 +52,10 @@ export interface UseCustomerActions {
         file: File
     ) => Promise<{ success: boolean; error?: string }>;
     getFileDownloadUrl: (path: string) => Promise<{ success: boolean; url?: string; error?: string }>;
+    removeFile: (
+        field: 'idPhotoUrl' | 'bankApprovalUrl' | 'agreementUrl',
+        path: string
+    ) => Promise<{ success: boolean; error?: string }>;
 }
 
 export interface UseCustomerResult {
@@ -397,6 +401,19 @@ return result;
         []
     );
 
+    const removeFile = useCallback(
+        async (
+            field: 'idPhotoUrl' | 'bankApprovalUrl' | 'agreementUrl',
+            path: string
+        ): Promise<{ success: boolean; error?: string }> => {
+            const { error } = await PersistenceAdapter.deleteCustomerFile(path);
+            if (error) return { success: false, error: error.message ?? 'שגיאה במחיקת הקובץ' };
+            updateField(null, field, null);
+            return { success: true };
+        },
+        [updateField]
+    );
+
     const tasks = editData?.tasks;
 
     const progress = useMemo(
@@ -422,6 +439,7 @@ return result;
         reload,
         uploadFile,
         getFileDownloadUrl,
+        removeFile,
     };
 
     return {

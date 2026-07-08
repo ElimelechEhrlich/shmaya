@@ -490,6 +490,11 @@ export const PersistenceAdapter = {
     return { data: data.signedUrl, error: null };
   },
 
+  async deleteCustomerFile(path: string): Promise<DbResult<null>> {
+    const { error } = await supabase.storage.from('customer-files').remove([path]);
+    return { data: null, error };
+  },
+
   // ── Tasks ──
 
   async fetchTasksForCustomer(clientId: string): Promise<DbResult<PersistedTask[]>> {
