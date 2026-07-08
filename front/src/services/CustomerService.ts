@@ -61,6 +61,9 @@ function formDataToCustomer(formData: CustomerFormData): Partial<Customer> {
         needsDeductionsFile: formData.needsDeductionsFile,
         comments: formData.comments,
         isActive: formData.isActive,
+        idPhotoUrl: formData.idPhotoUrl,
+        bankApprovalUrl: formData.bankApprovalUrl,
+        agreementUrl: formData.agreementUrl,
     };
 }
 
