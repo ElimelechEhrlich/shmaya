@@ -1,6 +1,6 @@
 // src/pages/Login.tsx
 import React, { useState } from "react";
-import { useNavigate } from "react-router";
+import { useNavigate, useSearchParams } from "react-router";
 import { authService, ALLOWED_USERS } from "../services/authService";
 
 export default function Login(): React.ReactElement {
@@ -8,6 +8,7 @@ export default function Login(): React.ReactElement {
   const [username, setUsername] = useState<string>('בחר');
   const [error, setError] = useState<boolean>(false);
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
 const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
   e.preventDefault();
@@ -15,7 +16,8 @@ const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
   if (!ALLOWED_USERS.includes(username)) { setError(true); return; }
   const ok = await authService.login(username);
   if (!ok) { setError(true); return; }
-  navigate('/admin/dashboard');
+  const redirect = searchParams.get('redirect');
+  navigate(redirect || '/admin/dashboard');
 };
   return (
     <div className="h-screen w-full flex items-center justify-center bg-slate-900" dir="rtl">
