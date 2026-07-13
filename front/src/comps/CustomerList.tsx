@@ -162,7 +162,7 @@ getCustomerDisplayName(client).includes(filters.search || '')
                         <span>{showFilters ? '▴' : '▾'}</span>
                     </button>
                     <div className={`${showFilters ? 'block' : 'hidden'} md:block`}>
-                    <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-3">
+                    <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-7 gap-3">
                         <input
                             type="text"
                             placeholder="🔍 חיפוש שם או מזהה..."
