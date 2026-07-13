@@ -436,8 +436,10 @@ const CustomerCard: React.FC = () => {
                             <EditableRow label="שם מלא" value={editData.customerDetails?.fullName} isEditing={isEditing} category="customerDetails" field="fullName" onChange={actions.updateField} />
                             <EditableRow label="תעודת זהות" value={editData.customerDetails?.identityId} isEditing={isEditing} category="customerDetails" field="identityId" onChange={actions.updateField} />
                             <EditableRow label="טלפון" value={editData.customerDetails?.phoneNumber} isEditing={isEditing} category="customerDetails" field="phoneNumber" onChange={actions.updateField} />
+                            <ToggleRow label="יש וואטסאפ" active={editData.customerDetails?.hasWhatsapp} isEditing={isEditing} category="customerDetails" field="hasWhatsapp" onChange={actions.updateField} />
                             <EditableRow label="כתובת מגורים" value={editData.customerDetails?.address} isEditing={isEditing} category="customerDetails" field="address" onChange={actions.updateField} />
                             <EditableRow label="אימייל" value={editData.customerDetails?.email} isEditing={isEditing} category="customerDetails" field="email" onChange={actions.updateField} />
+                            <EditableRow label="ת.ז. הורה" value={editData.customerDetails?.parentIdNumber} isEditing={isEditing} category="customerDetails" field="parentIdNumber" onChange={actions.updateField} />
                         </Section>
 
                         <Section title="פרטי עסק" icon="🏢">
@@ -473,14 +475,24 @@ const CustomerCard: React.FC = () => {
                                         onChange={actions.updateField}
                                     />
                                     {editData.incomeTaxDetails?.spouseFileExists && (
-                                        <ToggleRow
-                                            label="נדרשת העברת ייצוג תיק בן הזוג"
-                                            active={editData.incomeTaxDetails?.spouseRepresentationTransferNeeded}
-                                            isEditing={isEditing}
-                                            category="incomeTaxDetails"
-                                            field="spouseRepresentationTransferNeeded"
-                                            onChange={actions.updateField}
-                                        />
+                                        <>
+                                            <ToggleRow
+                                                label="נדרשת העברת ייצוג תיק בן הזוג"
+                                                active={editData.incomeTaxDetails?.spouseRepresentationTransferNeeded}
+                                                isEditing={isEditing}
+                                                category="incomeTaxDetails"
+                                                field="spouseRepresentationTransferNeeded"
+                                                onChange={actions.updateField}
+                                            />
+                                            <EditableRow
+                                                label="שנת לידה בן זוג"
+                                                value={editData.incomeTaxDetails?.spouseBirthYear}
+                                                isEditing={isEditing}
+                                                category="incomeTaxDetails"
+                                                field="spouseBirthYear"
+                                                onChange={actions.updateField}
+                                            />
+                                        </>
                                     )}
                                 </div>
                             )}

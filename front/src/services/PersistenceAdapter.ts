@@ -115,6 +115,8 @@ function dbRowToCustomer(row: any): Customer {
       phoneNumber: row.phone_number || '',
       address: row.address || '',
       email: row.email || '',
+      parentIdNumber: row.parent_id_number || '',
+      hasWhatsapp: !!row.has_whatsapp,
     },
     businessDetails: {
       businessName: row.business_name || '',
@@ -142,6 +144,7 @@ function dbRowToCustomer(row: any): Customer {
       needsIncomeTaxDirectDebit: row.needs_income_tax_direct_debit ?? true,
       spouseFileExists: row.spouse_file_exists ?? false,
       spouseRepresentationTransferNeeded: row.spouse_representation_transfer_needed ?? false,
+      spouseBirthYear: row.spouse_birth_year != null ? String(row.spouse_birth_year) : '',
     },
     vatDetails: {
       newVatCase: row.vat_is_new_case ?? true,
@@ -344,6 +347,8 @@ export const PersistenceAdapter = {
       phone_number: c.customerDetails?.phoneNumber ?? '',
       address: c.customerDetails?.address ?? '',
       email: c.customerDetails?.email ?? '',
+      parent_id_number: c.customerDetails?.parentIdNumber ?? '',
+      has_whatsapp: c.customerDetails?.hasWhatsapp ?? false,
       is_active: c.isActive ?? true,
       is_waiting: c.isWaiting ?? true,
       comments: c.comments ?? '',
@@ -364,6 +369,7 @@ export const PersistenceAdapter = {
       needs_income_tax_direct_debit: c.incomeTaxDetails?.needsIncomeTaxDirectDebit ?? true,
       spouse_file_exists: c.incomeTaxDetails?.spouseFileExists ?? false,
       spouse_representation_transfer_needed: c.incomeTaxDetails?.spouseRepresentationTransferNeeded ?? false,
+      spouse_birth_year: Number(c.incomeTaxDetails?.spouseBirthYear) || null,
       vat_is_new_case: c.vatDetails?.newVatCase ?? true,
       insurance_prepayment: c.insuranceDetails?.insurancePrepayment ?? '',
       work_hours: c.insuranceDetails?.workHours ?? '',
@@ -401,6 +407,8 @@ export const PersistenceAdapter = {
       flatRow.phone_number = c.customerDetails.phoneNumber;
       flatRow.address = c.customerDetails.address;
       flatRow.email = c.customerDetails.email;
+      flatRow.parent_id_number = c.customerDetails.parentIdNumber ?? '';
+      flatRow.has_whatsapp = c.customerDetails.hasWhatsapp ?? false;
     }
 
     if (c.businessDetails) {
@@ -423,6 +431,7 @@ export const PersistenceAdapter = {
       flatRow.needs_income_tax_direct_debit = c.incomeTaxDetails.needsIncomeTaxDirectDebit ?? true;
       flatRow.spouse_file_exists = c.incomeTaxDetails.spouseFileExists ?? false;
       flatRow.spouse_representation_transfer_needed = c.incomeTaxDetails.spouseRepresentationTransferNeeded ?? false;
+      flatRow.spouse_birth_year = Number(c.incomeTaxDetails.spouseBirthYear) || null;
     }
 
     if (c.vatDetails) {
