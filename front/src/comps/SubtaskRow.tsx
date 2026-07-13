@@ -16,6 +16,7 @@ export interface SubtaskViewRow {
     comment?: string | null;
     taskStatus?: 'pending' | 'completed';
     customerComments?: string;
+    customerIsWaiting?: boolean;
 }
 
 interface SubtaskRowProps {
@@ -54,18 +55,19 @@ const SubtaskRow: React.FC<SubtaskRowProps> = React.memo(({
             <div className={`absolute inset-y-0 right-0 w-0.75 ${accentBg} opacity-70`} />
 
             {/* Styled checkbox — peer pattern */}
-            <label className="cursor-pointer flex items-center shrink-0">
+            <label className={`flex items-center shrink-0 ${row.customerIsWaiting ? 'cursor-not-allowed' : 'cursor-pointer'}`} title={row.customerIsWaiting ? 'הלקוח במצב "בהמתנה" — לא ניתן לסמן ביצוע' : undefined}>
                 <input
                     type="checkbox"
                     checked={row.completed}
+                    disabled={!!row.customerIsWaiting}
                     onChange={(e) => onToggle(row, e.target.checked)}
                     className="peer sr-only"
                 />
-                <span className="w-5 h-5 rounded-full border-2 border-slate-300
+                <span className={`w-5 h-5 rounded-full border-2 border-slate-300
                                  peer-checked:border-blue-500 peer-checked:bg-blue-500
                                  transition-all duration-200 flex items-center justify-center
                                  text-transparent peer-checked:text-white text-[11px] font-black
-                                 hover:border-slate-400 shrink-0 select-none">
+                                 shrink-0 select-none ${row.customerIsWaiting ? 'opacity-50' : 'hover:border-slate-400'}`}>
                     ✓
                 </span>
             </label>

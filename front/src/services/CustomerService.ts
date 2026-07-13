@@ -21,12 +21,14 @@ function formDataToCustomer(formData: CustomerFormData): Partial<Customer> {
             phoneNumber: formData.customerDetails.phoneNumber,
             address: formData.customerDetails.address,
             email: formData.customerDetails.email,
+            parentIdNumber: formData.customerDetails.parentIdNumber,
+            hasWhatsapp: formData.customerDetails.hasWhatsapp,
         },
         businessDetails: {
             businessName: formData.businessDetails.businessName,
             businessID: formData.businessDetails.businessID,
             businessType: formData.businessDetails.businessType as any,
-            isNewBusiness: formData.businessDetails.isNewBusiness,
+            clientType: formData.businessDetails.clientType as any,
             openingDate: formData.businessDetails.openingDate,
             occupation: formData.businessDetails.occupation,
             businessDescription: formData.businessDetails.businessDescription,
@@ -46,6 +48,9 @@ function formDataToCustomer(formData: CustomerFormData): Partial<Customer> {
             annualTurnover: formData.incomeTaxDetails.annualTurnover,
             newItCase: formData.incomeTaxDetails.newItCase,
             needsIncomeTaxDirectDebit: formData.incomeTaxDetails.needsIncomeTaxDirectDebit,
+            spouseFileExists: formData.incomeTaxDetails.spouseFileExists,
+            spouseRepresentationTransferNeeded: formData.incomeTaxDetails.spouseRepresentationTransferNeeded,
+            spouseBirthYear: formData.incomeTaxDetails.spouseBirthYear,
         },
         vatDetails: {
             newVatCase: formData.vatDetails.newVatCase,
@@ -71,7 +76,7 @@ function formDataToCustomer(formData: CustomerFormData): Partial<Customer> {
 export const CustomerService = {
     saveCustomer: async (formData: CustomerFormData, isEdit: boolean = false, clientId: string | null = null): Promise<ServiceResponse> => {
         try {
-            if (formData.businessDetails?.isNewBusiness && !formData.businessDetails?.openingDate) {
+            if (formData.businessDetails?.clientType === 'עסק חדש' && !formData.businessDetails?.openingDate) {
     return { success: false, error: 'עסק חדש מחייב תאריך פתיחת עסק' };
             }
             const customerPayload = formDataToCustomer(formData);
@@ -184,6 +189,12 @@ export const CustomerService = {
 
     reactivateCustomer: async (clientId: string): Promise<ServiceResponse> => {
         const { error } = await PersistenceAdapter.updateCustomer(clientId, { isActive: true });
+        if (error) return { success: false, error: error.message };
+        return { success: true };
+    },
+
+    setWaitingStatus: async (clientId: string, isWaiting: boolean): Promise<ServiceResponse> => {
+        const { error } = await PersistenceAdapter.updateCustomer(clientId, { isWaiting });
         if (error) return { success: false, error: error.message };
         return { success: true };
     },

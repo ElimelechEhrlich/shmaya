@@ -54,6 +54,11 @@ export default function TaskDetails(): React.ReactElement {
         if (!task) return;
         const newCompleted = !currentCompleted;
 
+        if (task.customerIsWaiting) {
+            alert('הלקוח במצב "בהמתנה" — לא ניתן לסמן ביצוע משימות עד להעברה לטיפול המשרד.');
+            return;
+        }
+
         const sub = (task.subTasks ?? []).find(s => s.id === subtaskId);
         if (newCompleted && sub && !authService.canApproveFinal(sub.title)) {
             alert('אין לך הרשאה לשנות את הסטטוס של אישור ניהול סופי!');
@@ -190,9 +195,16 @@ export default function TaskDetails(): React.ReactElement {
                 <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-4">
                     <div className="flex justify-between items-start gap-4">
                         <div className="space-y-1.5">
-                            <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2.5 py-1 rounded-full inline-block">
-                                {isOfficeTask ? '🏢 משימה משרדית' : task.customerName}
-                            </span>
+                            <div className="flex items-center gap-2">
+                                <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2.5 py-1 rounded-full inline-block">
+                                    {isOfficeTask ? '🏢 משימה משרדית' : task.customerName}
+                                </span>
+                                {task.customerIsWaiting && (
+                                    <span className="text-xs font-bold text-orange-700 bg-orange-50 border border-orange-200 px-2.5 py-1 rounded-full inline-block">
+                                        בהמתנה
+                                    </span>
+                                )}
+                            </div>
                             <h1 className="text-2xl font-black text-slate-900">{task.title}</h1>
                         </div>
                         <span className={`shrink-0 text-xs font-bold px-3 py-1.5 rounded-full border ${
@@ -234,8 +246,9 @@ export default function TaskDetails(): React.ReactElement {
                                             <input
                                                 type="checkbox"
                                                 checked={sub.completed}
+                                                disabled={!!task.customerIsWaiting}
                                                 onChange={() => handleToggleSubtask(sub.id, sub.completed)}
-                                                className="cursor-pointer w-5 h-5 accent-blue-600 shrink-0"
+                                                className={`w-5 h-5 accent-blue-600 shrink-0 ${task.customerIsWaiting ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
                                             />
                                             <span className={`text-sm font-medium truncate ${sub.completed ? 'line-through text-slate-400' : 'text-slate-800'}`}>
                                                 {sub.title}

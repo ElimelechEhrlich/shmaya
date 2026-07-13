@@ -6,13 +6,15 @@ export interface CustomerBase {
     phoneNumber: string;
     address: string;
     email: string;
+    parentIdNumber: string;
+    hasWhatsapp: boolean;
 }
 
 export interface BusinessDetails {
     businessName: string;
     businessID: string;
     businessType: string;
-    isNewBusiness: boolean;
+    clientType: string;
     openingDate: string;
     occupation: string;
     businessDescription: string;
@@ -26,6 +28,9 @@ export interface IncomeTaxCase {
     annualTurnover: string;
     newItCase: boolean;
     needsIncomeTaxDirectDebit: boolean;
+    spouseFileExists: boolean;
+    spouseRepresentationTransferNeeded: boolean;
+    spouseBirthYear: string;
 }
 
 export interface VatCase {

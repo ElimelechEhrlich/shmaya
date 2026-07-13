@@ -25,7 +25,18 @@ interface TaskFilters {
     clients: string[];
     priorities: string[];
     search: string;
+    showWaitingClients: boolean;
 }
+
+// שמוליק צריך לראות לקוחות בהמתנה כברירת מחדל; לכולם אחרים הם מוסתרים עד שמישהו מסמן אחרת.
+const getDefaultFilters = (): TaskFilters => ({
+    statuses: ['pending'],
+    categories: [],
+    clients: [],
+    priorities: [],
+    search: '',
+    showWaitingClients: authService.getCurrentUser() === 'שמוליק',
+});
 
 interface MultiSelectProps {
     label: string;
@@ -44,13 +55,7 @@ export default function Tasks(): React.ReactElement {
     const [showCreate, setShowCreate] = useState(false);
     const [openAccordions, setOpenAccordions] = useState<Set<string>>(new Set());
     const [showFilters, setShowFilters] = useState(false);
-    const [filters, setFilters] = useState<TaskFilters>({
-        statuses: ['pending'],
-        categories: [],
-        clients: [],
-        priorities: [],
-        search: '',
-    });
+    const [filters, setFilters] = useState<TaskFilters>(getDefaultFilters);
 
     // ── Data loading ──────────────────────────────────────────────────
     const load = useCallback(async () => {
@@ -90,6 +95,7 @@ export default function Tasks(): React.ReactElement {
 
     // ── Filtering ─────────────────────────────────────────────────────
     const filtered = useMemo(() => rows.filter(r => {
+        if (!filters.showWaitingClients && r.customerIsWaiting) return false;
         if (filters.statuses.length && !filters.statuses.includes(r.completed ? 'completed' : 'pending')) return false;
         if (filters.categories.length && !filters.categories.includes(r.parentTaskId || '')) return false;
         if (filters.priorities.length && !filters.priorities.includes((r.priority || 'medium').toLowerCase())) return false;
@@ -165,6 +171,10 @@ export default function Tasks(): React.ReactElement {
 
     // ── Row callbacks — stable refs, passed directly to CustomerAccordion ──
     const onRowToggle = useCallback(async (row: SubtaskViewRow, completed: boolean) => {
+        if (row.customerIsWaiting) {
+            alert('הלקוח במצב "בהמתנה" — לא ניתן לסמן ביצוע משימות עד להעברה לטיפול המשרד.');
+            return;
+        }
         if (!authService.canApproveFinal(row.subtaskTitle)) {
             alert('אין לך הרשאה לשנות את הסטטוס של אישור ניהול סופי!');
             return;
@@ -230,7 +240,7 @@ export default function Tasks(): React.ReactElement {
     }, [load]);
 
     const resetFilters = useCallback(() =>
-        setFilters({ statuses: ['pending'], categories: [], clients: [], priorities: [], search: '' }),
+        setFilters(getDefaultFilters()),
     []);
 
     // ── Render ────────────────────────────────────────────────────────
@@ -298,6 +308,15 @@ export default function Tasks(): React.ReactElement {
                             onChange={s => setFilters(f => ({ ...f, priorities: s }))}
                         />
                     </div>
+                    <label className="flex items-center gap-2 cursor-pointer mt-3 w-fit">
+                        <input
+                            type="checkbox"
+                            checked={filters.showWaitingClients}
+                            onChange={e => setFilters(f => ({ ...f, showWaitingClients: e.target.checked }))}
+                            className="w-4 h-4 cursor-pointer accent-orange-600"
+                        />
+                        <span className="text-xs font-bold text-slate-600">הצג גם לקוחות בהמתנה</span>
+                    </label>
                     </div>
                     <div className="mt-3 flex justify-between items-center">
                         <span className="text-xs text-slate-500 font-medium">

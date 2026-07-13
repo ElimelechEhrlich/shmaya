@@ -7,6 +7,7 @@ import {
     isEmployerType as registryIsEmployerType,
     isRepresentationAllowed,
     BUSINESS_TYPE_OPTIONS,
+    CLIENT_TYPE_OPTIONS,
     getCustomerDisplayName
 } from '../registries/CustomerRegistry';
 import ProgressBar from './ProgressBar';
@@ -297,6 +298,18 @@ const CustomerCard: React.FC = () => {
         if (!r.success) alert("שגיאה: " + r.error);
     };
 
+    const handleToggleWaitingStatus = async () => {
+        const nextWaiting = !editData?.isWaiting;
+        const ok = await modal.confirm(
+            nextWaiting
+                ? 'להחזיר את הלקוח למצב "בהמתנה"? המשימות יישארו חסומות לסימון ביצוע עד להעברה חוזרת לטיפול המשרד.'
+                : 'להעביר את הלקוח לטיפול המשרד? החל מרגע זה ניתן יהיה לסמן ביצוע משימות עבורו.'
+        );
+        if (!ok) return;
+        const r = await actions.setWaitingStatus(nextWaiting);
+        if (!r.success) await modal.alert('שגיאה בעדכון הסטטוס: ' + (r.error ?? ''));
+    };
+
     const handleDelete = async () => {
         const r = await actions.remove();
         if (r.success) {
@@ -350,6 +363,11 @@ const CustomerCard: React.FC = () => {
                         <span>→</span> חזרה לרשימה
                     </button>
                     <div className="flex gap-3 items-center">
+                        {!isEditing && authService.canManageWaitingStatus() && (
+                            <button onClick={handleToggleWaitingStatus} className="cursor-pointer text-sm font-bold text-orange-700 hover:text-orange-900 px-3 py-2 rounded-lg transition">
+                                {editData.isWaiting ? '→ העברת לקוח לטיפול המשרד' : '↺ החזרת לקוח להמתנה'}
+                            </button>
+                        )}
                         {!isEditing && (
                             <>
                                 {isInactive ? (
@@ -388,11 +406,12 @@ const CustomerCard: React.FC = () => {
 
                 {/* Banner */}
                 <div className={`card-base p-7 mb-6 relative overflow-hidden ${isInactive ? 'opacity-75' : ''}`}>
-                    <div className="absolute top-0 right-0 w-1.5 h-full bg-blue-600"></div>
+                    <div className={`absolute top-0 right-0 w-1.5 h-full ${editData.isWaiting ? 'bg-orange-400' : 'bg-blue-600'}`}></div>
                     <div className="flex justify-between items-start gap-8 mb-5">
                         <div>
                             <div className="flex items-center gap-2 mb-2">
                                 <span className="inline-block px-2.5 py-0.5 bg-blue-50 text-blue-700 font-bold text-[11px] rounded-full border border-blue-100">{bType || 'ללא סיווג'}</span>
+                                {editData.isWaiting && <span className="inline-block px-2.5 py-0.5 bg-orange-100 text-orange-700 font-bold text-[11px] rounded-full border border-orange-300">בהמתנה</span>}
                                 {isInactive && <span className="inline-block px-2.5 py-0.5 bg-slate-100 text-slate-500 font-bold text-[11px] rounded-full border border-slate-200">לא פעיל</span>}
                                 {editData.isInsuranceActive && editData.insuranceDetails?.workHours === '9' && (
                                     <span className="inline-block px-2.5 py-0.5 bg-orange-100 text-orange-700 font-bold text-[11px] rounded-full border border-orange-300">עצמאי שאינו עונה להגדרה</span>
@@ -417,8 +436,10 @@ const CustomerCard: React.FC = () => {
                             <EditableRow label="שם מלא" value={editData.customerDetails?.fullName} isEditing={isEditing} category="customerDetails" field="fullName" onChange={actions.updateField} />
                             <EditableRow label="תעודת זהות" value={editData.customerDetails?.identityId} isEditing={isEditing} category="customerDetails" field="identityId" onChange={actions.updateField} />
                             <EditableRow label="טלפון" value={editData.customerDetails?.phoneNumber} isEditing={isEditing} category="customerDetails" field="phoneNumber" onChange={actions.updateField} />
+                            <ToggleRow label="יש וואטסאפ" active={editData.customerDetails?.hasWhatsapp} isEditing={isEditing} category="customerDetails" field="hasWhatsapp" onChange={actions.updateField} />
                             <EditableRow label="כתובת מגורים" value={editData.customerDetails?.address} isEditing={isEditing} category="customerDetails" field="address" onChange={actions.updateField} />
                             <EditableRow label="אימייל" value={editData.customerDetails?.email} isEditing={isEditing} category="customerDetails" field="email" onChange={actions.updateField} />
+                            <EditableRow label="ת.ז. הורה" value={editData.customerDetails?.parentIdNumber} isEditing={isEditing} category="customerDetails" field="parentIdNumber" onChange={actions.updateField} />
                         </Section>
 
                         <Section title="פרטי עסק" icon="🏢">
@@ -429,18 +450,52 @@ const CustomerCard: React.FC = () => {
                                 {isEditing ? (
                                     <select
                                         className="input-style cursor-pointer"
-                                        value={editData.businessDetails?.isNewBusiness ? 'true' : 'false'}
-                                        onChange={(e) => actions.updateField('businessDetails', 'isNewBusiness', e.target.value === 'true')}
+                                        value={editData.businessDetails?.clientType || ''}
+                                        onChange={(e) => actions.updateField('businessDetails', 'clientType', e.target.value)}
                                     >
-                                        <option value="true">עסק חדש</option>
-                                        <option value="false">עסק קיים</option>
+                                        <option value="">בחר סוג לקוח...</option>
+                                        {CLIENT_TYPE_OPTIONS.map((o) => (
+                                            <option key={o} value={o}>{o}</option>
+                                        ))}
                                     </select>
                                 ) : (
                                     <span className="text-sm font-bold text-slate-800">
-                                        {editData.businessDetails?.isNewBusiness ? 'עסק חדש' : 'עסק קיים'}
+                                        {editData.businessDetails?.clientType || '---'}
                                     </span>
                                 )}
                             </div>
+                            {(editData.businessDetails?.clientType === 'עסק חדש' || editData.businessDetails?.clientType === 'לקוח עובר (עסק קיים)') && (
+                                <div className="mb-4 p-3 bg-slate-50 rounded-xl border border-slate-100 space-y-3">
+                                    <ToggleRow
+                                        label="תיק בן זוג קיים במס הכנסה"
+                                        active={editData.incomeTaxDetails?.spouseFileExists}
+                                        isEditing={isEditing}
+                                        category="incomeTaxDetails"
+                                        field="spouseFileExists"
+                                        onChange={actions.updateField}
+                                    />
+                                    {editData.incomeTaxDetails?.spouseFileExists && (
+                                        <>
+                                            <ToggleRow
+                                                label="נדרשת העברת ייצוג תיק בן הזוג"
+                                                active={editData.incomeTaxDetails?.spouseRepresentationTransferNeeded}
+                                                isEditing={isEditing}
+                                                category="incomeTaxDetails"
+                                                field="spouseRepresentationTransferNeeded"
+                                                onChange={actions.updateField}
+                                            />
+                                            <EditableRow
+                                                label="שנת לידה בן זוג"
+                                                value={editData.incomeTaxDetails?.spouseBirthYear}
+                                                isEditing={isEditing}
+                                                category="incomeTaxDetails"
+                                                field="spouseBirthYear"
+                                                onChange={actions.updateField}
+                                            />
+                                        </>
+                                    )}
+                                </div>
+                            )}
                             <EditableRow label="תאריך פתיחה" value={editData.businessDetails?.openingDate} isEditing={isEditing} type="date" category="businessDetails" field="openingDate" onChange={actions.updateField} />
                             <EditableRow
                                 label="משלח יד"
@@ -613,8 +668,12 @@ const CustomerCard: React.FC = () => {
                                                 </h4>
                                                 <button
                                                     type="button"
-                                                    onClick={() => actions.toggleTaskStatus(task.id, task.status)}
-                                                    className={`cursor-pointer px-2.5 py-1 rounded-lg text-[10px] font-bold transition border ${task.status === 'completed' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-slate-900 text-white hover:bg-slate-800'}`}
+                                                    disabled={!!editData.isWaiting}
+                                                    onClick={() => {
+                                                        if (editData.isWaiting) return;
+                                                        actions.toggleTaskStatus(task.id, task.status);
+                                                    }}
+                                                    className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition border ${editData.isWaiting ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed' : task.status === 'completed' ? 'cursor-pointer bg-green-50 text-green-700 border-green-200' : 'cursor-pointer bg-slate-900 text-white hover:bg-slate-800'}`}
                                                 >
                                                     {task.status === 'completed' ? '✓ הכל בוצע' : 'סמן הכל כבוצע'}
                                                 </button>
@@ -630,15 +689,20 @@ const CustomerCard: React.FC = () => {
                                                                 <input
                                                                     type="checkbox"
                                                                     checked={!!sub.completed}
+                                                                    disabled={!!editData.isWaiting}
                                                                     // ✨ סעיף 6: חסימת יוחנן ושמוליק מסימון אישור ניהול סופי כבוצע
                                                                     onChange={(e) => {
+                                                                        if (editData.isWaiting) {
+                                                                            alert("הלקוח במצב \"בהמתנה\" — לא ניתן לסמן ביצוע משימות עד להעברה לטיפול המשרד.");
+                                                                            return;
+                                                                        }
                                                                         if (!authService.canApproveFinal(sub.title)) {
                                                                             alert("אין לך הרשאה לשנות את הסטטוס של אישור ניהול סופי!");
                                                                             return;
                                                                         }
                                                                         actions.setSubtaskCompleted(task.id, sub.id, e.target.checked);
                                                                     }}
-                                                                    className="w-4 h-4 rounded text-blue-600 accent-blue-600 cursor-pointer flex-shrink-0"
+                                                                    className={`w-4 h-4 rounded text-blue-600 accent-blue-600 flex-shrink-0 ${editData.isWaiting ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
                                                                 />
                                                                 <span className={`text-xs font-medium truncate ${sub.completed ? 'line-through text-slate-400' : 'text-slate-700'}`}>
                                                                     {sub.title}
