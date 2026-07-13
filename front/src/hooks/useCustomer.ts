@@ -44,6 +44,7 @@ export interface UseCustomerActions {
     updateSubTaskPriority: (taskId: string, subtaskId: string, priority: SubTaskPriority) => Promise<void>;
     deactivate: () => Promise<{ success: boolean; error?: string }>;
     reactivate: () => Promise<{ success: boolean; error?: string }>;
+    setWaitingStatus: (isWaiting: boolean) => Promise<{ success: boolean; error?: string }>;
     remove: () => Promise<{ success: boolean; error?: string }>;
     reload: () => Promise<void>;
     uploadFile: (
@@ -363,6 +364,16 @@ if (!wasLtd && isNowLtd && editData) {
         [customerId, reload]
     );
 
+    const setWaitingStatus = useCallback(
+        async (isWaiting: boolean): Promise<{ success: boolean; error?: string }> => {
+            if (!customerId) return { success: false, error: 'No customer loaded' };
+            const r = await CustomerService.setWaitingStatus(customerId, isWaiting);
+            if (r.success) await reload();
+            return r;
+        },
+        [customerId, reload]
+    );
+
     const remove = useCallback(
         async (): Promise<{ success: boolean; error?: string }> => {
             if (!customerId) return { success: false, error: 'No customer loaded' };
@@ -435,6 +446,7 @@ return result;
         updateSubTaskPriority, // ✨ הפניה לפונקציה המעודכנת
         deactivate,
         reactivate,
+        setWaitingStatus,
         remove,
         reload,
         uploadFile,

@@ -52,6 +52,7 @@ export interface CustomerWithTasks extends Customer {
 export interface PersistedTaskWithCustomer extends PersistedTask {
   customerId: string | null;
   customerName: string;
+  customerIsWaiting?: boolean;
 }
 
 export interface PersistedSubtaskRow {
@@ -68,6 +69,7 @@ export interface PersistedSubtaskRow {
   clientId: string | null;
   customerName: string;
   customerComments?: string;
+  customerIsWaiting?: boolean;
 }
 
 export interface PersistedLog {
@@ -104,6 +106,7 @@ function dbRowToCustomer(row: any): Customer {
     id: row.id,
     createdAt: row.created_at,
     isActive: row.is_active,
+    isWaiting: !!row.is_waiting,
     comments: row.comments || '',
 
     customerDetails: {
@@ -117,7 +120,7 @@ function dbRowToCustomer(row: any): Customer {
       businessName: row.business_name || '',
       businessID: row.business_id || '',
       businessType: (row.business_type || '') as any,
-      isNewBusiness: (row.is_new_business || false),
+      clientType: (row.client_type || '') as any,
       openingDate: row.opening_date || '',
       occupation: row.occupation || '',
       businessDescription: row.business_description || '',
@@ -137,6 +140,8 @@ function dbRowToCustomer(row: any): Customer {
       annualTurnover: row.annual_turnover || '',
       newItCase: row.income_tax_is_new_case ?? true,
       needsIncomeTaxDirectDebit: row.needs_income_tax_direct_debit ?? true,
+      spouseFileExists: row.spouse_file_exists ?? false,
+      spouseRepresentationTransferNeeded: row.spouse_representation_transfer_needed ?? false,
     },
     vatDetails: {
       newVatCase: row.vat_is_new_case ?? true,
@@ -340,11 +345,12 @@ export const PersistenceAdapter = {
       address: c.customerDetails?.address ?? '',
       email: c.customerDetails?.email ?? '',
       is_active: c.isActive ?? true,
+      is_waiting: c.isWaiting ?? true,
       comments: c.comments ?? '',
       business_name: c.businessDetails?.businessName ?? '',
       business_id: c.businessDetails?.businessID ?? '',
       business_type: c.businessDetails?.businessType ?? '',
-      is_new_business: c.businessDetails?.isNewBusiness ?? false,
+      client_type: c.businessDetails?.clientType ?? '',
       opening_date: c.businessDetails?.openingDate || null,
       occupation: c.businessDetails?.occupation ?? '',
       business_description: c.businessDetails?.businessDescription ?? '',
@@ -356,6 +362,8 @@ export const PersistenceAdapter = {
       annual_turnover: c.incomeTaxDetails?.annualTurnover ?? '',
       income_tax_is_new_case: c.incomeTaxDetails?.newItCase ?? true,
       needs_income_tax_direct_debit: c.incomeTaxDetails?.needsIncomeTaxDirectDebit ?? true,
+      spouse_file_exists: c.incomeTaxDetails?.spouseFileExists ?? false,
+      spouse_representation_transfer_needed: c.incomeTaxDetails?.spouseRepresentationTransferNeeded ?? false,
       vat_is_new_case: c.vatDetails?.newVatCase ?? true,
       insurance_prepayment: c.insuranceDetails?.insurancePrepayment ?? '',
       work_hours: c.insuranceDetails?.workHours ?? '',
@@ -399,7 +407,7 @@ export const PersistenceAdapter = {
       flatRow.business_name = c.businessDetails.businessName;
       flatRow.business_id = c.businessDetails.businessID;
       flatRow.business_type = c.businessDetails.businessType;
-      flatRow.is_new_business = c.businessDetails.isNewBusiness ?? false;
+      flatRow.client_type = c.businessDetails.clientType ?? '';
       flatRow.opening_date = c.businessDetails.openingDate || null;
       flatRow.occupation = c.businessDetails.occupation;
       flatRow.business_description = c.businessDetails.businessDescription;
@@ -413,6 +421,8 @@ export const PersistenceAdapter = {
       flatRow.annual_turnover = c.incomeTaxDetails.annualTurnover;
       flatRow.income_tax_is_new_case = c.incomeTaxDetails.newItCase;
       flatRow.needs_income_tax_direct_debit = c.incomeTaxDetails.needsIncomeTaxDirectDebit ?? true;
+      flatRow.spouse_file_exists = c.incomeTaxDetails.spouseFileExists ?? false;
+      flatRow.spouse_representation_transfer_needed = c.incomeTaxDetails.spouseRepresentationTransferNeeded ?? false;
     }
 
     if (c.vatDetails) {
@@ -440,6 +450,7 @@ export const PersistenceAdapter = {
     if (c.needsDeductionsFile !== undefined) flatRow.needs_deductions_file = c.needsDeductionsFile;
     if (c.comments !== undefined) flatRow.comments = c.comments;
     if (c.isActive !== undefined) flatRow.is_active = c.isActive;
+    if (c.isWaiting !== undefined) flatRow.is_waiting = c.isWaiting;
     if (c.idPhotoUrl !== undefined) flatRow.id_photo_url = c.idPhotoUrl;
     if (c.bankApprovalUrl !== undefined) flatRow.bank_approval_url = c.bankApprovalUrl;
     if (c.agreementUrl !== undefined) flatRow.agreement_url = c.agreementUrl;
@@ -536,7 +547,7 @@ export const PersistenceAdapter = {
   async fetchTaskById(taskId: string): Promise<DbResult<PersistedTaskWithCustomer>> {
     const { data, error } = await supabase
       .from('parent_tasks')
-.select('*, customers(id, full_name, business_name, business_type), sub_tasks(*)')
+.select('*, customers(id, full_name, business_name, business_type, is_waiting), sub_tasks(*)')
       .eq('id', taskId)
       .maybeSingle();
 
@@ -551,6 +562,7 @@ export const PersistenceAdapter = {
       data: {
         ...mapTaskRow(rawTask),
         customerId: customer?.id ?? rawTask.customer_id,
+        customerIsWaiting: !!customer?.is_waiting,
         customerName: ((customer?.id === OFFICE_CUSTOMER_ID || !customer)
           ? 'משימה משרדית'
           : getDisplayName(customer))
@@ -562,7 +574,7 @@ export const PersistenceAdapter = {
   async fetchAllSubtasksView(): Promise<DbResult<PersistedSubtaskRow[]>> {
     const { data, error } = await supabase
       .from('sub_tasks')
-     .select('*, parent_tasks(id, title, status, customer_id, registry_key, customers(id, full_name, business_name, business_type, comments))')
+     .select('*, parent_tasks(id, title, status, customer_id, registry_key, customers(id, full_name, business_name, business_type, comments, is_waiting))')
       .order('created_at', { ascending: false });
 
     if (error) return { data: null, error };
@@ -585,6 +597,7 @@ export const PersistenceAdapter = {
         clientId: parent?.customer_id || null,
         customerName: getDisplayName(customer),
         customerComments: customer?.comments || '',
+        customerIsWaiting: !!customer?.is_waiting,
       };
     });
 
@@ -870,6 +883,20 @@ export const PersistenceAdapter = {
       .eq('is_active', true)
       .neq('id', OFFICE_CUSTOMER_ID);
     return { data: count ?? 0, error: error as any };
+  },
+
+  async fetchWaitingCustomers(): Promise<DbResult<{ id: string; name: string }[]>> {
+    const { data, error } = await supabase
+      .from('customers')
+      .select('id, full_name, business_name, business_type')
+      .eq('is_waiting', true)
+      .neq('id', OFFICE_CUSTOMER_ID)
+      .order('created_at', { ascending: false });
+    if (error) return { data: null, error };
+    return {
+      data: (data ?? []).map((row: any) => ({ id: row.id, name: getDisplayName(row) })),
+      error: null,
+    };
   },
 
   async fetchCustomerTaskStats(): Promise<DbResult<{ pending: number; completed: number }>> {

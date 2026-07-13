@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { useNavigate } from 'react-router';
 import { PersistenceAdapter } from '../services/PersistenceAdapter';
 import type { PersistedTask } from '../services/PersistenceAdapter';
 import { PRIORITY_STYLES } from '../registries/CustomerRegistry';
 import { OfficeTaskModal, type OfficeSubtaskEdit } from '../comps/OfficeTaskModal';
 import { useModal } from '../contexts/ModalContext';
+import { authService } from '../services/authService';
 
 interface OfficeRow extends OfficeSubtaskEdit {
     taskId: string;
@@ -12,10 +14,13 @@ interface OfficeRow extends OfficeSubtaskEdit {
 
 export default function Dashboard() {
     const modal = useModal();
+    const navigate = useNavigate();
+    const isShmulik = authService.getCurrentUser() === 'שמוליק';
     const [activeCustomers, setActiveCustomers] = useState<number | null>(null);
     const [pendingTasks, setPendingTasks] = useState<number | null>(null);
     const [completedTasks, setCompletedTasks] = useState<number | null>(null);
     const [officeTasks, setOfficeTasks] = useState<PersistedTask[] | null>(null);
+    const [waitingCustomers, setWaitingCustomers] = useState<{ id: string; name: string }[] | null>(null);
     const [showOpenOnly, setShowOpenOnly] = useState(true);
     const [showCreateOffice, setShowCreateOffice] = useState(false);
     const [editingSubtask, setEditingSubtask] = useState<OfficeSubtaskEdit | null>(null);
@@ -39,7 +44,13 @@ export default function Dashboard() {
             if (error) console.error('[Dashboard] fetchOfficeTasks:', error);
             else setOfficeTasks(data ?? []);
         });
-    }, []);
+        if (isShmulik) {
+            PersistenceAdapter.fetchWaitingCustomers().then(({ data, error }) => {
+                if (error) console.error('[Dashboard] fetchWaitingCustomers:', error);
+                else setWaitingCustomers(data ?? []);
+            });
+        }
+    }, [isShmulik]);
 
     const handleSubtaskToggle = useCallback(async (taskId: string, subtaskId: string, completed: boolean) => {
         setOfficeTasks(prev => prev?.map(task =>
@@ -110,6 +121,34 @@ export default function Dashboard() {
                     </p>
                 </div>
             </div>
+
+            {/* ─── Waiting customers (שמוליק בלבד) ─── */}
+            {isShmulik && (
+                <div className="mt-8 bg-white rounded-2xl border border-orange-200 shadow-sm">
+                    <div className="px-6 py-4 border-b border-orange-100 bg-orange-50/60 rounded-t-2xl">
+                        <h2 className="text-lg font-bold text-orange-900">לקוחות בהמתנה</h2>
+                    </div>
+                    {waitingCustomers === null ? (
+                        <div className="p-6">
+                            <div className="h-5 w-48 bg-slate-100 rounded animate-pulse" />
+                        </div>
+                    ) : waitingCustomers.length === 0 ? (
+                        <p className="p-6 text-slate-400 text-sm italic">אין לקוחות בהמתנה כרגע</p>
+                    ) : (
+                        <div className="divide-y divide-orange-100">
+                            {waitingCustomers.map(c => (
+                                <div
+                                    key={c.id}
+                                    onClick={() => navigate(`/admin/customers/${c.id}`)}
+                                    className="cursor-pointer flex items-center px-6 py-3 bg-orange-50/40 hover:bg-orange-50 transition-colors"
+                                >
+                                    <span className="text-sm font-bold text-orange-900">{c.name}</span>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            )}
 
             {/* ─── Office tasks ─── */}
             <div className="mt-8 bg-white rounded-2xl border border-slate-200 shadow-sm">

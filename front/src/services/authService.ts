@@ -7,6 +7,7 @@ export interface AuthService {
   getCurrentUser(): string | null;
   canDelete(): boolean;
   canApproveFinal(title: string): boolean;
+  canManageWaitingStatus(): boolean;
 }
 
 export const authService: AuthService = {
@@ -47,5 +48,10 @@ export const authService: AuthService = {
         return false;
     }
     return true;
+  },
+
+  canManageWaitingStatus(): boolean {
+    const user = this.getCurrentUser();
+    return user === 'שמוליק' || user === 'מוישי';
   },
 };

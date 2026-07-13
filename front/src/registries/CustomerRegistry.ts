@@ -28,6 +28,10 @@
 // layer for no architectural gain.
 export type BusinessTypeKey = 'זעיר' | 'פטור' | 'מורשה' | 'חברה בע"מ' | 'אחר';
 
+// Client type replaces the legacy is_new_business boolean (migration 0015).
+// Same convention as BusinessTypeKey: the Hebrew value IS the stored value.
+export type ClientTypeKey = 'עסק חדש' | 'לקוח עובר (עסק קיים)' | 'לקוח לטיפול בהחזרי מס בלבד';
+
 export type ServiceKey =
   | 'incomeTax'
   | 'nationalInsurance'
@@ -86,7 +90,7 @@ export interface BusinessDetails {
   businessDescription: string;
   employsWorkers: YesNo;
   deductionsId: string;
-  isNewBusiness: boolean;
+  clientType: ClientTypeKey | '';
 }
 
 export interface InsuranceDetails {
@@ -103,6 +107,10 @@ export interface IncomeTaxDetails {
   annualTurnover: string;
   newItCase: boolean;
   needsIncomeTaxDirectDebit: boolean;
+  /** Shown only when businessDetails.clientType is 'עסק חדש' or 'לקוח עובר (עסק קיים)'. */
+  spouseFileExists: boolean;
+  /** Shown only when spouseFileExists is true. */
+  spouseRepresentationTransferNeeded: boolean;
 }
 
 export interface VatDetails {
@@ -143,6 +151,12 @@ export interface Customer {
   idPhotoUrl?: string | null;
   bankApprovalUrl?: string | null;
   agreementUrl?: string | null;
+
+  /** True for customers created via the pre-check modal, until an authorized
+   *  user (canManageWaitingStatus) transfers them to office care. While true,
+   *  this overrides the computed "בטיפול/הושלם" status everywhere it's shown,
+   *  and blocks all subtask-completion checkboxes app-wide. */
+  isWaiting?: boolean;
 }
 
 // ──────────────────────────────────────────────────────────────────
@@ -218,6 +232,10 @@ export const BUSINESS_TYPES: Record<BusinessTypeKey, BusinessTypeRule> = {
 
 export const BUSINESS_TYPE_OPTIONS: BusinessTypeKey[] = [
   'זעיר', 'פטור', 'מורשה', 'חברה בע"מ', 'אחר',
+];
+
+export const CLIENT_TYPE_OPTIONS: ClientTypeKey[] = [
+  'עסק חדש', 'לקוח עובר (עסק קיים)', 'לקוח לטיפול בהחזרי מס בלבד',
 ];
 
 // ──────────────────────────────────────────────────────────────────

@@ -13,6 +13,7 @@ interface CustomerFilters {
     isIncomeTaxActive: string;
     isVatActive: string;
     isFinalApproved: string;
+    status: 'all' | 'waiting' | 'active' | 'completed' | 'inactive';
 }
 
 const INITIAL_FILTERS: CustomerFilters = {
@@ -22,7 +23,15 @@ const INITIAL_FILTERS: CustomerFilters = {
     isIncomeTaxActive: 'all',
     isVatActive: 'all',
     isFinalApproved: 'all',
+    status: 'all',
 };
+
+// עדיפות: בהמתנה גוברת על הכל (גם על לא-פעיל), אחריה לא-פעיל, ואז לפי אחוז ביצוע.
+function getStatusCategory(client: any, progressPercent: number): 'waiting' | 'inactive' | 'completed' | 'active' {
+    if (client.isWaiting) return 'waiting';
+    if (client.isActive === false) return 'inactive';
+    return progressPercent === 100 ? 'completed' : 'active';
+}
 
 const CustomerList: React.FC = () => {
     const navigate = useNavigate();
@@ -63,14 +72,15 @@ const CustomerList: React.FC = () => {
         const isApproved = finalizationMap.get(client.id) ?? false;
 const matchesSearch =
 getCustomerDisplayName(client).includes(filters.search || '')
-|| (client.businessDetails?.businessID || '').includes(filters.search || '')        
+|| (client.businessDetails?.businessID || '').includes(filters.search || '')
     const matchesType = filters.businessType.length === 0 || filters.businessType.includes(client.businessDetails?.businessType);
         const matchesInsurance = filters.isInsuranceActive === 'all' || String(!!client.isInsuranceActive) === filters.isInsuranceActive;
         const matchesTax = filters.isIncomeTaxActive === 'all' || String(!!client.isIncomeTaxActive) === filters.isIncomeTaxActive;
         const matchesVat = filters.isVatActive === 'all' || String(!!client.isVatActive) === filters.isVatActive;
         const matchesApproved = filters.isFinalApproved === 'all' || String(isApproved) === filters.isFinalApproved;
-        return matchesSearch && matchesType && matchesInsurance && matchesTax && matchesVat && matchesApproved;
-    }), [customers, filters, finalizationMap]);
+        const matchesStatus = filters.status === 'all' || getStatusCategory(client, progressMap.get(client.id) ?? 0) === filters.status;
+        return matchesSearch && matchesType && matchesInsurance && matchesTax && matchesVat && matchesApproved && matchesStatus;
+    }), [customers, filters, finalizationMap, progressMap]);
 
     const exportToExcel = (): void => {
         const headers = ["שם לקוח", "מזהה עסק", "סוג עסק", "ביטוח לאומי", "מס הכנסה", "מע\"מ", "אישור סופי"];
@@ -187,6 +197,13 @@ getCustomerDisplayName(client).includes(filters.search || '')
                             <option value="true">מאושר</option>
                             <option value="false">לא מאושר</option>
                         </select>
+                        <select className="input-style cursor-pointer" value={filters.status} onChange={(e) => setFilters({ ...filters, status: e.target.value as CustomerFilters['status'] })}>
+                            <option value="all">סטטוס (הכל)</option>
+                            <option value="waiting">בהמתנה</option>
+                            <option value="active">בטיפול</option>
+                            <option value="completed">הושלם</option>
+                            <option value="inactive">לא פעיל</option>
+                        </select>
                     </div>
                     </div>
                     <div className="mt-3 flex justify-between items-center">
@@ -232,7 +249,9 @@ getCustomerDisplayName(client).includes(filters.search || '')
                                             {client.isVatActive && <span className="bg-amber-100 text-amber-700 px-2 py-1 rounded font-medium">מע״מ</span>}
                                         </td>
                                         <td className="p-4 text-center">
-                                            {isInactive
+                                            {client.isWaiting
+                                                ? <span className="text-orange-700 bg-orange-50 px-3 py-1 rounded-full border border-orange-200 text-xs font-bold">בהמתנה</span>
+                                                : isInactive
                                                 ? <span className="text-slate-500 bg-slate-100 px-3 py-1 rounded-full border border-slate-200 text-xs font-bold">לא פעיל</span>
                                                 : (progressMap.get(client.id) ?? 0) === 100
                                                     ? <span className="text-green-700 bg-green-50 px-3 py-1 rounded-full border border-green-200 text-xs font-bold">✓ הושלם</span>
