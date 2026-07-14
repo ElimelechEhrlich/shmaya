@@ -440,12 +440,21 @@ const CustomerCard: React.FC = () => {
                             <EditableRow label="כתובת מגורים" value={editData.customerDetails?.address} isEditing={isEditing} category="customerDetails" field="address" onChange={actions.updateField} />
                             <EditableRow label="אימייל" value={editData.customerDetails?.email} isEditing={isEditing} category="customerDetails" field="email" onChange={actions.updateField} />
                             <EditableRow label="ת.ז. הורה" value={editData.customerDetails?.parentIdNumber} isEditing={isEditing} category="customerDetails" field="parentIdNumber" onChange={actions.updateField} />
+                            <EditableRow
+                                                label="שנת לידה בן זוג"
+                                                value={editData.incomeTaxDetails?.spouseBirthYear}
+                                                isEditing={isEditing}
+                                                category="incomeTaxDetails"
+                                                field="spouseBirthYear"
+                                                onChange={actions.updateField}
+                                            />
                         </Section>
 
                         <Section title="פרטי עסק" icon="🏢">
                             <EditableRow label="שם העסק" value={editData.businessDetails?.businessName} isEditing={isEditing} category="businessDetails" field="businessName" onChange={actions.updateField} />
                             <EditableRow label="מזהה עסק" value={editData.businessDetails?.businessID} isEditing={isEditing} category="businessDetails" field="businessID" onChange={actions.updateField} />
                             <EditableRow label="סוג עסק" value={editData.businessDetails?.businessType} isEditing={isEditing} type="search-select" options={BUSINESS_TYPE_OPTIONS} category="businessDetails" field="businessType" onChange={actions.updateField} />
+                          <FormField label="סוג לקוח">
                             <div className="mb-4 last:mb-0">
                                 {isEditing ? (
                                     <select
@@ -464,6 +473,7 @@ const CustomerCard: React.FC = () => {
                                     </span>
                                 )}
                             </div>
+                              </FormField>
                             {(editData.businessDetails?.clientType === 'עסק חדש' || editData.businessDetails?.clientType === 'לקוח עובר (עסק קיים)') && (
                                 <div className="mb-4 p-3 bg-slate-50 rounded-xl border border-slate-100 space-y-3">
                                     <ToggleRow
@@ -484,14 +494,7 @@ const CustomerCard: React.FC = () => {
                                                 field="spouseRepresentationTransferNeeded"
                                                 onChange={actions.updateField}
                                             />
-                                            <EditableRow
-                                                label="שנת לידה בן זוג"
-                                                value={editData.incomeTaxDetails?.spouseBirthYear}
-                                                isEditing={isEditing}
-                                                category="incomeTaxDetails"
-                                                field="spouseBirthYear"
-                                                onChange={actions.updateField}
-                                            />
+                                    
                                         </>
                                     )}
                                 </div>
