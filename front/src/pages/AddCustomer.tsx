@@ -267,6 +267,7 @@ export default function AddCustomer(): React.ReactElement {
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <FormField label="שם העסק"><input name="businessName" className="input-style" onChange={(e) => handleChange('businessDetails', e)} required /></FormField>
                                 <FormField label="מזהה עסק"><input name="businessID" className="input-style" onChange={(e) => handleChange('businessDetails', e)} /></FormField>
+                              <FormField label="סוג לקוח">
                                 <div className="flex flex-col gap-1">
                                     <select
                                         className="input-style cursor-pointer"
@@ -285,6 +286,7 @@ export default function AddCustomer(): React.ReactElement {
                                         ))}
                                     </select>
                                 </div>
+                                  </FormField>
                                 <FormField label="תאריך פתיחת העסק"><input name="openingDate" type="date" className="input-style" onChange={(e) => handleChange('businessDetails', e)} required={formData.businessDetails.clientType === 'עסק חדש'} /></FormField>
                                     <FormField label="סוג עסק לייצוג">
                                     <FilterableSelect
