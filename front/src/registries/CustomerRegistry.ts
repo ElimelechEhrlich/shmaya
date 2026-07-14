@@ -81,6 +81,7 @@ export interface CustomerDetails {
   email: string;
   parentIdNumber: string;
   hasWhatsapp: boolean;
+  spouseBirthYear: string;
 }
 
 export interface BusinessDetails {
@@ -113,7 +114,6 @@ export interface IncomeTaxDetails {
   spouseFileExists: boolean;
   /** Shown only when spouseFileExists is true. */
   spouseRepresentationTransferNeeded: boolean;
-  spouseBirthYear: string;
 }
 
 export interface VatDetails {

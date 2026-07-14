@@ -8,6 +8,7 @@ export interface CustomerBase {
     email: string;
     parentIdNumber: string;
     hasWhatsapp: boolean;
+    spouseBirthYear: string;
 }
 
 export interface BusinessDetails {
@@ -30,7 +31,6 @@ export interface IncomeTaxCase {
     needsIncomeTaxDirectDebit: boolean;
     spouseFileExists: boolean;
     spouseRepresentationTransferNeeded: boolean;
-    spouseBirthYear: string;
 }
 
 export interface VatCase {

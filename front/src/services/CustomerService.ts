@@ -23,6 +23,7 @@ function formDataToCustomer(formData: CustomerFormData): Partial<Customer> {
             email: formData.customerDetails.email,
             parentIdNumber: formData.customerDetails.parentIdNumber,
             hasWhatsapp: formData.customerDetails.hasWhatsapp,
+            spouseBirthYear: formData.customerDetails.spouseBirthYear,
         },
         businessDetails: {
             businessName: formData.businessDetails.businessName,
@@ -50,7 +51,6 @@ function formDataToCustomer(formData: CustomerFormData): Partial<Customer> {
             needsIncomeTaxDirectDebit: formData.incomeTaxDetails.needsIncomeTaxDirectDebit,
             spouseFileExists: formData.incomeTaxDetails.spouseFileExists,
             spouseRepresentationTransferNeeded: formData.incomeTaxDetails.spouseRepresentationTransferNeeded,
-            spouseBirthYear: formData.incomeTaxDetails.spouseBirthYear,
         },
         vatDetails: {
             newVatCase: formData.vatDetails.newVatCase,

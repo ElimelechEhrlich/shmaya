@@ -19,15 +19,16 @@ import { PersistenceAdapter } from '../services/PersistenceAdapter';
 import { handleLtdCustomerFlow } from '../utils/handleLtdCustomerFlow';
 import FilterableSelect from '../comps/FilterableSelect';
 import { branchesList } from '../constants/branches';
+import WhatsAppIcon from '../comps/WhatsAppIcon';
 
 
 interface CustomerFormData {
-    customerDetails: { fullName: string; identityId: string; phoneNumber: string; address: string; email: string; parentIdNumber: string; hasWhatsapp: boolean };
+    customerDetails: { fullName: string; identityId: string; phoneNumber: string; address: string; email: string; parentIdNumber: string; hasWhatsapp: boolean; spouseBirthYear: string };
     businessDetails: {
         businessName: string; businessID: string; businessType: string; clientType: string; openingDate: string; occupation: string; businessDescription: string; employsWorkers: string; deductionsId: string;
     };
     insuranceDetails: { insurancePrepayment: string; workHours: string; newInsuranceCase: boolean; insuranceId: string; insuranceStatus: string };
-    incomeTaxDetails: { repType: string; incomeTaxPrepayment: string; annualTurnover: string; newItCase: boolean; needsIncomeTaxDirectDebit: boolean; spouseFileExists: boolean; spouseRepresentationTransferNeeded: boolean; spouseBirthYear: string };
+    incomeTaxDetails: { repType: string; incomeTaxPrepayment: string; annualTurnover: string; newItCase: boolean; needsIncomeTaxDirectDebit: boolean; spouseFileExists: boolean; spouseRepresentationTransferNeeded: boolean };
     vatDetails: { newVatCase: boolean };
     paymentDetails: { setupFee: string; monthlyFee: string; directDebit: boolean; setupFeePaid: boolean };
     isInsuranceActive: boolean;
@@ -82,6 +83,7 @@ export default function AddCustomer(): React.ReactElement {
             email: prefill.email || '',
             parentIdNumber: '',
             hasWhatsapp: false,
+            spouseBirthYear: '',
         },
         businessDetails: {
             businessName: '', businessID: '', businessType: prefill.businessType || '', clientType: prefill.clientType || '', openingDate: '', occupation: '', businessDescription: '', employsWorkers: prefill.employsWorkers || 'no', deductionsId: ''
@@ -90,7 +92,6 @@ export default function AddCustomer(): React.ReactElement {
         incomeTaxDetails: {
             repType: 'ראשי', incomeTaxPrepayment: '', annualTurnover: '', newItCase: getNewCaseDefault(prefill.clientType), needsIncomeTaxDirectDebit: true,
             spouseFileExists: prefill.spouseFileExists ?? false, spouseRepresentationTransferNeeded: prefill.spouseRepresentationTransferNeeded ?? false,
-            spouseBirthYear: '',
         },
         vatDetails: { newVatCase: getNewCaseDefault(prefill.clientType) },
         paymentDetails: { setupFee: '', monthlyFee: '', directDebit: false, setupFeePaid: false },
@@ -253,13 +254,22 @@ export default function AddCustomer(): React.ReactElement {
                                                 checked={formData.customerDetails.hasWhatsapp}
                                                 onChange={(e) => setFormData({ ...formData, customerDetails: { ...formData.customerDetails, hasWhatsapp: e.target.checked } })}
                                             />
-                                            <span className="text-xs font-semibold text-slate-600">📱</span>
+                                            <WhatsAppIcon size={18} />
                                         </label>
                                     </div>
                                 </FormField>
                                 <FormField label="כתובת מגורים"><input name="address" className="input-style" onChange={(e) => handleChange('customerDetails', e)} /></FormField>
                                 <FormField label="אימייל"><input name="email" type="email" className="input-style" onChange={(e) => handleChange('customerDetails', e)} required /></FormField>
                                 <FormField label="ת.ז. הורה"><input name="parentIdNumber" className="input-style" onChange={(e) => handleChange('customerDetails', e)} /></FormField>
+                                <FormField label="שנת לידה בן זוג">
+                                    <input
+                                        type="number"
+                                        name="spouseBirthYear"
+                                        className="input-style"
+                                        value={formData.customerDetails.spouseBirthYear}
+                                        onChange={(e) => handleChange('customerDetails', e)}
+                                    />
+                                </FormField>
                             </div>
                         </Card>
 
@@ -331,25 +341,15 @@ export default function AddCustomer(): React.ReactElement {
                                         <span className="text-sm font-semibold text-slate-700">תיק בן זוג קיים במס הכנסה</span>
                                     </label>
                                     {formData.incomeTaxDetails.spouseFileExists && (
-                                        <>
-                                            <label className="flex items-center gap-2 cursor-pointer">
-                                                <input
-                                                    type="checkbox"
-                                                    className="w-5 h-5 cursor-pointer accent-blue-600"
-                                                    checked={formData.incomeTaxDetails.spouseRepresentationTransferNeeded}
-                                                    onChange={(e) => setFormData({ ...formData, incomeTaxDetails: { ...formData.incomeTaxDetails, spouseRepresentationTransferNeeded: e.target.checked } })}
-                                                />
-                                                <span className="text-sm font-semibold text-slate-700">נדרשת העברת ייצוג תיק בן הזוג</span>
-                                            </label>
-                                            <FormField label="שנת לידה בן זוג">
-                                                <input
-                                                    type="number"
-                                                    className="input-style"
-                                                    value={formData.incomeTaxDetails.spouseBirthYear}
-                                                    onChange={(e) => setFormData({ ...formData, incomeTaxDetails: { ...formData.incomeTaxDetails, spouseBirthYear: e.target.value } })}
-                                                />
-                                            </FormField>
-                                        </>
+                                        <label className="flex items-center gap-2 cursor-pointer">
+                                            <input
+                                                type="checkbox"
+                                                className="w-5 h-5 cursor-pointer accent-blue-600"
+                                                checked={formData.incomeTaxDetails.spouseRepresentationTransferNeeded}
+                                                onChange={(e) => setFormData({ ...formData, incomeTaxDetails: { ...formData.incomeTaxDetails, spouseRepresentationTransferNeeded: e.target.checked } })}
+                                            />
+                                            <span className="text-sm font-semibold text-slate-700">נדרשת העברת ייצוג תיק בן הזוג</span>
+                                        </label>
                                     )}
                                 </div>
                             )}

@@ -17,6 +17,7 @@ import { useModal } from '../contexts/ModalContext';
 import { branchesList } from '../constants/branches';
 import FilterableSelect from './FilterableSelect';
 import PriorityBadge from './PriorityBadge';
+import WhatsAppIcon from './WhatsAppIcon';
 
 
 
@@ -39,6 +40,7 @@ interface EditableRowProps {
 
 interface ToggleRowProps {
     label: string;
+    icon?: React.ReactNode;
     active: boolean | undefined;
     isEditing: boolean;
     category: string | null;
@@ -122,9 +124,12 @@ const EditableRow: React.FC<EditableRowProps> = React.memo(({ label, value, isEd
     </div>
 ));
 
-const ToggleRow: React.FC<ToggleRowProps> = React.memo(({ label, active, isEditing, category, field, onChange }) => (
+const ToggleRow: React.FC<ToggleRowProps> = React.memo(({ label, icon, active, isEditing, category, field, onChange }) => (
     <div className={`flex justify-between items-center p-3 rounded-xl border transition ${active ? 'bg-blue-50 border-blue-100' : 'bg-white border-slate-100 hover:border-slate-200'}`}>
-        <span className={`text-sm font-bold ${active ? 'text-blue-700' : 'text-slate-500'}`}>{label}</span>
+        <span className={`flex items-center gap-2 text-sm font-bold ${active ? 'text-blue-700' : 'text-slate-500'}`}>
+            {icon}
+            {label}
+        </span>
         <label className="p-2 -m-2 cursor-pointer">
             <input
                 type="checkbox"
@@ -436,18 +441,18 @@ const CustomerCard: React.FC = () => {
                             <EditableRow label="שם מלא" value={editData.customerDetails?.fullName} isEditing={isEditing} category="customerDetails" field="fullName" onChange={actions.updateField} />
                             <EditableRow label="תעודת זהות" value={editData.customerDetails?.identityId} isEditing={isEditing} category="customerDetails" field="identityId" onChange={actions.updateField} />
                             <EditableRow label="טלפון" value={editData.customerDetails?.phoneNumber} isEditing={isEditing} category="customerDetails" field="phoneNumber" onChange={actions.updateField} />
-                            <ToggleRow label="יש וואטסאפ" active={editData.customerDetails?.hasWhatsapp} isEditing={isEditing} category="customerDetails" field="hasWhatsapp" onChange={actions.updateField} />
+                            <ToggleRow label="יש וואטסאפ" icon={<WhatsAppIcon size={16} />} active={editData.customerDetails?.hasWhatsapp} isEditing={isEditing} category="customerDetails" field="hasWhatsapp" onChange={actions.updateField} />
                             <EditableRow label="כתובת מגורים" value={editData.customerDetails?.address} isEditing={isEditing} category="customerDetails" field="address" onChange={actions.updateField} />
                             <EditableRow label="אימייל" value={editData.customerDetails?.email} isEditing={isEditing} category="customerDetails" field="email" onChange={actions.updateField} />
                             <EditableRow label="ת.ז. הורה" value={editData.customerDetails?.parentIdNumber} isEditing={isEditing} category="customerDetails" field="parentIdNumber" onChange={actions.updateField} />
                             <EditableRow
-                                                label="שנת לידה בן זוג"
-                                                value={editData.incomeTaxDetails?.spouseBirthYear}
-                                                isEditing={isEditing}
-                                                category="incomeTaxDetails"
-                                                field="spouseBirthYear"
-                                                onChange={actions.updateField}
-                                            />
+                                label="שנת לידה בן זוג"
+                                value={editData.customerDetails?.spouseBirthYear}
+                                isEditing={isEditing}
+                                category="customerDetails"
+                                field="spouseBirthYear"
+                                onChange={actions.updateField}
+                            />
                         </Section>
 
                         <Section title="פרטי עסק" icon="🏢">
