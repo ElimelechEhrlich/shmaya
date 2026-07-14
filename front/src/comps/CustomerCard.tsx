@@ -360,7 +360,7 @@ const CustomerCard: React.FC = () => {
             <div className="max-w-7xl mx-auto">
 
                 {/* Actions Bar */}
-                <div className="flex flex-wrap justify-between items-center gap-2 mb-6">
+                <div className="sticky top-0 z-20 bg-gray-50 flex flex-wrap justify-between items-center gap-2 mb-6">
                     <button
                         onClick={() => navigate('/admin/customers')}
                         className="cursor-pointer text-slate-500 font-bold hover:text-slate-800 transition flex items-center gap-1.5"
@@ -734,7 +734,7 @@ const CustomerCard: React.FC = () => {
 
                 {/* ✨ כפתור המחיקה יוצג ויופעל רק עבור משתמשים מורשים (מוישי) */}
                 {authService.canDelete() && (
-                    <div className="mt-12 pt-6 border-t border-slate-200 flex justify-start">
+                    <div className="sticky bottom-0 z-20 bg-gray-50 mt-12 pt-6 pb-4 border-t border-slate-200 flex justify-start">
                         <button
                             type="button"
                             onClick={() => setConfirmDelete(true)}
