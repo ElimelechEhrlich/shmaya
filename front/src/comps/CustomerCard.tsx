@@ -495,6 +495,7 @@ const CustomerCard: React.FC = () => {
                                 </div>
                             )}
                             <EditableRow label="תאריך פתיחה" value={editData.businessDetails?.openingDate} isEditing={isEditing} type="date" category="businessDetails" field="openingDate" onChange={actions.updateField} />
+                            <EditableRow label="שנת תחילת טיפול בתיק" value={editData.businessDetails?.caseStartYear} isEditing={isEditing} type="text" category="businessDetails" field="caseStartYear" onChange={actions.updateField} />
                             <EditableRow
                                 label="משלח יד"
                                 value={editData.businessDetails?.occupation}
@@ -680,27 +681,36 @@ const CustomerCard: React.FC = () => {
                                             {/* תתי המשימות הפנימיות בשורות שטוחות ויפות */}
                                             <div className="space-y-2">
                                                 {(task.subTasks || []).map((sub: any) => {
-                                                    const isFinalApproval = sub.title?.includes("אישור ניהול סופי");
+                                                    const dependency = sub.dependsOn
+                                                        ? (task.subTasks || []).find((s: any) => s.registryKey === sub.dependsOn)
+                                                        : undefined;
+                                                    const isBlockedByDependency = !!dependency && !dependency.completed;
+                                                    const isLocked = !!sub.restrictedTo && authService.getCurrentUser() !== sub.restrictedTo;
+                                                    const isDisabled = !!editData.isWaiting || isBlockedByDependency || (isLocked && !sub.completed);
                                                     return (
                                                         <div key={sub.id} className={`flex items-center justify-between p-2 rounded-lg border transition ${sub.completed ? 'bg-green-50/50 border-green-150' : 'bg-slate-50/50 border-slate-150'}`}>
                                                             <label className="flex items-center gap-2 cursor-pointer flex-1 min-w-0">
                                                                 <input
                                                                     type="checkbox"
                                                                     checked={!!sub.completed}
-                                                                    disabled={!!editData.isWaiting}
-                                                                    // ✨ סעיף 6: חסימת יוחנן ושמוליק מסימון אישור ניהול סופי כבוצע
+                                                                    disabled={isDisabled}
+                                                                    title={isBlockedByDependency ? 'יש להשלים קודם את תת-המשימה הקודמת' : (isLocked ? `מוגבל ל-${sub.restrictedTo}` : undefined)}
                                                                     onChange={(e) => {
                                                                         if (editData.isWaiting) {
                                                                             alert("הלקוח במצב \"בהמתנה\" — לא ניתן לסמן ביצוע משימות עד להעברה לטיפול המשרד.");
                                                                             return;
                                                                         }
-                                                                        if (!authService.canApproveFinal(sub.title)) {
-                                                                            alert("אין לך הרשאה לשנות את הסטטוס של אישור ניהול סופי!");
+                                                                        if (!authService.canEditRestricted(sub.restrictedTo)) {
+                                                                            alert(`אין לך הרשאה לשנות את הסטטוס של משימה זו — מוגבלת ל-${sub.restrictedTo} בלבד!`);
+                                                                            return;
+                                                                        }
+                                                                        if (isBlockedByDependency) {
+                                                                            alert('יש להשלים קודם את תת-המשימה הקודמת בשרשרת.');
                                                                             return;
                                                                         }
                                                                         actions.setSubtaskCompleted(task.id, sub.id, e.target.checked);
                                                                     }}
-                                                                    className={`w-4 h-4 rounded text-blue-600 accent-blue-600 flex-shrink-0 ${editData.isWaiting ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
+                                                                    className={`w-4 h-4 rounded text-blue-600 accent-blue-600 flex-shrink-0 ${isDisabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
                                                                 />
                                                                 <span className={`text-xs font-medium truncate ${sub.completed ? 'line-through text-slate-400' : 'text-slate-700'}`}>
                                                                     {sub.title}

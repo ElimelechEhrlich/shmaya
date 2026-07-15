@@ -1,7 +1,7 @@
 // src/constants/taskRegistry.ts
 //
 // Declarative task catalog consumed by TaskGeneratorService. Parent gating for
-// service-owned parents (INSURANCE, INCOME_TAX, VAT) is driven by
+// service-owned parents (INSURANCE, TAX_VAT) is driven by
 // CustomerRegistry.SERVICES + BUSINESS_TYPES — NOT by `condition` lambdas
 // here.
 
@@ -19,7 +19,9 @@ export interface RegistryCustomer {
     businessDetails?: {
         businessName?: string;
         businessID?: string;
+        businessType?: string;
         deductionsId?: string;
+        caseStartYear?: string | number;
         [key: string]: any;
     };
     paymentDetails?: {
@@ -37,6 +39,8 @@ export interface RegistryCustomer {
     incomeTaxDetails?: {
         newItCase?: boolean;
         needsIncomeTaxDirectDebit?: boolean;
+        spouseFileExists?: boolean;
+        spouseRepresentationTransferNeeded?: boolean;
         [key: string]: any;
     };
     vatDetails?: {
@@ -45,22 +49,32 @@ export interface RegistryCustomer {
     };
 }
 
+type RegistryTitle = string | ((c: RegistryCustomer) => string);
+
 export interface RegistrySubTask {
     id: string;
-    title: string;
+    title: RegistryTitle;
     isAutoUpdate?: boolean;
     condition?: (c: RegistryCustomer) => boolean;
     getDetails?: (c: RegistryCustomer) => Record<string, any>;
     getCompleted?: (c: RegistryCustomer) => boolean;
+    /** Restricts editing this specific subtask to one user (e.g. 'מוישי'). */
+    restrictedTo?: string | null;
+    /** id of another subtask in the SAME category that must be completed first. */
+    dependsOn?: string;
 }
 
 export interface RegistryParentTask {
     id: string;
-    title: string;
+    title: RegistryTitle;
     condition?: (c: RegistryCustomer) => boolean;
     restrictedTo?: string | null;
     priority?: 'low' | 'medium' | 'high' | 'critical';
     subTasks: RegistrySubTask[];
+}
+
+function resolveTitle(title: RegistryTitle, c: RegistryCustomer): string {
+    return typeof title === 'function' ? title(c) : title;
 }
 
 // -- התאמת תנאי הוראת הקבע למבנה החדש והמנורמל
@@ -69,6 +83,22 @@ const directDebitCondition = (c: RegistryCustomer): boolean =>
     !!c.isIncomeTaxActive ||
     !!c.isVatActive ||
     !!c.isInsuranceActive;
+
+const ardeniOpenTitle = (c: RegistryCustomer): string => {
+    let title = 'פתיחה בארדני';
+    const businessType = c.businessDetails?.businessType;
+    if (businessType === 'מורשה') title += ' כמורשה';
+    else if (businessType === 'חברה בע"מ') title += ' כחברה בע"מ';
+    const caseStartYear = c.businessDetails?.caseStartYear;
+    if (caseStartYear) title += ` מ${caseStartYear}`;
+    return title;
+};
+
+const taxVatTitle = (c: RegistryCustomer): string =>
+    c.isIncomeTaxActive && !c.incomeTaxDetails?.spouseFileExists ? 'מס הכנסה ומע"מ' : 'מע"מ';
+
+const itRepCondition = (c: RegistryCustomer): boolean =>
+    !!c.isIncomeTaxActive && !c.incomeTaxDetails?.spouseFileExists;
 
 export const AUTO_TASKS_CONFIG: RegistryParentTask[] = [
     {
@@ -105,8 +135,10 @@ export const AUTO_TASKS_CONFIG: RegistryParentTask[] = [
                 }),
             },
             {
-                id: 'ardeni_open',
-                title: 'פתיחה בארדני',
+                id: 'spouse_case_setup',
+                title: 'הקמת תיק לקוח לבן הזוג עבור ייצוג התיק',
+                condition: (c: RegistryCustomer): boolean =>
+                    !!c.incomeTaxDetails?.spouseFileExists && !!c.incomeTaxDetails?.spouseRepresentationTransferNeeded,
             },
         ],
     },
@@ -115,11 +147,26 @@ export const AUTO_TASKS_CONFIG: RegistryParentTask[] = [
         title: 'טיפול מול ביטוח לאומי',
         subTasks: [
             {
-                id: 'rep',
-                title: 'ביטוח לאומי ייצוגים',
+                id: 'rep_1',
+                title: 'ביטוח לאומי רישום ייצוג בן זוג רשום',
                 getDetails: (c: RegistryCustomer): Record<string, any> => ({
                     'מספר תיק': c.insuranceDetails?.insuranceId || 'טרם הוזן'
                 })
+            },
+            {
+                id: 'rep_2',
+                title: 'ביטוח לאומי רישום ייצוג בן זוג',
+                dependsOn: 'rep_1',
+            },
+            {
+                id: 'rep_3',
+                title: 'ייצוג ביטוח לאומי בן זוג רשום - אושר',
+                dependsOn: 'rep_2',
+            },
+            {
+                id: 'rep_4',
+                title: 'ייצוג ביטוח לאומי בן זוג - אושר',
+                dependsOn: 'rep_3',
             },
             {
                 id: 'open',
@@ -140,26 +187,66 @@ export const AUTO_TASKS_CONFIG: RegistryParentTask[] = [
         ],
     },
     {
-        id: 'VAT',
-        title: 'טיפול מול מע"מ',
-        condition: (c: RegistryCustomer): boolean => !!c.isVatActive,
+        id: 'TAX_VAT',
+        title: taxVatTitle,
+        condition: (c: RegistryCustomer): boolean => !!c.isIncomeTaxActive || !!c.isVatActive,
         subTasks: [
-            { id: 'vat_rep', title: 'מע"מ ייצוגים' },
+            {
+                id: 'it_rep_1',
+                title: 'מס הכנסה רישום ייצוג + שליחה לחתימת לקוח',
+                condition: itRepCondition,
+            },
+            {
+                id: 'it_rep_2',
+                title: 'ייצוג מס הכנסה נחתם ע"י הלקוח',
+                condition: itRepCondition,
+                dependsOn: 'it_rep_1',
+            },
+            {
+                id: 'it_rep_3',
+                title: 'ייצוג מס הכנסה שודר',
+                condition: itRepCondition,
+                dependsOn: 'it_rep_2',
+            },
+            {
+                id: 'it_rep_4',
+                title: 'ייצוג מס הכנסה נקלט',
+                condition: itRepCondition,
+                dependsOn: 'it_rep_3',
+            },
+            {
+                id: 'vat_rep_1',
+                title: 'מע"מ רישום ייצוג + שליחה לחתימת לקוח',
+                condition: (c: RegistryCustomer): boolean => !!c.isVatActive,
+            },
+            {
+                id: 'vat_rep_2',
+                title: 'ייצוג מע"מ נחתם ע"י הלקוח',
+                condition: (c: RegistryCustomer): boolean => !!c.isVatActive,
+                dependsOn: 'vat_rep_1',
+            },
+            {
+                id: 'vat_rep_3',
+                title: 'ייצוג מע"מ שודר',
+                condition: (c: RegistryCustomer): boolean => !!c.isVatActive,
+                dependsOn: 'vat_rep_2',
+            },
+            {
+                id: 'vat_rep_4',
+                title: 'ייצוג מע"מ נקלט',
+                condition: (c: RegistryCustomer): boolean => !!c.isVatActive,
+                dependsOn: 'vat_rep_3',
+            },
+            {
+                id: 'it_open',
+                title: 'פתיחת תיק מס הכנסה',
+                condition: (c: RegistryCustomer): boolean =>
+                    !!c.isIncomeTaxActive && !c.incomeTaxDetails?.spouseFileExists && !!c.incomeTaxDetails?.newItCase,
+            },
             {
                 id: 'vat_open',
                 title: 'פתיחת תיק מע"מ',
-                condition: (c: RegistryCustomer): boolean => !!c.vatDetails?.newVatCase
-            },
-        ],
-    },
-    {
-        id: 'INCOME_TAX',
-        title: 'טיפול מול מס הכנסה',
-        condition: (c: RegistryCustomer): boolean => !!c.isIncomeTaxActive,
-        subTasks: [
-            {
-                id: 'it_rep',
-                title: 'ייצוגים מס הכנסה'
+                condition: (c: RegistryCustomer): boolean => !!c.isVatActive && !!c.vatDetails?.newVatCase,
             },
             {
                 id: 'it_deductions',
@@ -171,15 +258,9 @@ export const AUTO_TASKS_CONFIG: RegistryParentTask[] = [
                 }),
             },
             {
-                id: 'it_open',
-                title: 'פתיחת תיק מס הכנסה',
-                condition: (c: RegistryCustomer): boolean => !!c.incomeTaxDetails?.newItCase
-            },
-            {
                 id: 'taxCoordination',
-                title: 'תיאום מס'
+                title: 'תיאום מס',
             },
-
         ],
     },
     {
@@ -215,22 +296,30 @@ export const AUTO_TASKS_CONFIG: RegistryParentTask[] = [
         ],
     },
     {
-        id: 'FINAL_APPROVAL',
-        title: 'אישור ניהולי סופי',
+        id: 'OFFICE_HANDLING',
+        title: 'טיפול משרדי',
         condition: (): boolean => true,
-        restrictedTo: 'מוישי',
         subTasks: [
-            { id: 'approve', title: 'אישור ע"י המשרד' },
+            {
+                id: 'ardeni_open',
+                title: ardeniOpenTitle,
+            },
+            {
+                id: 'approve',
+                title: 'אישור ע"י המשרד',
+                restrictedTo: 'מוישי',
+            },
         ],
     },
 ];
+
+export { resolveTitle };
 
 // bg classes for the 3-4px accent strip (absolute-positioned, right side in RTL)
 export const CATEGORY_ACCENT_COLORS: Record<string, string> = {
     ADMIN_SETUP: 'bg-slate-400',
     INSURANCE: 'bg-sky-400',
-    INCOME_TAX: 'bg-blue-500',
-    VAT: 'bg-indigo-400',
+    TAX_VAT: 'bg-indigo-400',
     DIRECT_DEBIT: 'bg-teal-400',
-    FINAL_APPROVAL: 'bg-emerald-500',
+    OFFICE_HANDLING: 'bg-emerald-500',
 };

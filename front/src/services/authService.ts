@@ -6,7 +6,7 @@ export interface AuthService {
   logout(): void;
   getCurrentUser(): string | null;
   canDelete(): boolean;
-  canApproveFinal(title: string): boolean;
+  canEditRestricted(restrictedTo: string | null | undefined): boolean;
   canManageWaitingStatus(): boolean;
 }
 
@@ -41,13 +41,9 @@ export const authService: AuthService = {
     return true;
   },
 
-  canApproveFinal(subtaskTitle: string): boolean {
-    const user = this.getCurrentUser();
-    const isFinalApproval = subtaskTitle?.toLowerCase().includes("אישור ניהול סופי");
-    if (isFinalApproval && (user === 'יוחנן' || user === 'שמוליק')) {
-        return false;
-    }
-    return true;
+  canEditRestricted(restrictedTo: string | null | undefined): boolean {
+    if (!restrictedTo) return true;
+    return this.getCurrentUser() === restrictedTo;
   },
 
   canManageWaitingStatus(): boolean {

@@ -35,6 +35,7 @@ function formDataToCustomer(formData: CustomerFormData): Partial<Customer> {
             businessDescription: formData.businessDetails.businessDescription,
             employsWorkers: formData.businessDetails.employsWorkers as any,
             deductionsId: formData.businessDetails.deductionsId,
+            caseStartYear: formData.businessDetails.caseStartYear,
         },
         insuranceDetails: {
             insurancePrepayment: formData.insuranceDetails.insurancePrepayment,

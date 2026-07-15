@@ -21,6 +21,7 @@ export interface BusinessDetails {
     businessDescription: string;
     employsWorkers: string;
     deductionsId: string;
+    caseStartYear: string;
 }
 
 export interface IncomeTaxCase {

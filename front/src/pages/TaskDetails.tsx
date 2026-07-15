@@ -60,9 +60,16 @@ export default function TaskDetails(): React.ReactElement {
         }
 
         const sub = (task.subTasks ?? []).find(s => s.id === subtaskId);
-        if (newCompleted && sub && !authService.canApproveFinal(sub.title)) {
-            alert('אין לך הרשאה לשנות את הסטטוס של אישור ניהול סופי!');
+        if (newCompleted && sub && !authService.canEditRestricted(sub.restrictedTo)) {
+            alert(`אין לך הרשאה לשנות את הסטטוס של משימה זו — מוגבלת ל-${sub.restrictedTo} בלבד!`);
             return;
+        }
+        if (newCompleted && sub?.dependsOn) {
+            const dependency = (task.subTasks ?? []).find(s => s.registryKey === sub.dependsOn);
+            if (dependency && !dependency.completed) {
+                alert('יש להשלים קודם את תת-המשימה הקודמת בשרשרת.');
+                return;
+            }
         }
 
         const cascaded = cascadeOnSubtaskSet(
@@ -236,6 +243,12 @@ export default function TaskDetails(): React.ReactElement {
                     ) : (
                         <div className="divide-y divide-slate-100">
                             {(task.subTasks as PersistedSubTask[]).map(sub => {
+                                const dependency = sub.dependsOn
+                                    ? (task.subTasks as PersistedSubTask[]).find(s => s.registryKey === sub.dependsOn)
+                                    : undefined;
+                                const isBlockedByDependency = !!dependency && !dependency.completed;
+                                const isLocked = !!sub.restrictedTo && authService.getCurrentUser() !== sub.restrictedTo;
+                                const isDisabled = !!task.customerIsWaiting || isBlockedByDependency || (isLocked && !sub.completed);
                                 return (
                                     <div
                                         key={sub.id}
@@ -246,9 +259,10 @@ export default function TaskDetails(): React.ReactElement {
                                             <input
                                                 type="checkbox"
                                                 checked={sub.completed}
-                                                disabled={!!task.customerIsWaiting}
+                                                disabled={isDisabled}
+                                                title={isBlockedByDependency ? 'יש להשלים קודם את תת-המשימה הקודמת' : (isLocked ? `מוגבל ל-${sub.restrictedTo}` : undefined)}
                                                 onChange={() => handleToggleSubtask(sub.id, sub.completed)}
-                                                className={`w-5 h-5 accent-blue-600 shrink-0 ${task.customerIsWaiting ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
+                                                className={`w-5 h-5 accent-blue-600 shrink-0 ${isDisabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
                                             />
                                             <span className={`text-sm font-medium truncate ${sub.completed ? 'line-through text-slate-400' : 'text-slate-800'}`}>
                                                 {sub.title}

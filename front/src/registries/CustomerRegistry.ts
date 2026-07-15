@@ -52,10 +52,9 @@ export const PRIORITY_STYLES: Record<TaskPriority, { bg: string; text: string; b
 export const CATEGORY_STYLES: Record<string, { accent: string; bg: string; ring: string; emoji: string }> = {
   ADMIN_SETUP: { accent: 'border-r-slate-400', bg: 'bg-slate-50', ring: 'ring-slate-200', emoji: '🗂️' },
   INSURANCE: { accent: 'border-r-blue-400', bg: 'bg-blue-50/60', ring: 'ring-blue-200', emoji: '🛡️' },
-  INCOME_TAX: { accent: 'border-r-emerald-400', bg: 'bg-emerald-50/60', ring: 'ring-emerald-200', emoji: '💼' },
-  VAT: { accent: 'border-r-amber-400', bg: 'bg-amber-50/60', ring: 'ring-amber-200', emoji: '🧾' },
+  TAX_VAT: { accent: 'border-r-amber-400', bg: 'bg-amber-50/60', ring: 'ring-amber-200', emoji: '🧾' },
   DIRECT_DEBIT: { accent: 'border-r-purple-400', bg: 'bg-purple-50/60', ring: 'ring-purple-200', emoji: '💳' },
-  FINAL_APPROVAL: { accent: 'border-r-rose-400', bg: 'bg-rose-50/60', ring: 'ring-rose-200', emoji: '✅' },
+  OFFICE_HANDLING: { accent: 'border-r-rose-400', bg: 'bg-rose-50/60', ring: 'ring-rose-200', emoji: '✅' },
 };
 export const DEFAULT_CATEGORY_STYLE = { accent: 'border-r-slate-300', bg: 'bg-white', ring: 'ring-slate-200', emoji: '📋' };
 
@@ -94,6 +93,8 @@ export interface BusinessDetails {
   employsWorkers: YesNo;
   deductionsId: string;
   clientType: ClientTypeKey | '';
+  /** Feeds the dynamic title of the OFFICE_HANDLING.ardeni_open subtask. */
+  caseStartYear: string;
 }
 
 export interface InsuranceDetails {
@@ -195,7 +196,7 @@ export const BUSINESS_TYPES: Record<BusinessTypeKey, BusinessTypeRule> = {
     forcedParentTasks: [],
     // taxCoordination requires both: businessType=='זעיר' AND isIncomeTaxActive.
     forcedSubtasks: [
-      { parentId: 'INCOME_TAX', subtaskId: 'taxCoordination', when: (c) => c.isIncomeTaxActive },
+      { parentId: 'TAX_VAT', subtaskId: 'taxCoordination', when: (c) => c.isIncomeTaxActive },
     ],
   },
   'פטור': {
@@ -276,11 +277,11 @@ export const SERVICES: Record<ServiceKey, ServiceDefinition> = {
       'incomeTaxDetails.annualTurnover',
       'incomeTaxDetails.newItCase',
     ],
-    parentTaskId: 'INCOME_TAX',
+    parentTaskId: 'TAX_VAT',
     // Full catalog including taxCoordination (forced by businessType==='זעיר'
     // via BUSINESS_TYPES['זעיר'].forcedSubtasks). Listed here so consumers
     // iterating subtaskIds get the complete picture.
-    subtaskIds: ['it_rep', 'it_open', 'taxCoordination'],
+    subtaskIds: ['it_rep_1', 'it_rep_2', 'it_rep_3', 'it_rep_4', 'it_open', 'it_deductions', 'taxCoordination'],
     clearsOnDeactivate: [
       'incomeTaxDetails.incomeTaxPrepayment',
       'incomeTaxDetails.annualTurnover',
@@ -299,7 +300,7 @@ export const SERVICES: Record<ServiceKey, ServiceDefinition> = {
       'insuranceDetails.insuranceStatus',
     ],
     parentTaskId: 'INSURANCE',
-    subtaskIds: ['rep', 'open', 'deductions'],
+    subtaskIds: ['rep_1', 'rep_2', 'rep_3', 'rep_4', 'open', 'deductions'],
     clearsOnDeactivate: [],
   },
   representation: {
@@ -308,8 +309,8 @@ export const SERVICES: Record<ServiceKey, ServiceDefinition> = {
     activeFlag: 'isVatActive',
     detailsKey: 'vatDetails',
     unlockedFields: ['vatDetails.newVatCase'],
-    parentTaskId: 'VAT',
-    subtaskIds: ['vat_rep', 'vat_open'],
+    parentTaskId: 'TAX_VAT',
+    subtaskIds: ['vat_rep_1', 'vat_rep_2', 'vat_rep_3', 'vat_rep_4', 'vat_open'],
     clearsOnDeactivate: [],
   },
 };
@@ -337,23 +338,25 @@ export function isRepresentationAllowed(c: Customer): boolean {
 // 6b. Task-emission predicates
 //
 // Eliminates the duplicate condition lambdas that previously lived in
-// taskRegistry.js. Service-owned parent tasks (INSURANCE/INCOME_TAX/VAT) are
+// taskRegistry.js. Service-owned parent tasks (INSURANCE/TAX_VAT) are
 // gated by SERVICES[*].activeFlag plus BUSINESS_TYPES[*].forcedParentTasks.
+// TAX_VAT is shared by two SERVICES entries (incomeTax + representation) —
+// shouldEmitServiceParent ORs across every service matching a given parentId.
 // Subtasks forced exclusively by business type (e.g. taxCoordination under
-// INCOME_TAX for זעיר) are gated by BUSINESS_TYPES[*].forcedSubtasks.
+// TAX_VAT for זעיר) are gated by BUSINESS_TYPES[*].forcedSubtasks.
 // ──────────────────────────────────────────────────────────────────
 
 /**
  * Returns:
- *   - true  → service-owned parent that should fire (service active OR business type forces it)
+ *   - true  → service-owned parent that should fire (any owning service active OR business type forces it)
  *   - false → service-owned parent that should NOT fire
  *   - null  → parent isn't owned by any service; caller must use its own gating
- *             (ADMIN_SETUP, DIRECT_DEBIT, FINAL_APPROVAL fall here).
+ *             (ADMIN_SETUP, DIRECT_DEBIT, OFFICE_HANDLING fall here).
  */
 export function shouldEmitServiceParent(parentId: string, c: Customer): boolean | null {
-  const ownerService = Object.values(SERVICES).find((s) => s.parentTaskId === parentId);
-  if (!ownerService) return null;
-  if (c[ownerService.activeFlag]) return true;
+  const ownerServices = Object.values(SERVICES).filter((s) => s.parentTaskId === parentId);
+  if (ownerServices.length === 0) return null;
+  if (ownerServices.some((s) => c[s.activeFlag])) return true;
   const btRule = getBusinessTypeRule(c);
   if (btRule?.forcedParentTasks.includes(parentId)) return true;
   return false;
@@ -511,6 +514,7 @@ export interface SubTask {
   id: string;
   completed: boolean;
   comment?: string | null;
+  registryKey?: string | null;
 }
 
 export interface Task {
@@ -565,12 +569,13 @@ export function calculateWeightedProgress(tasks: Task[] | null | undefined): Pro
 // ──────────────────────────────────────────────────────────────────
 // 10. Finalization probe
 //
-// Prefers the registry-anchored parentTaskId === FINAL_APPROVAL_PARENT_ID
-// check. Falls back to the legacy Hebrew-substring match for rows that
-// pre-date the parentTaskId column (project-map.md §4 finding #5).
+// Checks the specific `approve` subtask under OFFICE_HANDLING, not the whole
+// parent — OFFICE_HANDLING also bundles the unrelated `ardeni_open` subtask,
+// so parent-level completion is not a valid finalization signal.
 // ──────────────────────────────────────────────────────────────────
 
-export const FINAL_APPROVAL_PARENT_ID = 'FINAL_APPROVAL';
+export const OFFICE_HANDLING_PARENT_ID = 'OFFICE_HANDLING';
+export const OFFICE_APPROVAL_SUBTASK_KEY = 'approve';
 
 // ──────────────────────────────────────────────────────────────────
 // 11. Cascade utilities (parent ↔ subtask completion coupling)
@@ -640,11 +645,12 @@ interface MergeableTask {
   title: string;
   status?: 'pending' | 'completed';
   restrictedTo?: string | null;
-  subTasks: { 
-    id?: string; 
-    title: string; 
-    completed?: boolean; 
-    comment?: string; 
+  subTasks: {
+    id?: string;
+    title: string;
+    completed?: boolean;
+    comment?: string;
+    registryKey?: string | null;
     details?: Record<string, unknown> }[];
   priority?: TaskPriority;
 }
@@ -697,9 +703,9 @@ export function planIdempotentSync(
         toUpdate.push({
           id: titleMatch.id,
           subTasks: g.subTasks.map((newSub) => {
-            // const oldByid = new Map((titleMatch.subTasks ?? []).map((s) => [s.id, s]));
-            // const old = oldByid.get(newSub.id);
-            const old = (titleMatch.subTasks ?? []).find(s => s.title === newSub.title);
+            // Prefer registryKey (stable across title/wording changes); fall back to title.
+            const old = (titleMatch.subTasks ?? []).find(s =>
+              (newSub.registryKey && s.registryKey === newSub.registryKey) || s.title === newSub.title);
             return old
               // ? { ...newSub, completed: !!old.completed, comment: old.comment ?? '' }
               // : { ...newSub, completed: false, comment: '' };
@@ -713,9 +719,10 @@ export function planIdempotentSync(
       continue;
     }
 
-    // const oldByid = new Map((match.subTasks ?? []).map((s) => [s.id, s]));
+    // Prefer registryKey (stable across title/wording changes); fall back to id/title.
     const mergedSubs = g.subTasks.map((newSub) => {
-      const old = (match.subTasks ?? []).find(s => s.id === newSub.id || s.title === newSub.title);
+      const old = (match.subTasks ?? []).find(s =>
+        (newSub.registryKey && s.registryKey === newSub.registryKey) || s.id === newSub.id || s.title === newSub.title);
       return old
         ? { ...newSub, id: old.id, completed: !!old.completed, comment: old.comment ?? '' } // 👈 הגנה קשיחה על ה-UUID של הבן
         : { ...newSub, id: undefined, completed: false, comment: '' };
@@ -751,8 +758,13 @@ function readParentTaskId(t: Task | Record<string, unknown>): string | undefined
 export function isCustomerFinalized(tasks: Task[] | null | undefined): boolean {
   if (!tasks?.length) return false;
   return tasks.some((t) => {
+    if (readParentTaskId(t) === OFFICE_HANDLING_PARENT_ID) {
+      if (t.status === 'completed') return true;
+      const approveSub = (t.subTasks ?? []).find((s) => s.registryKey === OFFICE_APPROVAL_SUBTASK_KEY);
+      if (approveSub) return !!approveSub.completed;
+      return false;
+    }
     if (t.status !== 'completed') return false;
-    if (readParentTaskId(t) === FINAL_APPROVAL_PARENT_ID) return true;
     // Legacy fallback (pre-migration rows with NULL parent_task_id)
     return Boolean(
       t.title?.includes('אישור ניהול') || t.title?.includes('פתיחת תיק סופית')

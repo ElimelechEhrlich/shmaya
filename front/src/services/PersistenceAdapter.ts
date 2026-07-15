@@ -30,6 +30,9 @@ export interface PersistedSubTask {
   completed: boolean;
   comment: string | null;
   priority: SubTaskPriority;
+  restrictedTo?: string | null;
+  dependsOn?: string | null;
+  registryKey?: string | null;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -70,6 +73,10 @@ export interface PersistedSubtaskRow {
   customerName: string;
   customerComments?: string;
   customerIsWaiting?: boolean;
+  restrictedTo?: string | null;
+  dependsOn?: string | null;
+  registryKey?: string | null;
+  customerCreatedAt?: string | null;
 }
 
 export interface PersistedLog {
@@ -129,6 +136,7 @@ function dbRowToCustomer(row: any): Customer {
       businessDescription: row.business_description || '',
       employsWorkers: (row.employs_workers || 'no') as any,
       deductionsId: row.deductions_id || '',
+      caseStartYear: row.case_start_year != null ? String(row.case_start_year) : '',
     },
     insuranceDetails: {
       insurancePrepayment: row.insurance_prepayment || '',
@@ -184,6 +192,9 @@ function mapTaskRow(t: any): PersistedTask {
       completed: !!s.is_completed,
       comment: s.comment ?? null,
       priority: (s.priority || 'medium') as SubTaskPriority,
+      restrictedTo: s.restricted_to ?? null,
+      dependsOn: s.depends_on ?? null,
+      registryKey: s.registry_key ?? null,
       createdAt: s.created_at,
       updatedAt: s.updated_at,
     })),
@@ -363,6 +374,7 @@ export const PersistenceAdapter = {
       employs_workers: c.businessDetails?.employsWorkers ?? 'no',
       needs_deductions_file: c.needsDeductionsFile ?? false,
       deductions_id: c.businessDetails?.deductionsId ?? '',
+      case_start_year: c.businessDetails?.caseStartYear ? Number(c.businessDetails.caseStartYear) : null,
       income_tax_rep_type: c.incomeTaxDetails?.repType ?? null,
       income_tax_prepayment: c.incomeTaxDetails?.incomeTaxPrepayment ?? '',
       annual_turnover: c.incomeTaxDetails?.annualTurnover ?? '',
@@ -422,6 +434,7 @@ export const PersistenceAdapter = {
       flatRow.business_description = c.businessDetails.businessDescription;
       flatRow.employs_workers = c.businessDetails.employsWorkers;
       flatRow.deductions_id = c.businessDetails.deductionsId;
+      flatRow.case_start_year = c.businessDetails.caseStartYear ? Number(c.businessDetails.caseStartYear) : null;
     }
 
     if (c.incomeTaxDetails) {
@@ -583,7 +596,7 @@ export const PersistenceAdapter = {
   async fetchAllSubtasksView(): Promise<DbResult<PersistedSubtaskRow[]>> {
     const { data, error } = await supabase
       .from('sub_tasks')
-     .select('*, parent_tasks(id, title, status, customer_id, registry_key, customers(id, full_name, business_name, business_type, comments, is_waiting))')
+     .select('*, parent_tasks(id, title, status, customer_id, registry_key, customers(id, full_name, business_name, business_type, comments, is_waiting, created_at))')
       .order('created_at', { ascending: false });
 
     if (error) return { data: null, error };
@@ -607,6 +620,10 @@ export const PersistenceAdapter = {
         customerName: getDisplayName(customer),
         customerComments: customer?.comments || '',
         customerIsWaiting: !!customer?.is_waiting,
+        restrictedTo: item.restricted_to ?? null,
+        dependsOn: item.depends_on ?? null,
+        registryKey: item.registry_key ?? null,
+        customerCreatedAt: customer?.created_at ?? null,
       };
     });
 
@@ -713,17 +730,17 @@ export const PersistenceAdapter = {
   },
 
   async updateTaskStatus(taskId: string, status: 'pending' | 'completed'): Promise<DbResult<null>> {
-    // ✨ חסימת אב המשימה במידה והוא מכיל תת-משימה של אישור ניהול סופי
+    // ✨ חסימת אב המשימה במידה והוא מכיל תת-משימה מוגבלת שהמשתמש הנוכחי אינו מורשה לה
     if (status === 'completed') {
       const { data: subTasks } = await supabase
         .from('sub_tasks')
-        .select('title')
+        .select('restricted_to')
         .eq('parent_task_id', taskId);
 
-      const hasFinalApproval = subTasks?.some(sub => sub.title?.toLowerCase().includes("אישור ניהול סופי"));
+      const restrictedSub = subTasks?.find(sub => sub.restricted_to);
 
-      if (hasFinalApproval && !authService.canApproveFinal("אישור ניהול סופי")) {
-        return { data: null, error: { message: "לא ניתן לסמן משימה זו כבוצע כיוון שהיא מכילה את 'אישור ניהול סופי' שטרם אושר!" } };
+      if (restrictedSub && !authService.canEditRestricted(restrictedSub.restricted_to)) {
+        return { data: null, error: { message: `לא ניתן לסמן משימה זו כבוצע — היא מכילה תת-משימה המוגבלת ל-${restrictedSub.restricted_to} בלבד!` } };
       }
     }
 
@@ -735,18 +752,18 @@ export const PersistenceAdapter = {
   async updateSubtasksStatusByParent(customerId: string, parentTaskId: string, completed: boolean): Promise<DbResult<null>> {
 
     if (completed) {
-      // 1. נבדוק קודם כל האם בין כל תתי-המשימות של האב הזה יש תת-משימה של "אישור ניהול סופי"
+      // 1. נבדוק קודם כל האם בין כל תתי-המשימות של האב הזה יש תת-משימה מוגבלת
       const { data: subTasks } = await supabase
         .from('sub_tasks')
-        .select('title')
+        .select('restricted_to')
         .eq('parent_task_id', parentTaskId);
 
       if (subTasks) {
-        // אם נמצאה לפחות תת-משימה אחת שהיא אישור ניהול סופי והיוזר הוא יוחנן/שמוליק - נחסום את כל הפעולה הגורפת!
-        const hasFinalApproval = subTasks.some(sub => sub.title?.includes("אישור ניהול סופי"));
+        // אם נמצאה לפחות תת-משימה מוגבלת שהיוזר הנוכחי לא מורשה לה - נחסום את כל הפעולה הגורפת!
+        const restrictedSub = subTasks.find(sub => sub.restricted_to);
 
-        if (hasFinalApproval && !authService.canApproveFinal("אישור ניהול סופי")) {
-          return { data: null, error: { message: "הפעולה נחסמה: התיק מכיל 'אישור ניהול סופי' ואין לך הרשאה לאשר אותו!" } };
+        if (restrictedSub && !authService.canEditRestricted(restrictedSub.restricted_to)) {
+          return { data: null, error: { message: `הפעולה נחסמה: התיק מכיל תת-משימה המוגבלת ל-${restrictedSub.restricted_to} בלבד!` } };
         }
       }
     }
@@ -774,12 +791,20 @@ export const PersistenceAdapter = {
     // upsert — תת-משימות קיימות עם UUID תקני
     const existing = subTasks
       .filter(s => s.id && UUID_RE.test(s.id))
-      .map(s => ({ id: s.id, parent_task_id: taskId, title: s.title, is_completed: s.completed ?? false, comment: s.comment ?? '', priority: s.priority || 'medium' }));
+      .map(s => ({
+        id: s.id, parent_task_id: taskId, title: s.title, is_completed: s.completed ?? false,
+        comment: s.comment ?? '', priority: s.priority || 'medium',
+        restricted_to: s.restrictedTo ?? null, depends_on: s.dependsOn ?? null, registry_key: s.registryKey ?? null,
+      }));
 
     // insert — תת-משימות חדשות ללא UUID
     const newOnes = subTasks
       .filter(s => !s.id || !UUID_RE.test(s.id))
-      .map(s => ({ parent_task_id: taskId, title: s.title, is_completed: s.completed ?? false, comment: s.comment ?? '', priority: s.priority || 'medium' }));
+      .map(s => ({
+        parent_task_id: taskId, title: s.title, is_completed: s.completed ?? false,
+        comment: s.comment ?? '', priority: s.priority || 'medium',
+        restricted_to: s.restrictedTo ?? null, depends_on: s.dependsOn ?? null, registry_key: s.registryKey ?? null,
+      }));
 
     // 1. DELETE קודם — כך לא יגע ב-newOnes שיוכנסו אחרי
     // knownIds ריק → מחק את כל ה-pending של האב
@@ -819,12 +844,12 @@ export const PersistenceAdapter = {
     if (completed) {
       const { data: subtask } = await supabase
         .from('sub_tasks')
-        .select('title')
+        .select('restricted_to')
         .eq('id', subtaskId)
         .single(); // חוזר ל-single בטוח כי המזהה חובה
 
-      if (subtask && !authService.canApproveFinal(subtask.title)) {
-        return { data: null, error: { message: "אין לך הרשאה לשנות את הסטטוס של אישור ניהול סופי!" } };
+      if (subtask?.restricted_to && !authService.canEditRestricted(subtask.restricted_to)) {
+        return { data: null, error: { message: `אין לך הרשאה לשנות את הסטטוס של משימה זו — מוגבלת ל-${subtask.restricted_to} בלבד!` } };
       }
     }
 
@@ -857,8 +882,14 @@ export const PersistenceAdapter = {
   },
 
   async updateSubtask(subtaskId: string, _parentTaskId: string, updates: { title: string; priority: string; comment: string }): Promise<DbResult<null>> {
-    if (updates.title.toLowerCase().includes("אישור ניהול סופי") && !authService.canApproveFinal(updates.title)) {
-      return { data: null, error: { message: "אין לך הרשאה לערוך או לשנות את אישור ניהול סופי!" } };
+    const { data: subtask } = await supabase
+      .from('sub_tasks')
+      .select('restricted_to')
+      .eq('id', subtaskId)
+      .single();
+
+    if (subtask?.restricted_to && !authService.canEditRestricted(subtask.restricted_to)) {
+      return { data: null, error: { message: `אין לך הרשאה לערוך משימה זו — מוגבלת ל-${subtask.restricted_to} בלבד!` } };
     }
     const { error } = await supabase
       .from('sub_tasks')

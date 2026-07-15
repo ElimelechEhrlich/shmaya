@@ -5,7 +5,7 @@ import { authService } from '../services/authService';
 import { CreateTaskModal } from '../comps/CreateTaskModal';
 import CustomerAccordion from '../comps/CustomerAccordion';
 import { type SubtaskViewRow } from '../comps/SubtaskRow';
-import { AUTO_TASKS_CONFIG } from '../constants/taskRegistry';
+import { AUTO_TASKS_CONFIG, resolveTitle } from '../constants/taskRegistry';
 import { translateError } from '../utils/translateError';
 import { useModal } from '../contexts/ModalContext';
 
@@ -29,14 +29,19 @@ interface TaskFilters {
 }
 
 // שמוליק צריך לראות לקוחות בהמתנה כברירת מחדל; לכולם אחרים הם מוסתרים עד שמישהו מסמן אחרת.
-const getDefaultFilters = (): TaskFilters => ({
-    statuses: ['pending'],
-    categories: [],
-    clients: [],
-    priorities: [],
-    search: '',
-    showWaitingClients: authService.getCurrentUser() === 'שמוליק',
-});
+// שמוליק ויוחנן רואים כברירת מחדל את כל הסטטוסים; מוישי ממשיך לראות רק פתוחות.
+const getDefaultFilters = (): TaskFilters => {
+    const user = authService.getCurrentUser();
+    const seesAllStatusesByDefault = user === 'שמוליק' || user === 'יוחנן';
+    return {
+        statuses: seesAllStatusesByDefault ? [] : ['pending'],
+        categories: [],
+        clients: [],
+        priorities: [],
+        search: '',
+        showWaitingClients: user === 'שמוליק',
+    };
+};
 
 interface MultiSelectProps {
     label: string;
@@ -79,8 +84,13 @@ export default function Tasks(): React.ReactElement {
     useEffect(() => { load(); }, [load]);
 
     // ── Filter options ────────────────────────────────────────────────
+    // TAX_VAT's title is dynamic per-customer (isIncomeTaxActive/spouseFileExists) — the filter
+    // dropdown has no single customer context, so it gets a generic label covering both cases.
     const categories = useMemo((): [string, string][] =>
-        AUTO_TASKS_CONFIG.map(t => [t.id, t.title]),
+        AUTO_TASKS_CONFIG.map(t => [
+            t.id,
+            t.id === 'TAX_VAT' ? 'מס הכנסה / מע"מ' : resolveTitle(t.title, {}),
+        ]),
     []);
 
     const clientOptions = useMemo((): [string, string][] => {
@@ -111,31 +121,31 @@ export default function Tasks(): React.ReactElement {
         return true;
     }), [rows, filters]);
 
-    // ── Grouping: office first, then A-Z by client name ───────────────
+    // ── Grouping: office first, then by client created_at (newest first) ──
     const groupedByClient = useMemo(() => {
-        const map = new Map<string, { clientName: string; rows: SubtaskViewRow[], comments: string }>();
+        const map = new Map<string, { clientName: string; rows: SubtaskViewRow[], comments: string, createdAt: string | null }>();
         for (const row of filtered) {
             const key = row.clientId ?? OFFICE_CUSTOMER_ID;
             const name = row.clientId ? (row.customerName ?? '—') : '🏢 משימות משרדיות';
-            if (!map.has(key)) map.set(key, { clientName: name, rows: [], comments: '' });
+            if (!map.has(key)) map.set(key, { clientName: name, rows: [], comments: '', createdAt: row.customerCreatedAt ?? null });
             map.get(key)!.rows.push(row);
             if (!map.get(key)!.comments && row.customerComments) {
                 map.get(key)!.comments = row.customerComments;
             }
-            
+
         }
         return Array.from(map.entries())
-            .sort(([aId, { clientName: aName }], [bId, { clientName: bName }]) => {
+            .sort(([aId, { createdAt: aCreated }], [bId, { createdAt: bCreated }]) => {
                 if (aId === OFFICE_CUSTOMER_ID) return -1;
                 if (bId === OFFICE_CUSTOMER_ID) return 1;
-                return aName.localeCompare(bName, 'he');
+                return (bCreated ?? '').localeCompare(aCreated ?? '');
             })
             .map(([clientId, { clientName, rows: clientRows, comments }]) => ({
-    clientId, 
-    clientName, 
-     comments,           
+    clientId,
+    clientName,
+     comments,
     rows: [...clientRows].sort((a, b) => {
-        const order = ['ADMIN_SETUP', 'INSURANCE', 'INCOME_TAX', 'VAT', 'DIRECT_DEBIT', 'FINAL_APPROVAL'];
+        const order = ['ADMIN_SETUP', 'INSURANCE', 'TAX_VAT', 'DIRECT_DEBIT', 'OFFICE_HANDLING'];
         const ai = order.indexOf(a.parentTaskId ?? '');
         const bi = order.indexOf(b.parentTaskId ?? '');
         return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
@@ -175,9 +185,16 @@ export default function Tasks(): React.ReactElement {
             alert('הלקוח במצב "בהמתנה" — לא ניתן לסמן ביצוע משימות עד להעברה לטיפול המשרד.');
             return;
         }
-        if (!authService.canApproveFinal(row.subtaskTitle)) {
-            alert('אין לך הרשאה לשנות את הסטטוס של אישור ניהול סופי!');
+        if (!authService.canEditRestricted(row.restrictedTo)) {
+            alert(`אין לך הרשאה לשנות את הסטטוס של משימה זו — מוגבלת ל-${row.restrictedTo} בלבד!`);
             return;
+        }
+        if (completed && row.dependsOn) {
+            const dependency = rows.find(r => r.taskId === row.taskId && r.registryKey === row.dependsOn);
+            if (dependency && !dependency.completed) {
+                alert('יש להשלים קודם את תת-המשימה הקודמת בשרשרת.');
+                return;
+            }
         }
         setRows(prev => prev.map(r =>
             r.subtaskId === row.subtaskId ? { ...r, completed } : r
@@ -187,7 +204,7 @@ export default function Tasks(): React.ReactElement {
             alert(`שגיאה בסימון תת-המשימה: ${translateError(error.message)}`);
             load();
         }
-    }, [load]);
+    }, [load, rows]);
 
     const onSaveTitle = useCallback(async (row: SubtaskViewRow, newTitle: string) => {
         const trimmed = newTitle.trim();
@@ -358,6 +375,7 @@ export default function Tasks(): React.ReactElement {
                             clientId={clientId}
                             clientName={clientName}
                             rows={clientRows}
+                            allRows={rows}
                             isOpen={openAccordions.has(clientId)}
                             onToggle={toggleAccordion}
                             onRowToggle={onRowToggle}
