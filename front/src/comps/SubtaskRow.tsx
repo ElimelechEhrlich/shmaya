@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import PriorityBadge from './PriorityBadge';
 import { CATEGORY_ACCENT_COLORS } from '../constants/taskRegistry';
+import { authService } from '../services/authService';
 
 export interface SubtaskViewRow {
     taskId: string;
@@ -17,6 +18,10 @@ export interface SubtaskViewRow {
     taskStatus?: 'pending' | 'completed';
     customerComments?: string;
     customerIsWaiting?: boolean;
+    restrictedTo?: string | null;
+    dependsOn?: string | null;
+    registryKey?: string | null;
+    customerCreatedAt?: string | null;
 }
 
 interface SubtaskRowProps {
@@ -26,6 +31,7 @@ interface SubtaskRowProps {
     onEditClick: (row: SubtaskViewRow) => void;
     onPriorityChange: (row: SubtaskViewRow, priority: string) => void;
     onDelete?: (row: SubtaskViewRow) => void;
+    isBlockedByDependency?: boolean;
 }
 
 const SubtaskRow: React.FC<SubtaskRowProps> = React.memo(({
@@ -35,9 +41,12 @@ const SubtaskRow: React.FC<SubtaskRowProps> = React.memo(({
     onEditClick,
     onPriorityChange,
     onDelete,
+    isBlockedByDependency,
 }) => {
     const [editing, setEditing] = useState(false);
     const [draft, setDraft] = useState(row.subtaskTitle);
+    const isLocked = !!row.restrictedTo && authService.getCurrentUser() !== row.restrictedTo;
+    const isDisabled = !!row.customerIsWaiting || !!isBlockedByDependency || (isLocked && !row.completed);
 
     const handleSave = () => {
         setEditing(false);
@@ -55,11 +64,20 @@ const SubtaskRow: React.FC<SubtaskRowProps> = React.memo(({
             <div className={`absolute inset-y-0 right-0 w-0.75 ${accentBg} opacity-70`} />
 
             {/* Styled checkbox — peer pattern */}
-            <label className={`flex items-center shrink-0 ${row.customerIsWaiting ? 'cursor-not-allowed' : 'cursor-pointer'}`} title={row.customerIsWaiting ? 'הלקוח במצב "בהמתנה" — לא ניתן לסמן ביצוע' : undefined}>
+            <label
+                className={`flex items-center shrink-0 ${isDisabled ? 'cursor-not-allowed' : 'cursor-pointer'}`}
+                title={row.customerIsWaiting
+                    ? 'הלקוח במצב "בהמתנה" — לא ניתן לסמן ביצוע'
+                    : isBlockedByDependency
+                        ? 'יש להשלים קודם את תת-המשימה הקודמת בשרשרת'
+                        : isLocked
+                            ? `מוגבל ל-${row.restrictedTo}`
+                            : undefined}
+            >
                 <input
                     type="checkbox"
                     checked={row.completed}
-                    disabled={!!row.customerIsWaiting}
+                    disabled={isDisabled}
                     onChange={(e) => onToggle(row, e.target.checked)}
                     className="peer sr-only"
                 />
@@ -67,7 +85,7 @@ const SubtaskRow: React.FC<SubtaskRowProps> = React.memo(({
                                  peer-checked:border-blue-500 peer-checked:bg-blue-500
                                  transition-all duration-200 flex items-center justify-center
                                  text-transparent peer-checked:text-white text-[11px] font-black
-                                 shrink-0 select-none ${row.customerIsWaiting ? 'opacity-50' : 'hover:border-slate-400'}`}>
+                                 shrink-0 select-none ${isDisabled ? 'opacity-50' : 'hover:border-slate-400'}`}>
                     ✓
                 </span>
             </label>

@@ -9,6 +9,9 @@ interface SubTask {
   completed: boolean;
   details?: Record<string, any>;
   comment?: string;
+  restrictedTo?: string | null;
+  dependsOn?: string | null;
+  registryKey?: string | null;
 }
 
 // הגדרת המבנה של משימת אב
@@ -74,29 +77,37 @@ export default function TaskCard({
         {/* רשימת תתי-משימות */}
         {isOpen && (
           <div className="p-4 bg-slate-50 space-y-3">
-            {task.subTasks.map(sub => (
-              <div key={sub.id} className="flex items-center justify-between p-3 bg-white border rounded-lg">
-                <div className="flex items-center gap-3">
-                  <input 
-                    type="checkbox" 
-                    disabled={isLocked}
-                    checked={sub.completed}
-                    onChange={() => onSubTaskToggle(task.id, sub.id)}
-                    className="w-5 h-5 accent-blue-600"
-                  />
-                  <span className={sub.completed ? 'line-through text-slate-400' : 'text-slate-800'}>
-                    {sub.title}
-                  </span>
-                </div>
-                
-                {/* פרטים ספציפיים לתת-משימה */}
-                {sub.details && Object.keys(sub.details).length > 0 && (
-                  <div className="text-[10px] text-slate-500 bg-slate-100 p-1 rounded">
-                    {Object.entries(sub.details).map(([k, v]) => `${k}: ${v}`).join(' | ')}
+            {task.subTasks.map(sub => {
+              const dependency = sub.dependsOn
+                ? task.subTasks.find(s => s.registryKey === sub.dependsOn)
+                : undefined;
+              const isBlockedByDependency = !!dependency && !dependency.completed;
+              const isSubLocked = !!sub.restrictedTo && currentUser !== sub.restrictedTo;
+              const isSubDisabled = isLocked || isBlockedByDependency || (isSubLocked && !sub.completed);
+              return (
+                <div key={sub.id} className="flex items-center justify-between p-3 bg-white border rounded-lg">
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="checkbox"
+                      disabled={isSubDisabled}
+                      checked={sub.completed}
+                      onChange={() => onSubTaskToggle(task.id, sub.id)}
+                      className="w-5 h-5 accent-blue-600"
+                    />
+                    <span className={sub.completed ? 'line-through text-slate-400' : 'text-slate-800'}>
+                      {sub.title}
+                    </span>
                   </div>
-                )}
-              </div>
-            ))}
+
+                  {/* פרטים ספציפיים לתת-משימה */}
+                  {sub.details && Object.keys(sub.details).length > 0 && (
+                    <div className="text-[10px] text-slate-500 bg-slate-100 p-1 rounded">
+                      {Object.entries(sub.details).map(([k, v]) => `${k}: ${v}`).join(' | ')}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
             
             {isLocked && (
               <p className="text-xs text-amber-600 font-bold mt-2 text-center italic">

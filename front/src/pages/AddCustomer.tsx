@@ -25,7 +25,7 @@ import WhatsAppIcon from '../comps/WhatsAppIcon';
 interface CustomerFormData {
     customerDetails: { fullName: string; identityId: string; phoneNumber: string; address: string; email: string; parentIdNumber: string; hasWhatsapp: boolean; spouseBirthYear: string };
     businessDetails: {
-        businessName: string; businessID: string; businessType: string; clientType: string; openingDate: string; occupation: string; businessDescription: string; employsWorkers: string; deductionsId: string;
+        businessName: string; businessID: string; businessType: string; clientType: string; openingDate: string; occupation: string; businessDescription: string; employsWorkers: string; deductionsId: string; caseStartYear: string;
     };
     insuranceDetails: { insurancePrepayment: string; workHours: string; newInsuranceCase: boolean; insuranceId: string; insuranceStatus: string };
     incomeTaxDetails: { repType: string; incomeTaxPrepayment: string; annualTurnover: string; newItCase: boolean; needsIncomeTaxDirectDebit: boolean; spouseFileExists: boolean; spouseRepresentationTransferNeeded: boolean };
@@ -86,7 +86,7 @@ export default function AddCustomer(): React.ReactElement {
             spouseBirthYear: '',
         },
         businessDetails: {
-            businessName: '', businessID: '', businessType: prefill.businessType || '', clientType: prefill.clientType || '', openingDate: '', occupation: '', businessDescription: '', employsWorkers: prefill.employsWorkers || 'no', deductionsId: ''
+            businessName: '', businessID: '', businessType: prefill.businessType || '', clientType: prefill.clientType || '', openingDate: '', occupation: '', businessDescription: '', employsWorkers: prefill.employsWorkers || 'no', deductionsId: '', caseStartYear: ''
         },
         insuranceDetails: { insurancePrepayment: '', workHours: '', newInsuranceCase: getNewCaseDefault(prefill.clientType), insuranceId: '', insuranceStatus: '' },
         incomeTaxDetails: {
@@ -298,6 +298,7 @@ export default function AddCustomer(): React.ReactElement {
                                 </div>
                                   </FormField>
                                 <FormField label="תאריך פתיחת העסק"><input name="openingDate" type="date" className="input-style" onChange={(e) => handleChange('businessDetails', e)} required={formData.businessDetails.clientType === 'עסק חדש'} /></FormField>
+                                <FormField label="שנת תחילת טיפול בתיק"><input name="caseStartYear" type="number" min="2000" max="2100" className="input-style" value={formData.businessDetails.caseStartYear} onChange={(e) => handleChange('businessDetails', e)} /></FormField>
                                     <FormField label="סוג עסק לייצוג">
                                     <FilterableSelect
                                         options={BUSINESS_TYPE_OPTIONS}

@@ -4,7 +4,7 @@
 // progress, finalization, and parent/subtask gating decisions are owned by
 // CustomerRegistry; this file just orchestrates the catalog walk.
 
-import { AUTO_TASKS_CONFIG } from '../constants/taskRegistry';
+import { AUTO_TASKS_CONFIG, resolveTitle } from '../constants/taskRegistry';
 import {
     calculateWeightedProgress,
     isCustomerFinalized,
@@ -30,7 +30,10 @@ export interface GeneratedSubTask {
     completed: boolean;
     details: Record<string, any>;
     comment: string;
-    priority: 'low' | 'medium' | 'high' | 'critical'
+    priority: 'low' | 'medium' | 'high' | 'critical';
+    restrictedTo: string | null;
+    dependsOn: string | null;
+    registryKey: string;
 }
 
 // הגדרת המבנה של משימה ראשית מיוצרת
@@ -38,7 +41,7 @@ export interface GeneratedTask {
     id: string;
     parentTaskId: string;
     title: string;
-    restrictedTo: string[] | null;
+    restrictedTo: string | null;
     subTasks: GeneratedSubTask[];
 }
 
@@ -57,7 +60,7 @@ export class TaskGeneratorService {
             .map((parentTask: any): GeneratedTask => ({
                 id: crypto.randomUUID(),
                 parentTaskId: parentTask.id,
-                title: parentTask.title,
+                title: resolveTitle(parentTask.title, customerData as any),
                 restrictedTo: parentTask.restrictedTo || null,
                 subTasks: parentTask.subTasks
                     .filter((sub: any) => {
@@ -70,11 +73,14 @@ export class TaskGeneratorService {
                     })
                     .map((sub: any): GeneratedSubTask => ({
                         id: sub.id,
-                        title: sub.title,
+                        title: resolveTitle(sub.title, customerData as any),
                         completed: sub.getCompleted ? sub.getCompleted(customerData) : false,
                         details: sub.getDetails ? sub.getDetails(customerData) : {},
                         comment: '',
                         priority: sub.priority || 'medium', // יורש עדיפות מתת-המשימה, או מהמשימה האב, או ברירת מחדל
+                        restrictedTo: sub.restrictedTo || null,
+                        dependsOn: sub.dependsOn || null,
+                        registryKey: sub.id,
                     })),
             }));
     }

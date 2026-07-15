@@ -53,7 +53,7 @@ These let the cascade assign `next[flag] = false` without `as Record<>` casts.
 
 | `key` | `representationAllowed` | `showsEmployerFields` | `forcesServicesOff` | `forcedParentTasks` | `forcedSubtasks` |
 |---|---|---|---|---|---|
-| `'זעיר'` | false | false | `['representation']` | `['INCOME_TAX']` | `[{ parentId: 'INCOME_TAX', subtaskId: 'taxCoordination' }]` |
+| `'זעיר'` | false | false | `['representation']` | `[]` | `[{ parentId: 'TAX_VAT', subtaskId: 'taxCoordination', when: isIncomeTaxActive }]` |
 | `'פטור'` | false | false | `['representation']` | — | — |
 | `'מורשה'` | true | true | — | — | — |
 | `'חברה בע"מ'` | true | true | — | — | — |
@@ -67,11 +67,11 @@ Three services, each with a clean conceptual key mapped to a legacy DB flag:
 
 | `ServiceKey` | `activeFlag` (Customer field) | `detailsKey` | `parentTaskId` | `subtaskIds` | `clearsOnDeactivate` |
 |---|---|---|---|---|---|
-| `incomeTax` | `isIncomeTaxActive` | `incomeTaxDetails` | `INCOME_TAX` | `['it_rep', 'it_open', 'taxCoordination']` | `['incomeTaxDetails.incomeTaxPrepayment', 'incomeTaxDetails.annualTurnover']` |
-| `nationalInsurance` | `isInsuranceActive` | `insuranceDetails` | `INSURANCE` | `['rep', 'open', 'deductions']` | — |
-| `representation` | `isVatActive` | `vatDetails` | `VAT` | `['vat_rep', 'vat_open']` | — |
+| `incomeTax` | `isIncomeTaxActive` | `incomeTaxDetails` | `TAX_VAT` | `['it_rep_1', 'it_rep_2', 'it_rep_3', 'it_rep_4', 'it_open', 'it_deductions', 'taxCoordination']` | `['incomeTaxDetails.incomeTaxPrepayment', 'incomeTaxDetails.annualTurnover']` |
+| `nationalInsurance` | `isInsuranceActive` | `insuranceDetails` | `INSURANCE` | `['rep_1', 'rep_2', 'rep_3', 'rep_4', 'open', 'deductions']` | — |
+| `representation` | `isVatActive` | `vatDetails` | `TAX_VAT` | `['vat_rep_1', 'vat_rep_2', 'vat_rep_3', 'vat_rep_4', 'vat_open']` | — |
 
-Note: `subtaskIds` for `incomeTax` includes `taxCoordination` even though that subtask is forced by `BUSINESS_TYPES['זעיר']` rather than by the service flag — so iterating gives the full catalog.
+Note: `incomeTax` and `representation` now share `parentTaskId: 'TAX_VAT'` (post tasks-reorg merge) — `shouldEmitServiceParent` aggregates all services sharing a parent id via `.filter()`+`.some()` (previously a single-match `.find()`, which would have silently ignored a VAT-only customer's flag once two services pointed at the same parent). `subtaskIds` for `incomeTax` includes `taxCoordination` even though that subtask is forced by `BUSINESS_TYPES['זעיר']` rather than by the service flag — so iterating gives the full catalog.
 
 ### 2.4 Cross-field cascade (`applyBusinessRules`, §7)
 
@@ -88,8 +88,8 @@ Every nested object is deep-cloned at the top of the function (including `custom
 These eliminate the duplicate condition lambdas that previously lived in `taskRegistry.js`. The generator calls them on each customer change.
 
 - `shouldEmitServiceParent(parentId, c)` → `true | false | null`
-  - `true` / `false` for service-owned parents (INSURANCE / INCOME_TAX / VAT) based on `SERVICES[*].activeFlag` *or* `BUSINESS_TYPES[bt].forcedParentTasks`.
-  - `null` for non-service parents (ADMIN_SETUP / DIRECT_DEBIT / FINAL_APPROVAL), telling the caller to fall back to the entry's own `condition` lambda.
+  - `true` / `false` for service-owned parents (INSURANCE / TAX_VAT) based on *any* `SERVICES[*]` sharing that `parentTaskId` having its `activeFlag` true, *or* `BUSINESS_TYPES[bt].forcedParentTasks`.
+  - `null` for non-service parents (ADMIN_SETUP / DIRECT_DEBIT / OFFICE_HANDLING), telling the caller to fall back to the entry's own `condition` lambda.
 - `isSubtaskBusinessTypeGated(parentId, subId)` → true if the subtask appears in *any* business type's `forcedSubtasks` list. Such subtasks are emitted *only* when forced; never by default.
 - `isSubtaskForcedByBusinessType(parentId, subId, c)` → true if the customer's current business type forces this specific subtask.
 
@@ -97,7 +97,7 @@ These eliminate the duplicate condition lambdas that previously lived in `taskRe
 
 **`calculateWeightedProgress(tasks): { totalUnits, doneUnits, percent }`** — subtask-weighted. Every subtask is one unit. A parent without subtasks counts as one unit. A parent marked `status === 'completed'` short-circuits to all-subtasks-done.
 
-**`isCustomerFinalized(tasks): boolean`** — returns true iff some task has `parentTaskId === 'FINAL_APPROVAL'` AND `status === 'completed'`. The `FINAL_APPROVAL_PARENT_ID` constant is the canonical id.
+**`isCustomerFinalized(tasks): boolean`** — returns true iff some task has `parentTaskId === 'OFFICE_HANDLING'` AND either the whole parent is `status === 'completed'`, or its `approve` subtask (matched by `registryKey`, not title) is individually completed. Checking the specific subtask — not whole-parent completion — matters because `OFFICE_HANDLING` also bundles the unrelated `ardeni_open` subtask. `OFFICE_HANDLING_PARENT_ID` / `OFFICE_APPROVAL_SUBTASK_KEY` are the canonical ids (replaced the old `FINAL_APPROVAL_PARENT_ID`).
 
 > **The `parentTaskId` column is the primary anchor** for both progress and finalization. The legacy Hebrew-substring fallback remains in `isCustomerFinalized` *only* for rows persisted before `db/migrations/0001` ran. Once the migration is applied (and `TaskGeneratorService` is already emitting `parentTaskId` on every new row), the fallback can be deleted.
 
@@ -192,7 +192,7 @@ Failures are swallowed (`console.error`) — logging must never block the user.
   loading:        boolean;
   isEditing:      boolean;
   progress:       number;                     // 0–100, parentTaskId-anchored weighted
-  isFinalized:    boolean;                    // parentTaskId === FINAL_APPROVAL
+  isFinalized:    boolean;                    // OFFICE_HANDLING parent completed, or its `approve` subtask individually completed
   actions: {
     updateField(category, field, value);      // runs every change through applyBusinessRules
     setEditMode(editing);                     // exit reverts unsaved edits to `customer`
@@ -216,10 +216,9 @@ Internal state is just `customer`, `editData`, `loading`, `isEditing`. Every der
 |---|---|
 | `ADMIN_SETUP` | `condition: () => true` (non-service) |
 | `INSURANCE` | Registry: `SERVICES.nationalInsurance.activeFlag` ∨ `BUSINESS_TYPES.forcedParentTasks` |
-| `INCOME_TAX` | Registry: `SERVICES.incomeTax.activeFlag` ∨ `BUSINESS_TYPES['זעיר'].forcedParentTasks = ['INCOME_TAX']` |
-| `VAT` | Registry: `SERVICES.representation.activeFlag` |
+| `TAX_VAT` | Registry: `SERVICES.incomeTax.activeFlag` ∨ `SERVICES.representation.activeFlag` (two services share this one `parentTaskId`; `shouldEmitServiceParent` ORs across all services matching it) — merges the legacy `INCOME_TAX`+`VAT` parents. Dynamic `title`: `'מס הכנסה ומע"מ'` if income-tax active without a spouse file, else `'מע"מ'`. |
 | `DIRECT_DEBIT` | `directDebitCondition` lambda (non-service, complex) |
-| `FINAL_APPROVAL` | `condition: () => true`, `restrictedTo: 'מוישי'` |
+| `OFFICE_HANDLING` | `condition: () => true` (non-service). Contains `ardeni_open` (no restriction, dynamic title) and `approve` (`restrictedTo: 'מוישי'` now at the **subtask** level, not the parent — replaces the old standalone `FINAL_APPROVAL` parent). |
 
 The generator (`TaskGeneratorService.generateForCustomer`) does:
 
@@ -258,8 +257,8 @@ All migrations 0001–0007 have been applied. The schema is stable.
 | Table | Key columns |
 |---|---|
 | `customers` | `id` (uuid PK), `full_name`, `is_active`, `comments`, `created_at`; flat detail columns for business, income-tax, VAT, insurance, and payment (see CLAUDE.md for full list). Sentinel row `id = '00000000-0000-0000-0000-000000000000'` represents office-wide tasks. |
-| `parent_tasks` | `id`, `customer_id` (FK → customers, nullable for office tasks), `title`, `status` (`pending`/`completed`), `registry_key` (stable Registry id: `ADMIN_SETUP` / `INSURANCE` / `INCOME_TAX` / `VAT` / `DIRECT_DEBIT` / `FINAL_APPROVAL`), `priority`, `restricted_to`, `created_at` |
-| `sub_tasks` | `id`, `parent_task_id` (FK → parent_tasks), `title`, `completed`, `priority`, `comment`, `updated_at`, `updated_by` |
+| `parent_tasks` | `id`, `customer_id` (FK → customers, nullable for office tasks), `title`, `status` (`pending`/`completed`), `registry_key` (stable Registry id: `ADMIN_SETUP` / `INSURANCE` / `TAX_VAT` / `DIRECT_DEBIT` / `OFFICE_HANDLING`), `priority`, `restricted_to`, `created_at` |
+| `sub_tasks` | `id`, `parent_task_id` (FK → parent_tasks), `title`, `completed`, `priority`, `comment`, `updated_at`, `updated_by`; migration `0017` (not yet applied) adds `restricted_to`, `depends_on`, `registry_key` |
 | `logs` | `id`, `created_at`, `actor`, `action`, `entity_type`, `entity_id`, `payload` (jsonb) |
 
 **Dropped (migration 0007, 2026-06-23):** `business_details`, `income_tax_cases`, `vat_cases`, `insurance_cases`, `payment_details`. Data was backfilled to `customers` in migration 0005 before the drop.

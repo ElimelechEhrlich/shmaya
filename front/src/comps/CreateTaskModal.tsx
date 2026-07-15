@@ -3,7 +3,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { OFFICE_CUSTOMER_ID, PersistenceAdapter } from '../services/PersistenceAdapter';
-import { authService } from '../services/authService';
 import { PRIORITY_LEVELS, PRIORITY_STYLES } from '../registries/CustomerRegistry';
 import FilterableSelect from './FilterableSelect';
 
@@ -73,14 +72,8 @@ const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     if (!title.trim()) { setErr('כותרת חובה'); return; }
     if (!isOffice && !clientId) { setErr('בחר לקוח או סמן משימה משרדית'); return; }
 
-    // ✨ בדיקת חסימה משופרת: אם המשתמש מנסה להשאיר או לסמן את המשימה כ"בוצע"
-    // והטקסט של המשימה מכיל "אישור ניהול סופי" - נחסום את ה-Submit של הטופס!
-    const isTryingToApprove = isCompleted && title.toLowerCase().includes("אישור ניהול סופי");
-    
-    if (isTryingToApprove && !authService.canApproveFinal(title)) {
-        setErr('אין לך הרשאה לסמן את המשימה הזו כבוצע!');
-        return;
-    }
+    // חסימת עריכה/סימון-כבוצע למשימות מוגבלות (restrictedTo) נאכפת ב-PersistenceAdapter
+    // מול העמודה restricted_to בפועל — לא כאן, כי למודל הזה אין גישה לשדה הזה.
 
     setSaving(true);
     // ... המשך פקודות ה-try/catch של ה-PersistenceAdapter שלך כרגיל ...

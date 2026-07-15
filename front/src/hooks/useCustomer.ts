@@ -205,8 +205,9 @@ if (!wasLtd && isNowLtd && editData) {
 
             if (isCompletedBoolean) {
                 const targetTask = (customer ?? editData)?.tasks.find(t => t.id === parentTaskId);
-                if (targetTask?.subTasks?.some(s => !authService.canApproveFinal(s.title))) {
-                    alert("הפעולה נחסמה: המשימה מכילה 'אישור ניהול סופי' ואין לך הרשאה לאשר אותו!");
+                const lockedSub = targetTask?.subTasks?.find(s => !authService.canEditRestricted(s.restrictedTo));
+                if (lockedSub) {
+                    alert(`הפעולה נחסמה: המשימה מכילה תת-משימה המוגבלת ל-${lockedSub.restrictedTo} בלבד!`);
                     return;
                 }
             }
@@ -249,9 +250,16 @@ if (!wasLtd && isNowLtd && editData) {
             const beforeSubTasks = targetTask.subTasks || [];
 
             const targetSub = beforeSubTasks.find(s => s.id === subtaskId);
-            if (completed && targetSub && !authService.canApproveFinal(targetSub.title)) {
-                alert("אין לך הרשאה לסמן 'אישור ניהול סופי' כבוצע!");
+            if (completed && targetSub && !authService.canEditRestricted(targetSub.restrictedTo)) {
+                alert(`אין לך הרשאה לשנות את הסטטוס של משימה זו — מוגבלת ל-${targetSub.restrictedTo} בלבד!`);
                 return;
+            }
+            if (completed && targetSub?.dependsOn) {
+                const dependency = beforeSubTasks.find(s => s.registryKey === targetSub.dependsOn);
+                if (dependency && !dependency.completed) {
+                    alert('יש להשלים קודם את תת-המשימה הקודמת בשרשרת.');
+                    return;
+                }
             }
 
             const res = cascadeOnSubtaskSet(

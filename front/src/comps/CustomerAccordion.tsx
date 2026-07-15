@@ -8,6 +8,10 @@ interface CustomerAccordionProps {
     clientId: string;
     clientName: string;
     rows: SubtaskViewRow[];
+    /** Unfiltered full row set — used only for dependsOn lookups, so a search/priority
+     *  filter that hides a dependency doesn't make its dependent's checkbox look
+     *  falsely unblocked (the actual toggle handler always checks the full set too). */
+    allRows: SubtaskViewRow[];
     isOpen: boolean;
     onToggle: (clientId: string) => void;
     // callbacks stable (useCallback in Tasks.tsx) — passed directly to SubtaskRow
@@ -30,6 +34,7 @@ const CustomerAccordion: React.FC<CustomerAccordionProps> = React.memo(({
     clientId,
     clientName,
     rows,
+    allRows,
     isOpen,
     onToggle,
     onRowToggle,
@@ -95,17 +100,23 @@ const CustomerAccordion: React.FC<CustomerAccordionProps> = React.memo(({
         📋 {comments}
     </div>
 )}
-                    {rows.map(row => (
-                        <SubtaskRow
-                            key={`${row.taskId}-${row.subtaskId ?? 'parent'}`}
-                            row={row}
-                            onToggle={onRowToggle}
-                            onSaveTitle={onSaveTitle}
-                            onEditClick={onEditClick}
-                            onPriorityChange={onPriorityChange}
-                            onDelete={onDelete}
-                        />
-                    ))}
+                    {rows.map(row => {
+                        const dependency = row.dependsOn
+                            ? allRows.find(r => r.taskId === row.taskId && r.registryKey === row.dependsOn)
+                            : undefined;
+                        return (
+                            <SubtaskRow
+                                key={`${row.taskId}-${row.subtaskId ?? 'parent'}`}
+                                row={row}
+                                onToggle={onRowToggle}
+                                onSaveTitle={onSaveTitle}
+                                onEditClick={onEditClick}
+                                onPriorityChange={onPriorityChange}
+                                onDelete={onDelete}
+                                isBlockedByDependency={!!dependency && !dependency.completed}
+                            />
+                        );
+                    })}
                 </div>
             )}
 

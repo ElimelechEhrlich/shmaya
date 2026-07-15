@@ -58,7 +58,7 @@ All authenticated routes are nested under `/admin/*` inside `<Layout>` (Sidebar 
 
 ## Task generation
 
-`src/constants/taskRegistry.js` is declarative data — parent task ids, titles, optional subtask `condition` lambdas, `getDetails` projection functions. Parent gating for service-owned parents (`INSURANCE`, `INCOME_TAX`, `VAT`) is **driven by the Registry**, not by lambdas here. Non-service parents (`ADMIN_SETUP`, `DIRECT_DEBIT`, `FINAL_APPROVAL`) keep their own `condition`.
+`src/constants/taskRegistry.js` is declarative data — parent task ids, titles, optional subtask `condition` lambdas, `getDetails` projection functions. Parent gating for service-owned parents (`INSURANCE`, `TAX_VAT`) is **driven by the Registry**, not by lambdas here. `TAX_VAT` merges the legacy `INCOME_TAX`+`VAT` parents (two `SERVICES` entries share one `parentTaskId`); `shouldEmitServiceParent` aggregates all services sharing a parent id via `.filter()`+`.some()`, not a single-match `.find()`. Non-service parents (`ADMIN_SETUP`, `DIRECT_DEBIT`, `OFFICE_HANDLING`) keep their own `condition`.
 
 `TaskGeneratorService.generateForCustomer(customer)` in `src/services/TaskService.js` consults the Registry's `shouldEmitServiceParent` and `isSubtaskBusinessTypeGated`/`isSubtaskForcedByBusinessType` and emits tasks with stable `parentTaskId`s (NOT Hebrew title strings). Each emitted row carries `priority: 'medium'` by default and `comment: ''` on every subtask. Called by:
 
@@ -145,7 +145,7 @@ CREATE TABLE public.parent_tasks (
   title        text        NOT NULL,
   status       text        DEFAULT 'pending',          -- 'pending' | 'completed'
   restricted_to text,
-  registry_key text,                                   -- stable key: ADMIN_SETUP | INSURANCE | INCOME_TAX | VAT | DIRECT_DEBIT | FINAL_APPROVAL
+  registry_key text,                                   -- stable key: ADMIN_SETUP | INSURANCE | TAX_VAT | DIRECT_DEBIT | OFFICE_HANDLING
   priority     text        NOT NULL DEFAULT 'medium',  -- 'low' | 'medium' | 'high' | 'critical'
   created_at   timestamptz DEFAULT now()
 );
