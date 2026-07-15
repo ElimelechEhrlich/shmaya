@@ -635,8 +635,9 @@ export const PersistenceAdapter = {
     title: string;
     clientId: string | null;
     registryKey?: string | null;
+    restrictedTo?: string | null;
     priority?: string;
-    subTasks: { title: string }[];
+    subTasks: { title: string; restrictedTo?: string | null; dependsOn?: string | null; registryKey?: string | null }[];
     isManual?: boolean;
   }) {
     try {
@@ -646,6 +647,7 @@ export const PersistenceAdapter = {
         customer_id: finalClientId,
         status: 'pending',
         is_manual: taskData.isManual ?? false,
+        restricted_to: taskData.restrictedTo ?? null,
       };
       if (taskData.registryKey) {
         parentInsert.registry_key = taskData.registryKey;
@@ -664,14 +666,20 @@ export const PersistenceAdapter = {
           title: sub.title.trim(),
           is_completed: false,
           comment: '',
-          priority: taskData.priority || 'medium'
+          priority: taskData.priority || 'medium',
+          restricted_to: sub.restrictedTo ?? null,
+          depends_on: sub.dependsOn ?? null,
+          registry_key: sub.registryKey ?? null,
         }))
         : [{
           parent_task_id: parent.id,
           title: taskData.title.trim(),
           is_completed: false,
           comment: '',
-          priority: taskData.priority || 'medium'
+          priority: taskData.priority || 'medium',
+          restricted_to: null,
+          depends_on: null,
+          registry_key: null,
         }];
       const { error: subErr } = await supabase.from('sub_tasks').insert(subtasksRows);
       if (subErr) throw subErr;

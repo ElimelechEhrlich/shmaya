@@ -120,10 +120,14 @@ export const CustomerService = {
                 title: t.title,
                 clientId: customerId,
                 registryKey: t.parentTaskId ?? null,
+                restrictedTo: t.restrictedTo ?? null,
                 subTasks: t.subTasks.map((s: any) => ({
                     title: s.title,
                     priority: (s.priority || 'medium') as SubTaskPriority,
-                    comment: s.comment || ''
+                    comment: s.comment || '',
+                    restrictedTo: s.restrictedTo ?? null,
+                    dependsOn: s.dependsOn ?? null,
+                    registryKey: s.registryKey ?? null,
                 }))
             } as any)));
             return;
@@ -152,10 +156,14 @@ export const CustomerService = {
                 title: t.title,
                 clientId: customerId,
                 registryKey: t.parentTaskId ?? null,
+                restrictedTo: t.restrictedTo ?? null,
                 subTasks: t.subTasks.map((s: any) => ({
                     title: s.title,
                     priority: (s.priority || 'medium') as SubTaskPriority,
-                    comment: s.comment || ''
+                    comment: s.comment || '',
+                    restrictedTo: s.restrictedTo ?? null,
+                    dependsOn: s.dependsOn ?? null,
+                    registryKey: s.registryKey ?? null,
                 }))
             } as any)));
         }
