@@ -8,7 +8,8 @@ import {
     isRepresentationAllowed,
     BUSINESS_TYPE_OPTIONS,
     CLIENT_TYPE_OPTIONS,
-    getCustomerDisplayName
+    getCustomerDisplayName,
+    getChainPosition
 } from '../registries/CustomerRegistry';
 import ProgressBar from './ProgressBar';
 import { CreateTaskModal } from '../comps/CreateTaskModal';
@@ -687,31 +688,55 @@ const CustomerCard: React.FC = () => {
                                                     const isBlockedByDependency = !!dependency && !dependency.completed;
                                                     const isLocked = !!sub.restrictedTo && authService.getCurrentUser() !== sub.restrictedTo;
                                                     const isDisabled = !!editData.isWaiting || isBlockedByDependency || (isLocked && !sub.completed);
+                                                    const chainPosition = getChainPosition(task.subTasks || [], sub);
+                                                    const checkboxTitle = isBlockedByDependency ? 'יש להשלים קודם את תת-המשימה הקודמת' : (isLocked ? `מוגבל ל-${sub.restrictedTo}` : undefined);
+                                                    const handleCheckboxChange = (checked: boolean) => {
+                                                        if (editData.isWaiting) {
+                                                            alert("הלקוח במצב \"בהמתנה\" — לא ניתן לסמן ביצוע משימות עד להעברה לטיפול המשרד.");
+                                                            return;
+                                                        }
+                                                        if (!authService.canEditRestricted(sub.restrictedTo)) {
+                                                            alert(`אין לך הרשאה לשנות את הסטטוס של משימה זו — מוגבלת ל-${sub.restrictedTo} בלבד!`);
+                                                            return;
+                                                        }
+                                                        if (isBlockedByDependency) {
+                                                            alert('יש להשלים קודם את תת-המשימה הקודמת בשרשרת.');
+                                                            return;
+                                                        }
+                                                        actions.setSubtaskCompleted(task.id, sub.id, checked);
+                                                    };
                                                     return (
                                                         <div key={sub.id} className={`flex items-center justify-between p-2 rounded-lg border transition ${sub.completed ? 'bg-green-50/50 border-green-150' : 'bg-slate-50/50 border-slate-150'}`}>
                                                             <label className="flex items-center gap-2 cursor-pointer flex-1 min-w-0">
-                                                                <input
-                                                                    type="checkbox"
-                                                                    checked={!!sub.completed}
-                                                                    disabled={isDisabled}
-                                                                    title={isBlockedByDependency ? 'יש להשלים קודם את תת-המשימה הקודמת' : (isLocked ? `מוגבל ל-${sub.restrictedTo}` : undefined)}
-                                                                    onChange={(e) => {
-                                                                        if (editData.isWaiting) {
-                                                                            alert("הלקוח במצב \"בהמתנה\" — לא ניתן לסמן ביצוע משימות עד להעברה לטיפול המשרד.");
-                                                                            return;
-                                                                        }
-                                                                        if (!authService.canEditRestricted(sub.restrictedTo)) {
-                                                                            alert(`אין לך הרשאה לשנות את הסטטוס של משימה זו — מוגבלת ל-${sub.restrictedTo} בלבד!`);
-                                                                            return;
-                                                                        }
-                                                                        if (isBlockedByDependency) {
-                                                                            alert('יש להשלים קודם את תת-המשימה הקודמת בשרשרת.');
-                                                                            return;
-                                                                        }
-                                                                        actions.setSubtaskCompleted(task.id, sub.id, e.target.checked);
-                                                                    }}
-                                                                    className={`w-4 h-4 rounded text-blue-600 accent-blue-600 flex-shrink-0 ${isDisabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
-                                                                />
+                                                                {chainPosition ? (
+                                                                    <span className="relative flex items-center shrink-0" title={checkboxTitle}>
+                                                                        <input
+                                                                            type="checkbox"
+                                                                            checked={!!sub.completed}
+                                                                            disabled={isDisabled}
+                                                                            onChange={(e) => handleCheckboxChange(e.target.checked)}
+                                                                            className="peer sr-only"
+                                                                        />
+                                                                        <span className={`relative w-4 h-4 rounded-full border-2 border-slate-300
+                                                                                         peer-checked:border-blue-500 peer-checked:bg-blue-500
+                                                                                         transition-all duration-200 flex items-center justify-center
+                                                                                         shrink-0 select-none ${isDisabled ? 'opacity-50' : 'hover:border-slate-400'}`}>
+                                                                            {chainPosition.hasPrev && <span className="absolute -top-2.5 right-1/2 translate-x-1/2 w-px h-2.5 bg-slate-300" />}
+                                                                            {chainPosition.hasNext && <span className="absolute -bottom-2.5 right-1/2 translate-x-1/2 w-px h-2.5 bg-slate-300" />}
+                                                                            <span className="peer-checked:hidden text-[8px] font-black text-slate-400">{chainPosition.position}</span>
+                                                                            <span className="hidden peer-checked:inline text-white text-[9px] font-black">✓</span>
+                                                                        </span>
+                                                                    </span>
+                                                                ) : (
+                                                                    <input
+                                                                        type="checkbox"
+                                                                        checked={!!sub.completed}
+                                                                        disabled={isDisabled}
+                                                                        title={checkboxTitle}
+                                                                        onChange={(e) => handleCheckboxChange(e.target.checked)}
+                                                                        className={`w-4 h-4 rounded text-blue-600 accent-blue-600 flex-shrink-0 ${isDisabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
+                                                                    />
+                                                                )}
                                                                 <span className={`text-xs font-medium truncate ${sub.completed ? 'line-through text-slate-400' : 'text-slate-700'}`}>
                                                                     {sub.title}
                                                                 </span>

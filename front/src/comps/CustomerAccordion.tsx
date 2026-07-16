@@ -3,6 +3,7 @@ import React from 'react';
 import { useNavigate } from 'react-router';
 import { OFFICE_CUSTOMER_ID } from '../services/PersistenceAdapter';
 import SubtaskRow, { type SubtaskViewRow } from './SubtaskRow';
+import { getChainPosition } from '../registries/CustomerRegistry';
 
 interface CustomerAccordionProps {
     clientId: string;
@@ -101,8 +102,9 @@ const CustomerAccordion: React.FC<CustomerAccordionProps> = React.memo(({
     </div>
 )}
                     {rows.map(row => {
+                        const siblings = allRows.filter(r => r.taskId === row.taskId);
                         const dependency = row.dependsOn
-                            ? allRows.find(r => r.taskId === row.taskId && r.registryKey === row.dependsOn)
+                            ? siblings.find(r => r.registryKey === row.dependsOn)
                             : undefined;
                         return (
                             <SubtaskRow
@@ -114,6 +116,7 @@ const CustomerAccordion: React.FC<CustomerAccordionProps> = React.memo(({
                                 onPriorityChange={onPriorityChange}
                                 onDelete={onDelete}
                                 isBlockedByDependency={!!dependency && !dependency.completed}
+                                chainPosition={getChainPosition(siblings, row)}
                             />
                         );
                     })}
