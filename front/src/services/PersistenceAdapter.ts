@@ -15,7 +15,7 @@
 import { supabase } from '../supabaseClient.js';
 import type { Customer } from '../registries/CustomerRegistry';
 import { authService } from './authService.js';
-import { AUTO_TASKS_CONFIG } from '../constants/taskRegistry';
+import { AUTO_TASKS_CONFIG, getSubtaskRegistryOrder } from '../constants/taskRegistry';
 
 // ──────────────────────────────────────────────────────────────────
 // Persisted shapes
@@ -176,16 +176,9 @@ function dbRowToCustomer(row: any): Customer {
 }
 
 function mapTaskRow(t: any): PersistedTask {
-  return {
-    id: t.id,
-    clientId: t.customer_id,
-    parentTaskId: t.registry_key ?? t.parent_task_id ?? null,
-    title: t.title,
-    status: t.status,
-    createdAt: t.created_at,
-    isManual: !!t.is_manual,
-    // ✨ תיקון: שליפת ה-priority ישירות מתוך שורת תת המשימה הספציפית ב-DB
-    subTasks: (t.sub_tasks ?? []).map((s: any) => ({
+  const parentTaskId = t.registry_key ?? t.parent_task_id ?? null;
+  // ✨ תיקון: שליפת ה-priority ישירות מתוך שורת תת המשימה הספציפית ב-DB
+  const subTasks = (t.sub_tasks ?? []).map((s: any) => ({
       id: s.id,
       parentTaskId: t.id,
       title: s.title,
@@ -197,7 +190,21 @@ function mapTaskRow(t: any): PersistedTask {
       registryKey: s.registry_key ?? null,
       createdAt: s.created_at,
       updatedAt: s.updated_at,
-    })),
+    }));
+  // DB read order is not guaranteed to match the registry's intended order
+  // (no ORDER BY, random UUID PKs) — sort explicitly so dependsOn chains
+  // (rep_1..4 etc.) always render in the right sequence.
+  subTasks.sort((a: any, b: any) =>
+    getSubtaskRegistryOrder(parentTaskId, a.registryKey) - getSubtaskRegistryOrder(parentTaskId, b.registryKey));
+  return {
+    id: t.id,
+    clientId: t.customer_id,
+    parentTaskId,
+    title: t.title,
+    status: t.status,
+    createdAt: t.created_at,
+    isManual: !!t.is_manual,
+    subTasks,
   };
 }
 
@@ -738,8 +745,18 @@ export const PersistenceAdapter = {
   },
 
   async updateTaskStatus(taskId: string, status: 'pending' | 'completed'): Promise<DbResult<null>> {
-    // ✨ חסימת אב המשימה במידה והוא מכיל תת-משימה מוגבלת שהמשתמש הנוכחי אינו מורשה לה
+    // ✨ חסימת אב המשימה במידה והלקוח "בהמתנה", או שהוא מכיל תת-משימה מוגבלת שהמשתמש הנוכחי אינו מורשה לה
     if (status === 'completed') {
+      const { data: parentRow } = await supabase
+        .from('parent_tasks')
+        .select('customers(is_waiting)')
+        .eq('id', taskId)
+        .single();
+
+      if ((parentRow as any)?.customers?.is_waiting) {
+        return { data: null, error: { message: 'הלקוח במצב "בהמתנה" — לא ניתן לסמן ביצוע משימות עד להעברה לטיפול המשרד.' } };
+      }
+
       const { data: subTasks } = await supabase
         .from('sub_tasks')
         .select('restricted_to')
@@ -760,6 +777,16 @@ export const PersistenceAdapter = {
   async updateSubtasksStatusByParent(customerId: string, parentTaskId: string, completed: boolean): Promise<DbResult<null>> {
 
     if (completed) {
+      const { data: customerRow } = await supabase
+        .from('customers')
+        .select('is_waiting')
+        .eq('id', customerId)
+        .single();
+
+      if (customerRow?.is_waiting) {
+        return { data: null, error: { message: 'הלקוח במצב "בהמתנה" — לא ניתן לסמן ביצוע משימות עד להעברה לטיפול המשרד.' } };
+      }
+
       // 1. נבדוק קודם כל האם בין כל תתי-המשימות של האב הזה יש תת-משימה מוגבלת
       const { data: subTasks } = await supabase
         .from('sub_tasks')
@@ -852,9 +879,13 @@ export const PersistenceAdapter = {
     if (completed) {
       const { data: subtask } = await supabase
         .from('sub_tasks')
-        .select('restricted_to')
+        .select('restricted_to, parent_tasks(customers(is_waiting))')
         .eq('id', subtaskId)
         .single(); // חוזר ל-single בטוח כי המזהה חובה
+
+      if ((subtask as any)?.parent_tasks?.customers?.is_waiting) {
+        return { data: null, error: { message: 'הלקוח במצב "בהמתנה" — לא ניתן לסמן ביצוע משימות עד להעברה לטיפול המשרד.' } };
+      }
 
       if (subtask?.restricted_to && !authService.canEditRestricted(subtask.restricted_to)) {
         return { data: null, error: { message: `אין לך הרשאה לשנות את הסטטוס של משימה זו — מוגבלת ל-${subtask.restricted_to} בלבד!` } };
@@ -877,6 +908,16 @@ export const PersistenceAdapter = {
     subtaskId: string,
     title: string
   ): Promise<DbResult<null>> {
+    const { data: subtask } = await supabase
+      .from('sub_tasks')
+      .select('restricted_to')
+      .eq('id', subtaskId)
+      .single();
+
+    if (subtask?.restricted_to && !authService.canEditRestricted(subtask.restricted_to)) {
+      return { data: null, error: { message: `אין לך הרשאה לערוך משימה זו — מוגבלת ל-${subtask.restricted_to} בלבד!` } };
+    }
+
     const { error } = await supabase
       .from('sub_tasks')
       .update({ title: title.trim(), updated_at: new Date().toISOString() })
@@ -913,6 +954,29 @@ export const PersistenceAdapter = {
   },
 
   async updateTask(taskId: string, patch: Partial<PersistedTask>): Promise<DbResult<null>> {
+    if (patch.status === 'completed') {
+      const { data: parentRow } = await supabase
+        .from('parent_tasks')
+        .select('customers(is_waiting)')
+        .eq('id', taskId)
+        .single();
+
+      if ((parentRow as any)?.customers?.is_waiting) {
+        return { data: null, error: { message: 'הלקוח במצב "בהמתנה" — לא ניתן לסמן ביצוע משימות עד להעברה לטיפול המשרד.' } };
+      }
+
+      const { data: subTasks } = await supabase
+        .from('sub_tasks')
+        .select('restricted_to')
+        .eq('parent_task_id', taskId);
+
+      const restrictedSub = subTasks?.find(sub => sub.restricted_to);
+
+      if (restrictedSub && !authService.canEditRestricted(restrictedSub.restricted_to)) {
+        return { data: null, error: { message: `לא ניתן לסמן משימה זו כבוצע — היא מכילה תת-משימה המוגבלת ל-${restrictedSub.restricted_to} בלבד!` } };
+      }
+    }
+
     const row: Record<string, any> = {};
     if (patch.title) row.title = patch.title;
     if (patch.status) row.status = patch.status;

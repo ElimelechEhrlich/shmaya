@@ -5,7 +5,7 @@ import { authService } from '../services/authService';
 import { CreateTaskModal } from '../comps/CreateTaskModal';
 import CustomerAccordion from '../comps/CustomerAccordion';
 import { type SubtaskViewRow } from '../comps/SubtaskRow';
-import { AUTO_TASKS_CONFIG, resolveTitle } from '../constants/taskRegistry';
+import { AUTO_TASKS_CONFIG, resolveTitle, getSubtaskRegistryOrder } from '../constants/taskRegistry';
 import { translateError } from '../utils/translateError';
 import { useModal } from '../contexts/ModalContext';
 
@@ -148,7 +148,12 @@ export default function Tasks(): React.ReactElement {
         const order = ['ADMIN_SETUP', 'INSURANCE', 'TAX_VAT', 'DIRECT_DEBIT', 'OFFICE_HANDLING'];
         const ai = order.indexOf(a.parentTaskId ?? '');
         const bi = order.indexOf(b.parentTaskId ?? '');
-        return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+        const categoryDiff = (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+        if (categoryDiff !== 0) return categoryDiff;
+        // same category — same taskId (parent row) always sorts together already;
+        // within it, order by the subtask's registry-defined position.
+        if (a.taskId !== b.taskId) return 0;
+        return getSubtaskRegistryOrder(a.parentTaskId, a.registryKey) - getSubtaskRegistryOrder(b.parentTaskId, b.registryKey);
     })
 }));
     }, [filtered]);

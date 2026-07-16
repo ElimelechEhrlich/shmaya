@@ -630,6 +630,69 @@ export function cascadeOnSubtaskSet(
 }
 
 // ──────────────────────────────────────────────────────────────────
+// 11b. dependsOn chain position — for the "stepper" UI treatment
+// ──────────────────────────────────────────────────────────────────
+
+export interface ChainPosition {
+  position: number; // 1-based
+  total: number;
+  hasPrev: boolean;
+  hasNext: boolean;
+}
+
+/** Where `sub` sits within its dependsOn chain (e.g. rep_1→rep_2→rep_3→rep_4),
+ *  found by walking the linked list formed by registryKey/dependsOn among
+ *  `allSubTasks` (siblings under the same parent). Returns null when `sub`
+ *  isn't part of any multi-step chain (no registryKey, or chain length 1) —
+ *  callers should render a plain checkbox in that case. */
+export function getChainPosition(
+  allSubTasks: { registryKey?: string | null; dependsOn?: string | null }[],
+  sub: { registryKey?: string | null; dependsOn?: string | null }
+): ChainPosition | null {
+  if (!sub.registryKey) return null;
+  const byKey = new Map(
+    allSubTasks.filter((s) => s.registryKey).map((s) => [s.registryKey as string, s])
+  );
+  const childOf = new Map<string, string>();
+  for (const s of allSubTasks) {
+    if (s.dependsOn && s.registryKey) childOf.set(s.dependsOn, s.registryKey);
+  }
+
+  // walk backwards to find the chain's head
+  let head = sub.registryKey;
+  const seenBack = new Set<string>();
+  for (;;) {
+    const cur = byKey.get(head);
+    const prev = cur?.dependsOn;
+    if (!prev || !byKey.has(prev) || seenBack.has(prev)) break;
+    seenBack.add(prev);
+    head = prev;
+  }
+
+  // walk forward from the head, building the full chain
+  const chain: string[] = [head];
+  const seenFwd = new Set([head]);
+  let cursor = head;
+  while (childOf.has(cursor)) {
+    const next = childOf.get(cursor) as string;
+    if (seenFwd.has(next)) break;
+    chain.push(next);
+    seenFwd.add(next);
+    cursor = next;
+  }
+
+  if (chain.length <= 1) return null;
+  const position = chain.indexOf(sub.registryKey);
+  if (position === -1) return null;
+  return {
+    position: position + 1,
+    total: chain.length,
+    hasPrev: position > 0,
+    hasNext: position < chain.length - 1,
+  };
+}
+
+// ──────────────────────────────────────────────────────────────────
 // 12. Idempotent task-generation merge
 // ──────────────────────────────────────────────────────────────────
 //

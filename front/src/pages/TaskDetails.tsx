@@ -10,6 +10,7 @@ import {
 import {
     calculateWeightedProgress,
     cascadeOnSubtaskSet,
+    getChainPosition,
 } from '../registries/CustomerRegistry';
 import PriorityBadge from '../comps/PriorityBadge';
 import { authService } from '../services/authService';
@@ -249,6 +250,8 @@ export default function TaskDetails(): React.ReactElement {
                                 const isBlockedByDependency = !!dependency && !dependency.completed;
                                 const isLocked = !!sub.restrictedTo && authService.getCurrentUser() !== sub.restrictedTo;
                                 const isDisabled = !!task.customerIsWaiting || isBlockedByDependency || (isLocked && !sub.completed);
+                                const chainPosition = getChainPosition(task.subTasks as PersistedSubTask[], sub);
+                                const checkboxTitle = isBlockedByDependency ? 'יש להשלים קודם את תת-המשימה הקודמת' : (isLocked ? `מוגבל ל-${sub.restrictedTo}` : undefined);
                                 return (
                                     <div
                                         key={sub.id}
@@ -256,14 +259,35 @@ export default function TaskDetails(): React.ReactElement {
                                     >
                                         {/* Checkbox + title */}
                                         <div className="flex items-center gap-3 flex-1 min-w-0">
-                                            <input
-                                                type="checkbox"
-                                                checked={sub.completed}
-                                                disabled={isDisabled}
-                                                title={isBlockedByDependency ? 'יש להשלים קודם את תת-המשימה הקודמת' : (isLocked ? `מוגבל ל-${sub.restrictedTo}` : undefined)}
-                                                onChange={() => handleToggleSubtask(sub.id, sub.completed)}
-                                                className={`w-5 h-5 accent-blue-600 shrink-0 ${isDisabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
-                                            />
+                                            {chainPosition ? (
+                                                <label className={`relative flex items-center shrink-0 ${isDisabled ? 'cursor-not-allowed' : 'cursor-pointer'}`} title={checkboxTitle}>
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={sub.completed}
+                                                        disabled={isDisabled}
+                                                        onChange={() => handleToggleSubtask(sub.id, sub.completed)}
+                                                        className="peer sr-only"
+                                                    />
+                                                    <span className={`relative w-5 h-5 rounded-full border-2 border-slate-300
+                                                                     peer-checked:border-blue-500 peer-checked:bg-blue-500
+                                                                     transition-all duration-200 flex items-center justify-center
+                                                                     shrink-0 select-none ${isDisabled ? 'opacity-50' : 'hover:border-slate-400'}`}>
+                                                        {chainPosition.hasPrev && <span className="absolute -top-3 right-1/2 translate-x-1/2 w-px h-3 bg-slate-300" />}
+                                                        {chainPosition.hasNext && <span className="absolute -bottom-3 right-1/2 translate-x-1/2 w-px h-3 bg-slate-300" />}
+                                                        <span className="peer-checked:hidden text-[10px] font-black text-slate-400">{chainPosition.position}</span>
+                                                        <span className="hidden peer-checked:inline text-white text-[11px] font-black">✓</span>
+                                                    </span>
+                                                </label>
+                                            ) : (
+                                                <input
+                                                    type="checkbox"
+                                                    checked={sub.completed}
+                                                    disabled={isDisabled}
+                                                    title={checkboxTitle}
+                                                    onChange={() => handleToggleSubtask(sub.id, sub.completed)}
+                                                    className={`w-5 h-5 accent-blue-600 shrink-0 ${isDisabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
+                                                />
+                                            )}
                                             <span className={`text-sm font-medium truncate ${sub.completed ? 'line-through text-slate-400' : 'text-slate-800'}`}>
                                                 {sub.title}
                                             </span>

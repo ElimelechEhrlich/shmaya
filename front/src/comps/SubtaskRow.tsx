@@ -32,6 +32,9 @@ interface SubtaskRowProps {
     onPriorityChange: (row: SubtaskViewRow, priority: string) => void;
     onDelete?: (row: SubtaskViewRow) => void;
     isBlockedByDependency?: boolean;
+    /** Position within a dependsOn chain (e.g. rep_1→rep_2→rep_3→rep_4) — renders
+     *  a small step number + connector line instead of a plain checkbox. */
+    chainPosition?: { position: number; total: number; hasPrev: boolean; hasNext: boolean } | null;
 }
 
 const SubtaskRow: React.FC<SubtaskRowProps> = React.memo(({
@@ -42,6 +45,7 @@ const SubtaskRow: React.FC<SubtaskRowProps> = React.memo(({
     onPriorityChange,
     onDelete,
     isBlockedByDependency,
+    chainPosition,
 }) => {
     const [editing, setEditing] = useState(false);
     const [draft, setDraft] = useState(row.subtaskTitle);
@@ -81,12 +85,20 @@ const SubtaskRow: React.FC<SubtaskRowProps> = React.memo(({
                     onChange={(e) => onToggle(row, e.target.checked)}
                     className="peer sr-only"
                 />
-                <span className={`w-5 h-5 rounded-full border-2 border-slate-300
+                <span className={`relative w-5 h-5 rounded-full border-2 border-slate-300
                                  peer-checked:border-blue-500 peer-checked:bg-blue-500
                                  transition-all duration-200 flex items-center justify-center
-                                 text-transparent peer-checked:text-white text-[11px] font-black
                                  shrink-0 select-none ${isDisabled ? 'opacity-50' : 'hover:border-slate-400'}`}>
-                    ✓
+                    {chainPosition?.hasPrev && (
+                        <span className="absolute -top-3 right-1/2 translate-x-1/2 w-px h-3 bg-slate-300" />
+                    )}
+                    {chainPosition?.hasNext && (
+                        <span className="absolute -bottom-3 right-1/2 translate-x-1/2 w-px h-3 bg-slate-300" />
+                    )}
+                    <span className="peer-checked:hidden text-[10px] font-black text-slate-400">
+                        {chainPosition ? chainPosition.position : ''}
+                    </span>
+                    <span className="hidden peer-checked:inline text-white text-[11px] font-black">✓</span>
                 </span>
             </label>
 

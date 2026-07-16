@@ -315,6 +315,22 @@ export const AUTO_TASKS_CONFIG: RegistryParentTask[] = [
 
 export { resolveTitle };
 
+/** Position of a subtask within its parent category's registry-defined order.
+ *  Used to sort persisted subtasks back into the intended display order —
+ *  the DB itself carries no ordering guarantee (no ORDER BY on read, random
+ *  UUID primary keys). Unknown/legacy subtasks (no registryKey match, e.g.
+ *  rows not yet migrated) sort last, after every known subtask. */
+export function getSubtaskRegistryOrder(
+    parentId: string | null | undefined,
+    subtaskRegistryKey: string | null | undefined
+): number {
+    if (!parentId || !subtaskRegistryKey) return 9999;
+    const parent = AUTO_TASKS_CONFIG.find((p) => p.id === parentId);
+    if (!parent) return 9999;
+    const idx = parent.subTasks.findIndex((s) => s.id === subtaskRegistryKey);
+    return idx === -1 ? 9999 : idx;
+}
+
 // bg classes for the 3-4px accent strip (absolute-positioned, right side in RTL)
 export const CATEGORY_ACCENT_COLORS: Record<string, string> = {
     ADMIN_SETUP: 'bg-slate-400',
