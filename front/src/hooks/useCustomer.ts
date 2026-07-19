@@ -158,6 +158,7 @@ export function useCustomer(customerId: string | undefined): UseCustomerResult {
             }
 
             const { tasks: _, ...cleanFormData } = updatedData as any;
+            const prevSetupFeePaid = customer?.paymentDetails?.setupFeePaid;
             const prevInsurance = customer?.isInsuranceActive;
 const prevIncomeTax = customer?.isIncomeTaxActive;
 const prevVat = customer?.isVatActive;
@@ -178,6 +179,25 @@ if (prevVat !== editData.isVatActive)
         'customer', customerId, customerName);
                 setIsEditing(false);
                 await reload();
+                // ✨ תלות דו-כיוונית: תשלום עבור פתיחת תיק ↔ שדה setupFeePaid
+                if (prevSetupFeePaid !== editData.paymentDetails?.setupFeePaid) {
+                    const wantCompleted = !!editData.paymentDetails?.setupFeePaid;
+                    const { data: freshCustomer } = await PersistenceAdapter.fetchCustomerWithTasks(customerId);
+                    const adminTask = freshCustomer?.tasks?.find(t => t.parentTaskId === 'ADMIN_SETUP');
+                    const feeSub = adminTask?.subTasks?.find(s => s.registryKey === 'setup_fee_payment');
+                    if (adminTask && feeSub && !!feeSub.completed !== wantCompleted) {
+                        const cascaded = cascadeOnSubtaskSet(
+                            { status: adminTask.status, subTasks: adminTask.subTasks as any },
+                            feeSub.id,
+                            wantCompleted
+                        );
+                        await PersistenceAdapter.updateSubtaskStatus(adminTask.id, feeSub.id, wantCompleted);
+                        if (cascaded.status !== adminTask.status) {
+                            await PersistenceAdapter.updateTaskStatus(adminTask.id, cascaded.status as 'pending' | 'completed');
+                        }
+                        await reload();
+                    }
+                }
                 const wasLtd = customer?.businessDetails?.businessType === 'חברה בע"מ';
 const isNowLtd = editData?.businessDetails?.businessType === 'חברה בע"מ';
 
@@ -289,6 +309,19 @@ if (!wasLtd && isNowLtd && editData) {
                     alert(`שגיאה בעדכון סטטוס המשימה: ${statusErr.message}`);
                     await reload();
                     return;
+                }
+            }
+            // ✨ תלות דו-כיוונית: תשלום עבור פתיחת תיק ↔ שדה setupFeePaid
+            if (customerId && targetSub?.registryKey === 'setup_fee_payment') {
+                const nextPaymentDetails = { ...(customer?.paymentDetails ?? {}), setupFeePaid: completed };
+                const { error: fieldErr } = await PersistenceAdapter.updateCustomer(customerId, {
+                    paymentDetails: nextPaymentDetails as any,
+                });
+                if (fieldErr) {
+                    console.error('[useCustomer.setSubtaskCompleted] setupFeePaid sync failed:', fieldErr.message);
+                } else {
+                    setCustomer((s) => s ? { ...s, paymentDetails: nextPaymentDetails as any } : s);
+                    setEditData((s) => s ? { ...s, paymentDetails: nextPaymentDetails as any } : s);
                 }
             }
 
