@@ -30,7 +30,9 @@ const FilterableSelect: React.FC<FilterableSelectProps> = ({ options, value, onC
                 <span className={value ? 'text-slate-800' : 'text-slate-400'}>
                     {value || placeholder}
                 </span>
-                <span className="text-slate-400 text-xs mr-2">▾</span>
+                <svg viewBox="0 0 20 20" fill="#94a3b8" style={{ width: '0.85rem', height: '0.85rem' }} className="mr-2 shrink-0">
+                    <path d="M5 7l5 6 5-6H5z" />
+                </svg>
             </button>
 
             {open && (

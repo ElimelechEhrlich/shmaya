@@ -25,7 +25,7 @@ import WhatsAppIcon from '../comps/WhatsAppIcon';
 interface CustomerFormData {
     customerDetails: { fullName: string; identityId: string; phoneNumber: string; address: string; email: string; parentIdNumber: string; hasWhatsapp: boolean; spouseBirthYear: string };
     businessDetails: {
-        businessName: string; businessID: string; businessType: string; clientType: string; openingDate: string; occupation: string; businessDescription: string; employsWorkers: string; deductionsId: string; caseStartYear: string;
+        businessName: string; businessID: string; businessType: string; clientType: string; openingDate: string; occupation: string; businessDescription: string; employsWorkers: string; deductionsId: string; caseStartYear: string; deductionsFileStatus: string;
     };
     insuranceDetails: { insurancePrepayment: string; workHours: string; newInsuranceCase: boolean; insuranceId: string; insuranceStatus: string };
     incomeTaxDetails: { repType: string; incomeTaxPrepayment: string; annualTurnover: string; newItCase: boolean; needsIncomeTaxDirectDebit: boolean; spouseFileExists: boolean; spouseRepresentationTransferNeeded: boolean };
@@ -34,7 +34,6 @@ interface CustomerFormData {
     isInsuranceActive: boolean;
     isIncomeTaxActive: boolean;
     isVatActive: boolean;
-    needsDeductionsFile: boolean;
     comments: string;
     isActive: boolean;
 }
@@ -86,7 +85,7 @@ export default function AddCustomer(): React.ReactElement {
             spouseBirthYear: '',
         },
         businessDetails: {
-            businessName: '', businessID: '', businessType: prefill.businessType || '', clientType: prefill.clientType || '', openingDate: '', occupation: '', businessDescription: '', employsWorkers: prefill.employsWorkers || 'no', deductionsId: '', caseStartYear: ''
+            businessName: '', businessID: '', businessType: prefill.businessType || '', clientType: prefill.clientType || '', openingDate: '', occupation: '', businessDescription: '', employsWorkers: prefill.employsWorkers || 'no', deductionsId: '', caseStartYear: '', deductionsFileStatus: prefill.deductionsFileStatus || ''
         },
         insuranceDetails: { insurancePrepayment: '', workHours: '', newInsuranceCase: getNewCaseDefault(prefill.clientType), insuranceId: '', insuranceStatus: '' },
         incomeTaxDetails: {
@@ -95,7 +94,7 @@ export default function AddCustomer(): React.ReactElement {
         },
         vatDetails: { newVatCase: getNewCaseDefault(prefill.clientType) },
         paymentDetails: { setupFee: '', monthlyFee: '', directDebit: false, setupFeePaid: false },
-        isInsuranceActive: prefill.isInsuranceActive ?? false, isIncomeTaxActive: prefill.isIncomeTaxActive ?? false, isVatActive: prefill.isVatActive ?? false, needsDeductionsFile: false, comments: '', isActive: true
+        isInsuranceActive: prefill.isInsuranceActive ?? false, isIncomeTaxActive: prefill.isIncomeTaxActive ?? false, isVatActive: prefill.isVatActive ?? false, comments: '', isActive: true
     });
 
     const [previewTasks, setPreviewTasks] = useState<any[]>([]);
@@ -141,9 +140,16 @@ export default function AddCustomer(): React.ReactElement {
                     }
                 };
 
-                // חוק עסק קל ומבוקר בשכבת הקומפוננטה: אם שונה סטטוס העסקת עובדים
+                // חוק עסק קל ומבוקר בשכבת הקומפוננטה: אם שונה סטטוס העסקת עובדים.
+                // בשונה מהישן (needsDeductionsFile) — לא דורס בחירה קיימת, רק ממלא ברירת
+                // מחדל כשעדיין ריק (תואם applyBusinessRules ב-handleSubmit).
                 if (category === 'businessDetails' && name === 'employsWorkers') {
-                    updated.needsDeductionsFile = finalValue === 'yes';
+                    const bd = updated.businessDetails as CustomerFormData['businessDetails'];
+                    if (finalValue === 'yes') {
+                        if (!bd.deductionsFileStatus) bd.deductionsFileStatus = 'נדרש לפתוח תיק ניכויים';
+                    } else {
+                        bd.deductionsFileStatus = '';
+                    }
                 }
 
                 return updated;
@@ -493,16 +499,17 @@ export default function AddCustomer(): React.ReactElement {
                                         </select>
                                     </FormField>
                                     {formData.businessDetails.employsWorkers === 'yes' && (
-                                        <div className="flex items-center gap-3 self-end pb-2">
-                                            <label className="text-sm font-semibold cursor-pointer">תיק ניכויים נדרש?</label>
-                                            <input
-                                                type="checkbox"
-                                                className="w-5 h-5 cursor-pointer accent-blue-600"
-                                                checked={formData.needsDeductionsFile}
-                                                name="needsDeductionsFile"
-                                                onChange={(e) => handleChange('root', e)}
-                                            />
-                                        </div>
+                                        <FormField label="סטטוס תיק ניכויים">
+                                            <select
+                                                name="deductionsFileStatus"
+                                                className="input-style"
+                                                value={formData.businessDetails.deductionsFileStatus}
+                                                onChange={(e) => handleChange('businessDetails', e)}
+                                            >
+                                                <option value="נדרש לפתוח תיק ניכויים">נדרש לפתוח תיק ניכויים</option>
+                                                <option value="תיק ניכויים כבר קיים">תיק ניכויים כבר קיים</option>
+                                            </select>
+                                        </FormField>
                                     )}
                                 </div>
                             )}
@@ -550,21 +557,19 @@ export default function AddCustomer(): React.ReactElement {
                     </div>
 
                     {/* Right: sticky task preview (1/3 width on desktop) */}
-                    <div className="lg:col-span-1">
-                        <div className="lg:sticky lg:top-6 bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
-                            <div className="flex items-center justify-between mb-4 border-b border-slate-100 pb-3">
-                                <h3 className="text-blue-700 font-black text-[11px] uppercase tracking-[0.2em]">תצוגת משימות</h3>
-                                <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full text-xs font-bold border border-blue-100">{previewTasks.length}</span>
-                            </div>
-                            <div className="space-y-3 max-h-[70vh] overflow-y-auto pl-1">
-                                {previewTasks.length > 0 ? (
-                                    previewTasks.map((task: any) => <TaskCard key={task.id} task={task} currentUser="מוישי" onSubTaskToggle={() => { }} />)
-                                ) : (
-                                    <div className="p-6 border-2 border-dashed border-slate-200 rounded-xl text-center text-slate-400 text-sm">
-                                        הזן נתונים כדי לראות את המשימות שייווצרו
-                                    </div>
-                                )}
-                            </div>
+                    <div className="lg:col-span-1 lg:sticky lg:top-6 bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+                        <div className="flex items-center justify-between mb-4 border-b border-slate-100 pb-3">
+                            <h3 className="text-blue-700 font-black text-[11px] uppercase tracking-[0.2em]">תצוגת משימות</h3>
+                            <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full text-xs font-bold border border-blue-100">{previewTasks.length}</span>
+                        </div>
+                        <div className="space-y-3 lg:max-h-[calc(100vh-13.5rem)] lg:overflow-y-auto pl-1">
+                            {previewTasks.length > 0 ? (
+                                previewTasks.map((task: any) => <TaskCard key={task.id} task={task} currentUser="מוישי" onSubTaskToggle={() => { }} />)
+                            ) : (
+                                <div className="p-6 border-2 border-dashed border-slate-200 rounded-xl text-center text-slate-400 text-sm">
+                                    הזן נתונים כדי לראות את המשימות שייווצרו
+                                </div>
+                            )}
                         </div>
                     </div>
                 </form>

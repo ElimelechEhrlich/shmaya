@@ -12,6 +12,7 @@ import {
     cascadeOnSubtaskSet,
     getChainPosition,
 } from '../registries/CustomerRegistry';
+import { getChainFamilyColor } from '../constants/taskRegistry';
 import PriorityBadge from '../comps/PriorityBadge';
 import { authService } from '../services/authService';
 import ProgressBar from '../comps/ProgressBar';
@@ -251,6 +252,7 @@ export default function TaskDetails(): React.ReactElement {
                                 const isLocked = !!sub.restrictedTo && authService.getCurrentUser() !== sub.restrictedTo;
                                 const isDisabled = !!task.customerIsWaiting || isBlockedByDependency || (isLocked && !sub.completed);
                                 const chainPosition = getChainPosition(task.subTasks as PersistedSubTask[], sub);
+                                const familyColor = chainPosition ? getChainFamilyColor(sub.registryKey) : null;
                                 const checkboxTitle = isBlockedByDependency ? 'יש להשלים קודם את תת-המשימה הקודמת' : (isLocked ? `מוגבל ל-${sub.restrictedTo}` : undefined);
                                 return (
                                     <div
@@ -274,6 +276,7 @@ export default function TaskDetails(): React.ReactElement {
                                                                      shrink-0 select-none ${isDisabled ? 'opacity-50' : 'hover:border-slate-400'}`}>
                                                         {chainPosition.hasPrev && <span className="absolute -top-3 right-1/2 translate-x-1/2 w-px h-3 bg-slate-300" />}
                                                         {chainPosition.hasNext && <span className="absolute -bottom-3 right-1/2 translate-x-1/2 w-px h-3 bg-slate-300" />}
+                                                        {familyColor && <span className={`absolute -bottom-0.5 -left-0.5 w-1.5 h-1.5 rounded-full border border-white ${familyColor}`} />}
                                                         <span className="peer-checked:hidden text-[10px] font-black text-slate-400">{chainPosition.position}</span>
                                                         <span className="hidden peer-checked:inline text-white text-[11px] font-black">✓</span>
                                                     </span>

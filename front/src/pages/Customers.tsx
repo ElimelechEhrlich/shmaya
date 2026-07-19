@@ -8,7 +8,7 @@ export default function Customers(): React.ReactElement {
 
     return (
         <div className="space-y-6">
-            <div className="flex justify-center items-center px-6 rounded-xl ">
+            <div className="flex justify-center items-center px-6 pt-6 rounded-xl ">
                 {/* כפתור הוספה בולט */}
                 <button
                     onClick={() => setShowPrecheck(true)}

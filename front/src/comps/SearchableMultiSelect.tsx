@@ -41,7 +41,9 @@ const SearchableMultiSelect: React.FC<SearchableMultiSelectProps> = React.memo(
                 >
                     <span className="text-xs text-slate-400 font-bold">{label}: </span>
                     <span className="text-sm font-medium truncate mx-1">{summary}</span>
-                    <span className="text-slate-400 text-xs">▾</span>
+                    <svg viewBox="0 0 20 20" fill="#94a3b8" style={{ width: '0.85rem', height: '0.85rem' }} className="shrink-0">
+                        <path d="M5 7l5 6 5-6H5z" />
+                    </svg>
                 </button>
 
                 {open && (

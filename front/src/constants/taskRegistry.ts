@@ -10,7 +10,6 @@ export interface RegistryCustomer {
     isIncomeTaxActive?: boolean;
     isVatActive?: boolean;
     isInsuranceActive?: boolean;
-    needsDeductionsFile?: boolean;
     customerDetails?: {
         fullName?: string;
         phoneNumber?: string;
@@ -22,6 +21,7 @@ export interface RegistryCustomer {
         businessType?: string;
         deductionsId?: string;
         caseStartYear?: string | number;
+        deductionsFileStatus?: string;
         [key: string]: any;
     };
     paymentDetails?: {
@@ -176,14 +176,6 @@ export const AUTO_TASKS_CONFIG: RegistryParentTask[] = [
                     'סטטוס': c.insuranceDetails?.insuranceStatus || 'לא ידוע'
                 }),
             },
-            {
-                id: 'deductions',
-                title: 'ביטוח לאומי ייצוג תיק ניכויים',
-                condition: (c: RegistryCustomer): boolean => !!c.needsDeductionsFile,
-                getDetails: (c: RegistryCustomer): Record<string, any> => ({
-                    'מספר תיק ניכויים': c.businessDetails?.deductionsId || 'טרם הוזן'
-                }),
-            },
         ],
     },
     {
@@ -249,17 +241,95 @@ export const AUTO_TASKS_CONFIG: RegistryParentTask[] = [
                 condition: (c: RegistryCustomer): boolean => !!c.isVatActive && !!c.vatDetails?.newVatCase,
             },
             {
-                id: 'it_deductions',
-                title: 'מס הכנסה ייצוג ניכויים',
+                id: 'taxCoordination',
+                title: 'תיאום מס',
+            },
+        ],
+    },
+    {
+        id: 'DEDUCTIONS_FILE',
+        title: 'תיק ניכויים',
+        condition: (c: RegistryCustomer): boolean => !!c.businessDetails?.deductionsFileStatus,
+        subTasks: [
+            {
+                id: 'it_ded_rep_1',
+                title: 'מס הכנסה רישום ייצוג תיק ניכויים',
                 condition: (c: RegistryCustomer): boolean =>
-                    !!c.isIncomeTaxActive && !!c.needsDeductionsFile,
+                    !!c.isIncomeTaxActive && !!c.businessDetails?.deductionsFileStatus,
                 getDetails: (c: RegistryCustomer): Record<string, any> => ({
                     'מספר תיק ניכויים': c.businessDetails?.deductionsId || 'טרם הוזן'
                 }),
             },
             {
-                id: 'taxCoordination',
-                title: 'תיאום מס',
+                id: 'it_ded_rep_2',
+                title: 'שליחת ייצוג תיק ניכויים מס הכנסה לחתימת לקוח',
+                condition: (c: RegistryCustomer): boolean =>
+                    !!c.isIncomeTaxActive && !!c.businessDetails?.deductionsFileStatus,
+                dependsOn: 'it_ded_rep_1',
+            },
+            {
+                id: 'it_ded_rep_3',
+                title: 'ייצוג תיק ניכויים מס הכנסה נחתם ע"י הלקוח',
+                condition: (c: RegistryCustomer): boolean =>
+                    !!c.isIncomeTaxActive && !!c.businessDetails?.deductionsFileStatus,
+                dependsOn: 'it_ded_rep_2',
+            },
+            {
+                id: 'it_ded_rep_4',
+                title: 'ייצוג תיק ניכויים מס הכנסה שודר',
+                condition: (c: RegistryCustomer): boolean =>
+                    !!c.isIncomeTaxActive && !!c.businessDetails?.deductionsFileStatus,
+                dependsOn: 'it_ded_rep_3',
+            },
+            {
+                id: 'it_ded_rep_5',
+                title: 'ייצוג תיק ניכויים מס הכנסה נקלט',
+                condition: (c: RegistryCustomer): boolean =>
+                    !!c.isIncomeTaxActive && !!c.businessDetails?.deductionsFileStatus,
+                dependsOn: 'it_ded_rep_4',
+            },
+            {
+                id: 'ded_open',
+                title: 'פתיחת תיק ניכויים מס הכנסה',
+                condition: (c: RegistryCustomer): boolean =>
+                    !!c.isIncomeTaxActive && c.businessDetails?.deductionsFileStatus === 'נדרש לפתוח תיק ניכויים',
+            },
+            {
+                id: 'ins_ded_rep_1',
+                title: 'ביטוח לאומי רישום ייצוג תיק ניכויים',
+                condition: (c: RegistryCustomer): boolean =>
+                    !!c.isInsuranceActive && !!c.businessDetails?.deductionsFileStatus,
+                getDetails: (c: RegistryCustomer): Record<string, any> => ({
+                    'מספר תיק ניכויים': c.businessDetails?.deductionsId || 'טרם הוזן'
+                }),
+            },
+            {
+                id: 'ins_ded_rep_2',
+                title: 'שליחת ייצוג תיק ניכויים ביטוח לאומי לחתימת לקוח',
+                condition: (c: RegistryCustomer): boolean =>
+                    !!c.isInsuranceActive && !!c.businessDetails?.deductionsFileStatus,
+                dependsOn: 'ins_ded_rep_1',
+            },
+            {
+                id: 'ins_ded_rep_3',
+                title: 'ייצוג תיק ניכויים ביטוח לאומי נחתם ע"י הלקוח',
+                condition: (c: RegistryCustomer): boolean =>
+                    !!c.isInsuranceActive && !!c.businessDetails?.deductionsFileStatus,
+                dependsOn: 'ins_ded_rep_2',
+            },
+            {
+                id: 'ins_ded_rep_4',
+                title: 'ייצוג תיק ניכויים ביטוח לאומי שודר',
+                condition: (c: RegistryCustomer): boolean =>
+                    !!c.isInsuranceActive && !!c.businessDetails?.deductionsFileStatus,
+                dependsOn: 'ins_ded_rep_3',
+            },
+            {
+                id: 'ins_ded_rep_5',
+                title: 'ייצוג תיק ניכויים ביטוח לאומי נקלט',
+                condition: (c: RegistryCustomer): boolean =>
+                    !!c.isInsuranceActive && !!c.businessDetails?.deductionsFileStatus,
+                dependsOn: 'ins_ded_rep_4',
             },
         ],
     },
@@ -331,11 +401,34 @@ export function getSubtaskRegistryOrder(
     return idx === -1 ? 9999 : idx;
 }
 
+/** Small color-dot identifying which representation "family" a chained
+ *  subtask belongs to — lets you tell chains apart mid-sequence (not just
+ *  at the first step) when two different chains share one category, e.g.
+ *  it_rep_* vs vat_rep_* both under TAX_VAT, or it_ded_rep_* vs
+ *  ins_ded_rep_* both under DEDUCTIONS_FILE. Prefixes are mutually
+ *  exclusive by construction — order doesn't matter for correctness. */
+const CHAIN_FAMILY_COLORS: [prefix: string, colorClass: string][] = [
+    ['it_ded_rep_', 'bg-rose-400'],   // ניכויים מס הכנסה
+    ['ins_ded_rep_', 'bg-teal-400'],  // ניכויים ביטוח לאומי
+    ['it_rep_', 'bg-indigo-400'],     // מס הכנסה (ייצוג)
+    ['vat_rep_', 'bg-amber-400'],     // מע"מ (ייצוג)
+    ['rep_', 'bg-sky-400'],           // ביטוח לאומי (ייצוג)
+];
+
+export function getChainFamilyColor(registryKey: string | null | undefined): string | null {
+    if (!registryKey) return null;
+    for (const [prefix, colorClass] of CHAIN_FAMILY_COLORS) {
+        if (registryKey.startsWith(prefix)) return colorClass;
+    }
+    return null;
+}
+
 // bg classes for the 3-4px accent strip (absolute-positioned, right side in RTL)
 export const CATEGORY_ACCENT_COLORS: Record<string, string> = {
     ADMIN_SETUP: 'bg-slate-400',
     INSURANCE: 'bg-sky-400',
     TAX_VAT: 'bg-indigo-400',
+    DEDUCTIONS_FILE: 'bg-orange-400',
     DIRECT_DEBIT: 'bg-teal-400',
     OFFICE_HANDLING: 'bg-emerald-500',
 };

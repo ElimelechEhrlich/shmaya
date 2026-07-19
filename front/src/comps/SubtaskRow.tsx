@@ -1,7 +1,7 @@
 // src/comps/SubtaskRow.tsx
 import React, { useState } from 'react';
 import PriorityBadge from './PriorityBadge';
-import { CATEGORY_ACCENT_COLORS } from '../constants/taskRegistry';
+import { CATEGORY_ACCENT_COLORS, getChainFamilyColor } from '../constants/taskRegistry';
 import { authService } from '../services/authService';
 
 export interface SubtaskViewRow {
@@ -51,6 +51,7 @@ const SubtaskRow: React.FC<SubtaskRowProps> = React.memo(({
     const [draft, setDraft] = useState(row.subtaskTitle);
     const isLocked = !!row.restrictedTo && authService.getCurrentUser() !== row.restrictedTo;
     const isDisabled = !!row.customerIsWaiting || !!isBlockedByDependency || (isLocked && !row.completed);
+    const familyColor = chainPosition ? getChainFamilyColor(row.registryKey) : null;
 
     const handleSave = () => {
         setEditing(false);
@@ -94,6 +95,9 @@ const SubtaskRow: React.FC<SubtaskRowProps> = React.memo(({
                     )}
                     {chainPosition?.hasNext && (
                         <span className="absolute -bottom-3 right-1/2 translate-x-1/2 w-px h-3 bg-slate-300" />
+                    )}
+                    {familyColor && (
+                        <span className={`absolute -bottom-0.5 -left-0.5 w-1.5 h-1.5 rounded-full border border-white ${familyColor}`} />
                     )}
                     <span className="peer-checked:hidden text-[10px] font-black text-slate-400">
                         {chainPosition ? chainPosition.position : ''}

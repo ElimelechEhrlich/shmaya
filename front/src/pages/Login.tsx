@@ -43,9 +43,11 @@ const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
                 </option>
               ))}
             </select>
-            {/* חץ קטן מעוצב עבור ה-select */}
-            <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center px-4 text-slate-400 text-xs">
-              ▼
+            {/* חץ קטן מעוצב עבור ה-select — אותו חץ בדיוק כמו בכל שאר תיבות ה-select באפליקציה */}
+            <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center px-4">
+              <svg viewBox="0 0 20 20" fill="#94a3b8" style={{ width: '0.85rem', height: '0.85rem' }}>
+                <path d="M5 7l5 6 5-6H5z" />
+              </svg>
             </div>
           </div>
 
