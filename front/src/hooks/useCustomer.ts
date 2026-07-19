@@ -159,6 +159,7 @@ export function useCustomer(customerId: string | undefined): UseCustomerResult {
 
             const { tasks: _, ...cleanFormData } = updatedData as any;
             const prevSetupFeePaid = customer?.paymentDetails?.setupFeePaid;
+            const prevDeductionsFileStatus = customer?.businessDetails?.deductionsFileStatus;
             const prevInsurance = customer?.isInsuranceActive;
 const prevIncomeTax = customer?.isIncomeTaxActive;
 const prevVat = customer?.isVatActive;
@@ -194,6 +195,25 @@ if (prevVat !== editData.isVatActive)
                         await PersistenceAdapter.updateSubtaskStatus(adminTask.id, feeSub.id, wantCompleted);
                         if (cascaded.status !== adminTask.status) {
                             await PersistenceAdapter.updateTaskStatus(adminTask.id, cascaded.status as 'pending' | 'completed');
+                        }
+                        await reload();
+                    }
+                }
+                // ✨ תלות דו-כיוונית: פתיחת תיק ניכויים מס הכנסה (ded_open) ↔ שדה deductionsFileStatus
+                if (prevDeductionsFileStatus !== editData.businessDetails?.deductionsFileStatus) {
+                    const wantCompleted = editData.businessDetails?.deductionsFileStatus === 'תיק ניכויים כבר קיים';
+                    const { data: freshCustomer } = await PersistenceAdapter.fetchCustomerWithTasks(customerId);
+                    const dedTask = freshCustomer?.tasks?.find(t => t.parentTaskId === 'DEDUCTIONS_FILE');
+                    const dedOpenSub = dedTask?.subTasks?.find(s => s.registryKey === 'ded_open');
+                    if (dedTask && dedOpenSub && !!dedOpenSub.completed !== wantCompleted) {
+                        const cascaded = cascadeOnSubtaskSet(
+                            { status: dedTask.status, subTasks: dedTask.subTasks as any },
+                            dedOpenSub.id,
+                            wantCompleted
+                        );
+                        await PersistenceAdapter.updateSubtaskStatus(dedTask.id, dedOpenSub.id, wantCompleted);
+                        if (cascaded.status !== dedTask.status) {
+                            await PersistenceAdapter.updateTaskStatus(dedTask.id, cascaded.status as 'pending' | 'completed');
                         }
                         await reload();
                     }
@@ -322,6 +342,20 @@ if (!wasLtd && isNowLtd && editData) {
                 } else {
                     setCustomer((s) => s ? { ...s, paymentDetails: nextPaymentDetails as any } : s);
                     setEditData((s) => s ? { ...s, paymentDetails: nextPaymentDetails as any } : s);
+                }
+            }
+            // ✨ תלות דו-כיוונית: פתיחת תיק ניכויים מס הכנסה (ded_open) ↔ שדה deductionsFileStatus
+            if (customerId && targetSub?.registryKey === 'ded_open') {
+                const nextValue = completed ? 'תיק ניכויים כבר קיים' : 'נדרש לפתוח תיק ניכויים';
+                const nextBusinessDetails = { ...(customer?.businessDetails ?? {}), deductionsFileStatus: nextValue };
+                const { error: fieldErr } = await PersistenceAdapter.updateCustomer(customerId, {
+                    businessDetails: nextBusinessDetails as any,
+                });
+                if (fieldErr) {
+                    console.error('[useCustomer.setSubtaskCompleted] deductionsFileStatus sync failed:', fieldErr.message);
+                } else {
+                    setCustomer((s) => s ? { ...s, businessDetails: nextBusinessDetails as any } : s);
+                    setEditData((s) => s ? { ...s, businessDetails: nextBusinessDetails as any } : s);
                 }
             }
 

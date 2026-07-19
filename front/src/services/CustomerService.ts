@@ -36,6 +36,7 @@ function formDataToCustomer(formData: CustomerFormData): Partial<Customer> {
             employsWorkers: formData.businessDetails.employsWorkers as any,
             deductionsId: formData.businessDetails.deductionsId,
             caseStartYear: formData.businessDetails.caseStartYear,
+            deductionsFileStatus: formData.businessDetails.deductionsFileStatus,
         },
         insuranceDetails: {
             insurancePrepayment: formData.insuranceDetails.insurancePrepayment,
@@ -65,7 +66,6 @@ function formDataToCustomer(formData: CustomerFormData): Partial<Customer> {
         isInsuranceActive: formData.isInsuranceActive,
         isIncomeTaxActive: formData.isIncomeTaxActive,
         isVatActive: formData.isVatActive,
-        needsDeductionsFile: formData.needsDeductionsFile,
         comments: formData.comments,
         isActive: formData.isActive,
         idPhotoUrl: formData.idPhotoUrl,

@@ -511,10 +511,16 @@ const CustomerCard: React.FC = () => {
                                 <div className="mt-4 p-4 bg-blue-50 rounded-xl border border-blue-100 space-y-3">
                                     <EditableRow label="מעסיק עובדים?" value={editData.businessDetails?.employsWorkers} isEditing={isEditing} type="select" options={['yes', 'no']} category="businessDetails" field="employsWorkers" onChange={actions.updateField} />
                                     {editData.businessDetails?.employsWorkers === 'yes' && (
-                                        <div className="flex items-center gap-3">
-                                            <span className="text-xs font-bold text-blue-700">תיק ניכויים נדרש?</span>
-                                            <input type="checkbox" checked={!!editData.needsDeductionsFile} disabled={!isEditing} onChange={(e) => actions.updateField(null, 'needsDeductionsFile', e.target.checked)} className={`w-5 h-5 accent-blue-600 ${isEditing ? 'cursor-pointer' : 'cursor-not-allowed'}`} />
-                                        </div>
+                                        <EditableRow
+                                            label="סטטוס תיק ניכויים"
+                                            value={editData.businessDetails?.deductionsFileStatus}
+                                            isEditing={isEditing}
+                                            type="select"
+                                            options={['נדרש לפתוח תיק ניכויים', 'תיק ניכויים כבר קיים']}
+                                            category="businessDetails"
+                                            field="deductionsFileStatus"
+                                            onChange={actions.updateField}
+                                        />
                                     )}
                                 </div>
                             )}

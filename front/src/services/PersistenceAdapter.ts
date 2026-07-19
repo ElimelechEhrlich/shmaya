@@ -137,6 +137,7 @@ function dbRowToCustomer(row: any): Customer {
       employsWorkers: (row.employs_workers || 'no') as any,
       deductionsId: row.deductions_id || '',
       caseStartYear: row.case_start_year != null ? String(row.case_start_year) : '',
+      deductionsFileStatus: row.deductions_file_status || '',
     },
     insuranceDetails: {
       insurancePrepayment: row.insurance_prepayment || '',
@@ -167,7 +168,6 @@ function dbRowToCustomer(row: any): Customer {
     isInsuranceActive: !!row.is_insurance_active,
     isIncomeTaxActive: !!row.is_income_tax_active,
     isVatActive: !!row.is_vat_active,
-    needsDeductionsFile: row.needs_deductions_file ?? false,
 
     idPhotoUrl: row.id_photo_url ?? null,
     bankApprovalUrl: row.bank_approval_url ?? null,
@@ -379,9 +379,9 @@ export const PersistenceAdapter = {
       occupation: c.businessDetails?.occupation ?? '',
       business_description: c.businessDetails?.businessDescription ?? '',
       employs_workers: c.businessDetails?.employsWorkers ?? 'no',
-      needs_deductions_file: c.needsDeductionsFile ?? false,
       deductions_id: c.businessDetails?.deductionsId ?? '',
       case_start_year: c.businessDetails?.caseStartYear ? Number(c.businessDetails.caseStartYear) : null,
+      deductions_file_status: c.businessDetails?.deductionsFileStatus || null,
       income_tax_rep_type: c.incomeTaxDetails?.repType ?? null,
       income_tax_prepayment: c.incomeTaxDetails?.incomeTaxPrepayment ?? '',
       annual_turnover: c.incomeTaxDetails?.annualTurnover ?? '',
@@ -442,6 +442,7 @@ export const PersistenceAdapter = {
       flatRow.employs_workers = c.businessDetails.employsWorkers;
       flatRow.deductions_id = c.businessDetails.deductionsId;
       flatRow.case_start_year = c.businessDetails.caseStartYear ? Number(c.businessDetails.caseStartYear) : null;
+      flatRow.deductions_file_status = c.businessDetails.deductionsFileStatus || null;
     }
 
     if (c.incomeTaxDetails) {
@@ -476,7 +477,6 @@ export const PersistenceAdapter = {
     if (c.isIncomeTaxActive !== undefined) flatRow.is_income_tax_active = c.isIncomeTaxActive;
     if (c.isVatActive !== undefined) flatRow.is_vat_active = c.isVatActive;
     if (c.isInsuranceActive !== undefined) flatRow.is_insurance_active = c.isInsuranceActive;
-    if (c.needsDeductionsFile !== undefined) flatRow.needs_deductions_file = c.needsDeductionsFile;
     if (c.comments !== undefined) flatRow.comments = c.comments;
     if (c.isActive !== undefined) flatRow.is_active = c.isActive;
     if (c.isWaiting !== undefined) flatRow.is_waiting = c.isWaiting;

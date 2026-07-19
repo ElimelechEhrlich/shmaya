@@ -92,8 +92,8 @@ export const TaskDetailsModal: React.FC<TaskDetailsModalProps> = ({ isOpen, onCl
                                     <p className="font-bold">👥 העסק מעסיק עובדים שכירים</p>
                                     <p className="text-slate-500 mt-0.5">נדרש מעקב שוטף ודיווח תיק ניכויים</p>
                                 </div>
-                                <span className={`text-xs font-bold px-2 py-0.5 rounded ${customer.needs_deductions_file || customer.needsDeductionsFile ? 'bg-green-100 text-green-800' : 'bg-slate-100 text-slate-600'}`}>
-                                    {customer.needs_deductions_file || customer.needsDeductionsFile ? '✓ נדרש תיק ניכויים' : 'ללא תיק ניכויים'}
+                                <span className={`text-xs font-bold px-2 py-0.5 rounded ${business.deductionsFileStatus || customer.deductions_file_status ? 'bg-green-100 text-green-800' : 'bg-slate-100 text-slate-600'}`}>
+                                    {business.deductionsFileStatus || customer.deductions_file_status || 'ללא תיק ניכויים'}
                                 </span>
                             </div>
                         )}

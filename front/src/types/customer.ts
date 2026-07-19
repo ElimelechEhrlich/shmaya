@@ -22,6 +22,7 @@ export interface BusinessDetails {
     employsWorkers: string;
     deductionsId: string;
     caseStartYear: string;
+    deductionsFileStatus: string;
 }
 
 export interface IncomeTaxCase {
@@ -61,7 +62,6 @@ export interface CustomerFormData {
     isInsuranceActive: boolean;
     isIncomeTaxActive: boolean;
     isVatActive: boolean;
-    needsDeductionsFile: boolean;
     comments: string;
     isActive: boolean;
     idPhotoUrl?: string;

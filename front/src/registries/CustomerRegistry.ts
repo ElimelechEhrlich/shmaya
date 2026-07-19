@@ -53,6 +53,7 @@ export const CATEGORY_STYLES: Record<string, { accent: string; bg: string; ring:
   ADMIN_SETUP: { accent: 'border-r-slate-400', bg: 'bg-slate-50', ring: 'ring-slate-200', emoji: '🗂️' },
   INSURANCE: { accent: 'border-r-blue-400', bg: 'bg-blue-50/60', ring: 'ring-blue-200', emoji: '🛡️' },
   TAX_VAT: { accent: 'border-r-amber-400', bg: 'bg-amber-50/60', ring: 'ring-amber-200', emoji: '🧾' },
+  DEDUCTIONS_FILE: { accent: 'border-r-orange-400', bg: 'bg-orange-50/60', ring: 'ring-orange-200', emoji: '📁' },
   DIRECT_DEBIT: { accent: 'border-r-purple-400', bg: 'bg-purple-50/60', ring: 'ring-purple-200', emoji: '💳' },
   OFFICE_HANDLING: { accent: 'border-r-rose-400', bg: 'bg-rose-50/60', ring: 'ring-rose-200', emoji: '✅' },
 };
@@ -95,6 +96,10 @@ export interface BusinessDetails {
   clientType: ClientTypeKey | '';
   /** Feeds the dynamic title of the OFFICE_HANDLING.ardeni_open subtask. */
   caseStartYear: string;
+  /** Replaces the old needsDeductionsFile boolean. Two Hebrew values (stored
+   *  directly, like clientType) — 'תיק ניכויים כבר קיים' | 'נדרש לפתוח תיק ניכויים'
+   *  — or '' when not relevant (employsWorkers !== 'yes'). Gates DEDUCTIONS_FILE. */
+  deductionsFileStatus: string;
 }
 
 export interface InsuranceDetails {
@@ -142,8 +147,6 @@ export interface Customer {
   isIncomeTaxActive: boolean;
   isInsuranceActive: boolean;
   isVatActive: boolean;
-
-  needsDeductionsFile: boolean;
 
   /** Soft deactivation — kept on the row so history/tasks survive. */
   isActive?: boolean;
@@ -280,8 +283,9 @@ export const SERVICES: Record<ServiceKey, ServiceDefinition> = {
     parentTaskId: 'TAX_VAT',
     // Full catalog including taxCoordination (forced by businessType==='זעיר'
     // via BUSINESS_TYPES['זעיר'].forcedSubtasks). Listed here so consumers
-    // iterating subtaskIds get the complete picture.
-    subtaskIds: ['it_rep_1', 'it_rep_2', 'it_rep_3', 'it_rep_4', 'it_open', 'it_deductions', 'taxCoordination'],
+    // iterating subtaskIds get the complete picture. it_ded_rep_1..5 live
+    // under the separate DEDUCTIONS_FILE parent, not here.
+    subtaskIds: ['it_rep_1', 'it_rep_2', 'it_rep_3', 'it_rep_4', 'it_open', 'taxCoordination'],
     clearsOnDeactivate: [
       'incomeTaxDetails.incomeTaxPrepayment',
       'incomeTaxDetails.annualTurnover',
@@ -300,7 +304,8 @@ export const SERVICES: Record<ServiceKey, ServiceDefinition> = {
       'insuranceDetails.insuranceStatus',
     ],
     parentTaskId: 'INSURANCE',
-    subtaskIds: ['rep_1', 'rep_2', 'rep_3', 'rep_4', 'open', 'deductions'],
+    // ins_ded_rep_1..5 live under the separate DEDUCTIONS_FILE parent, not here.
+    subtaskIds: ['rep_1', 'rep_2', 'rep_3', 'rep_4', 'open'],
     clearsOnDeactivate: [],
   },
   representation: {
@@ -424,11 +429,19 @@ export function applyBusinessRules(c: Customer): Customer {
   // 2. After forced-off cascade, sync isActive with authority state
   next.isActive = hasActiveAuthorities(next);
 
-  // 2. Employer cascade — symmetric (true ↔ false)
-  if (isEmployerType(next)) {
-    next.needsDeductionsFile = next.businessDetails.employsWorkers === 'yes';
+  // 2. Employer cascade — symmetric (true ↔ false), but unlike the old
+  // needsDeductionsFile boolean this does NOT overwrite an existing manual
+  // choice on every cascade run: employsWorkers→'no' clears the field;
+  // employsWorkers→'yes' only fills in a default when it's currently empty
+  // (first time on, or after a 'no' round-trip). Any other field edit leaves
+  // an already-chosen deductionsFileStatus untouched. Idempotent: re-running
+  // with the same inputs is a no-op either way.
+  if (isEmployerType(next) && next.businessDetails.employsWorkers === 'yes') {
+    if (!next.businessDetails.deductionsFileStatus) {
+      next.businessDetails.deductionsFileStatus = 'נדרש לפתוח תיק ניכויים';
+    }
   } else {
-    next.needsDeductionsFile = false;
+    next.businessDetails.deductionsFileStatus = '';
   }
 
   // 3. Clear deactivated services' derived fields — generalized over every
@@ -492,7 +505,6 @@ export const BOOLEAN_FIELDS: string[] = [
   'isIncomeTaxActive',
   'isInsuranceActive',
   'isVatActive',
-  'needsDeductionsFile',
   'paymentDetails.directDebit',
   'paymentDetails.setupFeePaid',
   'incomeTaxDetails.needsIncomeTaxDirectDebit',

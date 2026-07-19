@@ -20,6 +20,7 @@ import FilterableSelect from './FilterableSelect';
 export interface NewCustomerPrecheckState {
     businessType: BusinessTypeKey;
     employsWorkers?: 'yes' | 'no';
+    deductionsFileStatus?: string;
     clientType: ClientTypeKey;
     spouseFileExists?: boolean;
     spouseRepresentationTransferNeeded?: boolean;
@@ -37,6 +38,7 @@ const NewCustomerPrecheckModal: React.FC<NewCustomerPrecheckModalProps> = ({ onC
 
     const [businessType, setBusinessType] = useState<string>('');
     const [employsWorkers, setEmploysWorkers] = useState<'yes' | 'no' | ''>('');
+    const [deductionsFileStatus, setDeductionsFileStatus] = useState<string>('');
     const [clientType, setClientType] = useState<string>('');
     const [spouseFileExists, setSpouseFileExists] = useState(false);
     const [spouseRepresentationTransferNeeded, setSpouseRepresentationTransferNeeded] = useState(false);
@@ -59,6 +61,7 @@ const NewCustomerPrecheckModal: React.FC<NewCustomerPrecheckModalProps> = ({ onC
         const state: NewCustomerPrecheckState = {
             businessType: businessType as BusinessTypeKey,
             employsWorkers: showsEmployerFields ? (employsWorkers as 'yes' | 'no') : undefined,
+            deductionsFileStatus: showsEmployerFields && employsWorkers === 'yes' ? (deductionsFileStatus || undefined) : undefined,
             clientType: clientType as ClientTypeKey,
             spouseFileExists: showsSpouseFile ? spouseFileExists : undefined,
             spouseRepresentationTransferNeeded: showsSpouseFile && spouseFileExists ? spouseRepresentationTransferNeeded : undefined,
@@ -96,6 +99,21 @@ const NewCustomerPrecheckModal: React.FC<NewCustomerPrecheckModalProps> = ({ onC
                                 <option value="">בחר...</option>
                                 <option value="yes">כן</option>
                                 <option value="no">לא</option>
+                            </select>
+                        </div>
+                    )}
+
+                    {showsEmployerFields && employsWorkers === 'yes' && (
+                        <div className="space-y-1">
+                            <label className="text-sm font-bold text-slate-700">סטטוס תיק ניכויים</label>
+                            <select
+                                className="input-style cursor-pointer"
+                                value={deductionsFileStatus}
+                                onChange={(e) => setDeductionsFileStatus(e.target.value)}
+                            >
+                                <option value="">ברירת מחדל (נדרש לפתוח)</option>
+                                <option value="נדרש לפתוח תיק ניכויים">נדרש לפתוח תיק ניכויים</option>
+                                <option value="תיק ניכויים כבר קיים">תיק ניכויים כבר קיים</option>
                             </select>
                         </div>
                     )}

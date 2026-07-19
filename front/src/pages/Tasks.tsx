@@ -145,7 +145,7 @@ export default function Tasks(): React.ReactElement {
     clientName,
      comments,
     rows: [...clientRows].sort((a, b) => {
-        const order = ['ADMIN_SETUP', 'INSURANCE', 'TAX_VAT', 'DIRECT_DEBIT', 'OFFICE_HANDLING'];
+        const order = ['ADMIN_SETUP', 'INSURANCE', 'TAX_VAT', 'DEDUCTIONS_FILE', 'DIRECT_DEBIT', 'OFFICE_HANDLING'];
         const ai = order.indexOf(a.parentTaskId ?? '');
         const bi = order.indexOf(b.parentTaskId ?? '');
         const categoryDiff = (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
