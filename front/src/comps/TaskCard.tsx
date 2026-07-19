@@ -44,13 +44,13 @@ export default function TaskCard({
 
   return (
     <>
-      <div className={`w-full border rounded-xl mb-4 overflow-hidden shadow-sm ${isLocked ? 'opacity-50' : 'bg-white'}`}>
+      <div className={`w-full border rounded-lg mb-2 overflow-hidden shadow-sm ${isLocked ? 'opacity-50' : 'bg-white'}`}>
         {/* כותרת משימת האב */}
-        <div 
-          className="p-4 bg-slate-900 text-white flex justify-between items-center cursor-pointer"
+        <div
+          className="p-2.5 bg-slate-900 text-white flex justify-between items-center cursor-pointer"
           onClick={() => setIsOpen(!isOpen)}
         >
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             {/* ✨ כפתור לפתיחת פרטי התיק המלאים ללא פגיעה בלוגיקת הפירוט */}
             <button
               type="button"
@@ -59,14 +59,14 @@ export default function TaskCard({
                 e.stopPropagation(); // מונע מהלחיצה לפתוח/לסגור את כרטיס המשימות
                 setIsModalOpen(true);
               }}
-              className="p-1.5 bg-slate-800 hover:bg-slate-700 text-blue-400 rounded-lg border border-slate-700 transition cursor-pointer text-xs flex items-center justify-center"
+              className="p-1 bg-slate-800 hover:bg-slate-700 text-blue-400 rounded-lg border border-slate-700 transition cursor-pointer text-[10px] flex items-center justify-center"
             >
               📂 פרטי התיק
             </button>
 
             <div>
-              <h3 className="font-bold">{task.title}</h3>
-              <p className="text-xs text-slate-400">
+              <h3 className="font-bold text-sm">{task.title}</h3>
+              <p className="text-[10px] text-slate-400">
                 {task.subTasks.filter(st => st.completed).length} / {task.subTasks.length} הושלמו
               </p>
             </div>
@@ -76,7 +76,7 @@ export default function TaskCard({
 
         {/* רשימת תתי-משימות */}
         {isOpen && (
-          <div className="p-4 bg-slate-50 space-y-3">
+          <div className="p-2 bg-slate-50 space-y-1.5">
             {task.subTasks.map(sub => {
               const dependency = sub.dependsOn
                 ? task.subTasks.find(s => s.registryKey === sub.dependsOn)
@@ -85,16 +85,16 @@ export default function TaskCard({
               const isSubLocked = !!sub.restrictedTo && currentUser !== sub.restrictedTo;
               const isSubDisabled = isLocked || isBlockedByDependency || (isSubLocked && !sub.completed);
               return (
-                <div key={sub.id} className="flex items-center justify-between p-3 bg-white border rounded-lg">
-                  <div className="flex items-center gap-3">
+                <div key={sub.id} className="flex items-center justify-between p-2 bg-white border rounded-lg">
+                  <div className="flex items-center gap-2">
                     <input
                       type="checkbox"
                       disabled={isSubDisabled}
                       checked={sub.completed}
                       onChange={() => onSubTaskToggle(task.id, sub.id)}
-                      className="w-5 h-5 accent-blue-600"
+                      className="w-4 h-4 accent-blue-600"
                     />
-                    <span className={sub.completed ? 'line-through text-slate-400' : 'text-slate-800'}>
+                    <span className={`text-sm ${sub.completed ? 'line-through text-slate-400' : 'text-slate-800'}`}>
                       {sub.title}
                     </span>
                   </div>

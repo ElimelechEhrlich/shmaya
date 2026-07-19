@@ -11,6 +11,7 @@ import {
     getCustomerDisplayName,
     getChainPosition
 } from '../registries/CustomerRegistry';
+import { getChainFamilyColor } from '../constants/taskRegistry';
 import ProgressBar from './ProgressBar';
 import { CreateTaskModal } from '../comps/CreateTaskModal';
 import { authService } from '../services/authService'; // ודא שהנתיב לקובץ ה-Auth נכון
@@ -411,9 +412,9 @@ const CustomerCard: React.FC = () => {
                 )}
 
                 {/* Banner */}
-                <div className={`card-base p-7 mb-6 relative overflow-hidden ${isInactive ? 'opacity-75' : ''}`}>
+                <div className={`card-base p-5 mb-6 relative overflow-hidden ${isInactive ? 'opacity-75' : ''}`}>
                     <div className={`absolute top-0 right-0 w-1.5 h-full ${editData.isWaiting ? 'bg-orange-400' : 'bg-blue-600'}`}></div>
-                    <div className="flex justify-between items-start gap-8 mb-5">
+                    <div className="flex justify-between items-start gap-8 mb-3">
                         <div>
                             <div className="flex items-center gap-2 mb-2">
                                 <span className="inline-block px-2.5 py-0.5 bg-blue-50 text-blue-700 font-bold text-[11px] rounded-full border border-blue-100">{bType || 'ללא סיווג'}</span>
@@ -423,18 +424,18 @@ const CustomerCard: React.FC = () => {
                                     <span className="inline-block px-2.5 py-0.5 bg-orange-100 text-orange-700 font-bold text-[11px] rounded-full border border-orange-300">עצמאי שאינו עונה להגדרה</span>
                                 )}
                             </div>
-                            <h1 className="text-3xl font-black text-slate-900 leading-tight">{getCustomerDisplayName(editData)}</h1>
-                            <p className="text-slate-500 font-medium mt-1">{editData.businessDetails?.businessName}</p>
+                            <h1 className="text-2xl font-black text-slate-900 leading-tight">{getCustomerDisplayName(editData)}</h1>
+                            <p className="text-slate-500 font-medium mt-1 text-sm">{editData.businessDetails?.businessName}</p>
                         </div>
                         <div className="text-left flex-shrink-0">
-                            <div className="text-5xl font-black text-slate-900 leading-none">{progress}<span className="text-2xl text-slate-400">%</span></div>
+                            <div className="text-3xl font-black text-slate-900 leading-none">{progress}<span className="text-lg text-slate-400">%</span></div>
                             <div className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-widest">ביצוע משימות</div>
                         </div>
                     </div>
-                    <ProgressBar percent={progress} size="lg" label={`${progress}% הושלם`} />
+                    <ProgressBar percent={progress} size="md" label={`${progress}% הושלם`} />
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-start">
 
                     {/* Column 1 */}
                     <div className="space-y-6">
@@ -659,17 +660,18 @@ const CustomerCard: React.FC = () => {
                     </div>
 
                     {/* ✨ סעיף 3: אזור המשימות המעודכן, הפרופורציונלי והחסין להרשאות עובדים */}
-                    <div className="space-y-6">
+                    <div className="space-y-6 lg:sticky lg:top-14">
                         <Section title="משימות" icon="📋">
+                            <div className="lg:max-h-[calc(100vh-18rem)] lg:overflow-y-auto pl-1 scroll-smooth">
                             {(!editData?.tasks || editData.tasks.length === 0) ? (
                                 <p className="text-sm text-slate-400 italic text-center py-8">לא נוצרו משימות עדיין.</p>
                             ) : (
-                                <div className="space-y-4">
+                                <div className="space-y-2">
                                     {editData.tasks.map((task: any) => (
-                                        <div key={task.id} className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+                                        <div key={task.id} className="bg-white border border-slate-200 rounded-lg p-3">
                                             {/* כותרת קבוצת משימת האב וסעיף 2 סימון גורף */}
-                                            <div className="flex justify-between items-center border-b border-slate-100 pb-2 mb-3">
-                                                <h4 className="text-sm font-black text-slate-850 flex items-center gap-1.5">
+                                            <div className="flex justify-between items-center border-b border-slate-100 pb-1 mb-1.5">
+                                                <h4 className="text-xs font-black text-slate-850 flex items-center gap-1.5">
                                                     <span>📂</span> {task.title}
                                                 </h4>
                                                 <button
@@ -679,14 +681,14 @@ const CustomerCard: React.FC = () => {
                                                         if (editData.isWaiting) return;
                                                         actions.toggleTaskStatus(task.id, task.status);
                                                     }}
-                                                    className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition border ${editData.isWaiting ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed' : task.status === 'completed' ? 'cursor-pointer bg-green-50 text-green-700 border-green-200' : 'cursor-pointer bg-slate-900 text-white hover:bg-slate-800'}`}
+                                                    className={`px-2 py-0.5 rounded-lg text-[9px] font-bold transition border ${editData.isWaiting ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed' : task.status === 'completed' ? 'cursor-pointer bg-green-50 text-green-700 border-green-200' : 'cursor-pointer bg-slate-900 text-white hover:bg-slate-800'}`}
                                                 >
                                                     {task.status === 'completed' ? '✓ הכל בוצע' : 'סמן הכל כבוצע'}
                                                 </button>
                                             </div>
 
                                             {/* תתי המשימות הפנימיות בשורות שטוחות ויפות */}
-                                            <div className="space-y-2">
+                                            <div className="space-y-1.5">
                                                 {(task.subTasks || []).map((sub: any) => {
                                                     const dependency = sub.dependsOn
                                                         ? (task.subTasks || []).find((s: any) => s.registryKey === sub.dependsOn)
@@ -695,6 +697,7 @@ const CustomerCard: React.FC = () => {
                                                     const isLocked = !!sub.restrictedTo && authService.getCurrentUser() !== sub.restrictedTo;
                                                     const isDisabled = !!editData.isWaiting || isBlockedByDependency || (isLocked && !sub.completed);
                                                     const chainPosition = getChainPosition(task.subTasks || [], sub);
+                                                    const familyColor = chainPosition ? getChainFamilyColor(sub.registryKey) : null;
                                                     const checkboxTitle = isBlockedByDependency ? 'יש להשלים קודם את תת-המשימה הקודמת' : (isLocked ? `מוגבל ל-${sub.restrictedTo}` : undefined);
                                                     const handleCheckboxChange = (checked: boolean) => {
                                                         if (editData.isWaiting) {
@@ -729,6 +732,7 @@ const CustomerCard: React.FC = () => {
                                                                                          shrink-0 select-none ${isDisabled ? 'opacity-50' : 'hover:border-slate-400'}`}>
                                                                             {chainPosition.hasPrev && <span className="absolute -top-2.5 right-1/2 translate-x-1/2 w-px h-2.5 bg-slate-300" />}
                                                                             {chainPosition.hasNext && <span className="absolute -bottom-2.5 right-1/2 translate-x-1/2 w-px h-2.5 bg-slate-300" />}
+                                                                            {familyColor && <span className={`absolute -bottom-0.5 -left-0.5 w-1.5 h-1.5 rounded-full border border-white ${familyColor}`} />}
                                                                             <span className="peer-checked:hidden text-[8px] font-black text-slate-400">{chainPosition.position}</span>
                                                                             <span className="hidden peer-checked:inline text-white text-[9px] font-black">✓</span>
                                                                         </span>
@@ -769,13 +773,14 @@ const CustomerCard: React.FC = () => {
                                     ))}
                                 </div>
                             )}
+                            </div>
                         </Section>
                     </div>
                 </div>
 
                 {/* ✨ כפתור המחיקה יוצג ויופעל רק עבור משתמשים מורשים (מוישי) */}
                 {authService.canDelete() && (
-                    <div className="sticky bottom-0 z-20 bg-gray-50 mt-12 pt-6 pb-4 border-t border-slate-200 flex justify-start">
+                    <div className="sticky bottom-0 z-20 bg-gray-50 mt-10 pt-2 pb-2 border-t border-slate-200 flex justify-start">
                         <button
                             type="button"
                             onClick={() => setConfirmDelete(true)}

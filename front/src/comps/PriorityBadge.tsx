@@ -13,13 +13,13 @@ const PriorityBadge: React.FC<PriorityBadgeProps> = React.memo(({ priority, onCh
     const style = PRIORITY_STYLES[p];
 
     return (
-        <div className="relative inline-block min-h-[44px] min-w-[44px] flex items-center">
+        <div className="relative inline-flex items-center">
             <select
                 value={p}
                 onChange={(e) => onChange(e.target.value)}
                 onClick={(e) => e.stopPropagation()}
                 title={`עדיפות: ${style?.label || p}`}
-                className={`cursor-pointer ${style?.bg || 'bg-slate-50'} ${style?.text || 'text-slate-700'} ${style?.border || 'border-slate-200'} border px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider appearance-none transition`}
+                className={`cursor-pointer ${style?.bg || 'bg-slate-50'} ${style?.text || 'text-slate-700'} ${style?.border || 'border-slate-200'} border h-5 px-1.5 py-0 rounded-full text-[9px] leading-none font-black uppercase tracking-wider appearance-none transition`}
                 style={{ backgroundImage: 'none' }}
             >
                 {PRIORITY_LEVELS.map((lv: string) => (

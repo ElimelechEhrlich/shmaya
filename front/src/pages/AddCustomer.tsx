@@ -557,21 +557,19 @@ export default function AddCustomer(): React.ReactElement {
                     </div>
 
                     {/* Right: sticky task preview (1/3 width on desktop) */}
-                    <div className="lg:col-span-1">
-                        <div className="lg:sticky lg:top-6 bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
-                            <div className="flex items-center justify-between mb-4 border-b border-slate-100 pb-3">
-                                <h3 className="text-blue-700 font-black text-[11px] uppercase tracking-[0.2em]">תצוגת משימות</h3>
-                                <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full text-xs font-bold border border-blue-100">{previewTasks.length}</span>
-                            </div>
-                            <div className="space-y-3 max-h-[70vh] overflow-y-auto pl-1">
-                                {previewTasks.length > 0 ? (
-                                    previewTasks.map((task: any) => <TaskCard key={task.id} task={task} currentUser="מוישי" onSubTaskToggle={() => { }} />)
-                                ) : (
-                                    <div className="p-6 border-2 border-dashed border-slate-200 rounded-xl text-center text-slate-400 text-sm">
-                                        הזן נתונים כדי לראות את המשימות שייווצרו
-                                    </div>
-                                )}
-                            </div>
+                    <div className="lg:col-span-1 lg:sticky lg:top-6 bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+                        <div className="flex items-center justify-between mb-4 border-b border-slate-100 pb-3">
+                            <h3 className="text-blue-700 font-black text-[11px] uppercase tracking-[0.2em]">תצוגת משימות</h3>
+                            <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full text-xs font-bold border border-blue-100">{previewTasks.length}</span>
+                        </div>
+                        <div className="space-y-3 lg:max-h-[calc(100vh-13.5rem)] lg:overflow-y-auto pl-1">
+                            {previewTasks.length > 0 ? (
+                                previewTasks.map((task: any) => <TaskCard key={task.id} task={task} currentUser="מוישי" onSubTaskToggle={() => { }} />)
+                            ) : (
+                                <div className="p-6 border-2 border-dashed border-slate-200 rounded-xl text-center text-slate-400 text-sm">
+                                    הזן נתונים כדי לראות את המשימות שייווצרו
+                                </div>
+                            )}
                         </div>
                     </div>
                 </form>

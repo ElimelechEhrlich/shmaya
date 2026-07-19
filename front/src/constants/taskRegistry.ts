@@ -401,6 +401,28 @@ export function getSubtaskRegistryOrder(
     return idx === -1 ? 9999 : idx;
 }
 
+/** Small color-dot identifying which representation "family" a chained
+ *  subtask belongs to — lets you tell chains apart mid-sequence (not just
+ *  at the first step) when two different chains share one category, e.g.
+ *  it_rep_* vs vat_rep_* both under TAX_VAT, or it_ded_rep_* vs
+ *  ins_ded_rep_* both under DEDUCTIONS_FILE. Prefixes are mutually
+ *  exclusive by construction — order doesn't matter for correctness. */
+const CHAIN_FAMILY_COLORS: [prefix: string, colorClass: string][] = [
+    ['it_ded_rep_', 'bg-rose-400'],   // ניכויים מס הכנסה
+    ['ins_ded_rep_', 'bg-teal-400'],  // ניכויים ביטוח לאומי
+    ['it_rep_', 'bg-indigo-400'],     // מס הכנסה (ייצוג)
+    ['vat_rep_', 'bg-amber-400'],     // מע"מ (ייצוג)
+    ['rep_', 'bg-sky-400'],           // ביטוח לאומי (ייצוג)
+];
+
+export function getChainFamilyColor(registryKey: string | null | undefined): string | null {
+    if (!registryKey) return null;
+    for (const [prefix, colorClass] of CHAIN_FAMILY_COLORS) {
+        if (registryKey.startsWith(prefix)) return colorClass;
+    }
+    return null;
+}
+
 // bg classes for the 3-4px accent strip (absolute-positioned, right side in RTL)
 export const CATEGORY_ACCENT_COLORS: Record<string, string> = {
     ADMIN_SETUP: 'bg-slate-400',
