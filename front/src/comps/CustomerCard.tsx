@@ -356,6 +356,131 @@ const CustomerCard: React.FC = () => {
     const isInactive = editData.isActive === false;
     const monthlyFeeNum = parseFloat(String(editData.paymentDetails?.monthlyFee ?? ''));
     const directDebitDisabled = !editData.paymentDetails?.monthlyFee || isNaN(monthlyFeeNum) || monthlyFeeNum <= 0;
+    const manualTasks = (editData.tasks || []).filter((task: any) => !!task.isManual);
+    const automaticTasks = (editData.tasks || []).filter((task: any) => !task.isManual);
+
+    const renderSubtaskRow = (task: any, sub: any) => {
+        const dependency = sub.dependsOn
+            ? (task.subTasks || []).find((s: any) => s.registryKey === sub.dependsOn)
+            : undefined;
+        const isBlockedByDependency = !!dependency && !dependency.completed;
+        const isLocked = !!sub.restrictedTo && authService.getCurrentUser() !== sub.restrictedTo;
+        const isDisabled = !!editData.isWaiting || isBlockedByDependency || (isLocked && !sub.completed);
+        const chainPosition = getChainPosition(task.subTasks || [], sub);
+        const familyColor = chainPosition ? getChainFamilyColor(sub.registryKey) : null;
+        const checkboxTitle = isBlockedByDependency ? 'יש להשלים קודם את תת-המשימה הקודמת' : (isLocked ? `מוגבל ל-${sub.restrictedTo}` : undefined);
+        const handleCheckboxChange = (checked: boolean) => {
+            if (editData.isWaiting) {
+                alert("הלקוח במצב \"בהמתנה\" — לא ניתן לסמן ביצוע משימות עד להעברה לטיפול המשרד.");
+                return;
+            }
+            if (!authService.canEditRestricted(sub.restrictedTo)) {
+                alert(`אין לך הרשאה לשנות את הסטטוס של משימה זו — מוגבלת ל-${sub.restrictedTo} בלבד!`);
+                return;
+            }
+            if (isBlockedByDependency) {
+                alert('יש להשלים קודם את תת-המשימה הקודמת בשרשרת.');
+                return;
+            }
+            actions.setSubtaskCompleted(task.id, sub.id, checked);
+        };
+
+        return (
+            <div key={sub.id} className={`flex items-center justify-between p-2 rounded-lg border transition ${sub.completed ? 'bg-green-50/50 border-green-150' : 'bg-slate-50/50 border-slate-150'}`}>
+                <label className="flex items-center gap-2 cursor-pointer flex-1 min-w-0">
+                    {chainPosition ? (
+                        <span className="relative flex items-center shrink-0" title={checkboxTitle}>
+                            <input
+                                type="checkbox"
+                                checked={!!sub.completed}
+                                disabled={isDisabled}
+                                onChange={(e) => handleCheckboxChange(e.target.checked)}
+                                className="peer sr-only"
+                            />
+                            <span className={`relative w-4 h-4 rounded-full border-2 border-slate-300
+                                         peer-checked:border-blue-500 peer-checked:bg-blue-500
+                                         transition-all duration-200 flex items-center justify-center
+                                         shrink-0 select-none ${isDisabled ? 'opacity-50' : 'hover:border-slate-400'}`}>
+                                {chainPosition.hasPrev && <span className="absolute -top-2.5 right-1/2 translate-x-1/2 w-px h-2.5 bg-slate-300" />}
+                                {chainPosition.hasNext && <span className="absolute -bottom-2.5 right-1/2 translate-x-1/2 w-px h-2.5 bg-slate-300" />}
+                                {familyColor && <span className={`absolute -bottom-0.5 -left-0.5 w-1.5 h-1.5 rounded-full border border-white ${familyColor}`} />}
+                                <span className="peer-checked:hidden text-[8px] font-black text-slate-400">{chainPosition.position}</span>
+                                <span className="hidden peer-checked:inline text-white text-[9px] font-black">✓</span>
+                            </span>
+                        </span>
+                    ) : (
+                        <input
+                            type="checkbox"
+                            checked={!!sub.completed}
+                            disabled={isDisabled}
+                            title={checkboxTitle}
+                            onChange={(e) => handleCheckboxChange(e.target.checked)}
+                            className={`w-4 h-4 rounded text-blue-600 accent-blue-600 flex-shrink-0 ${isDisabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
+                        />
+                    )}
+                    <span className={`text-xs font-medium truncate ${sub.completed ? 'line-through text-slate-400' : 'text-slate-700'}`}>
+                        {sub.title}
+                    </span>
+                </label>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                    <PriorityBadge
+                        priority={sub.priority}
+                        onChange={(p) => actions.updateSubTaskPriority(task.id, sub.id, p as any)}
+                    />
+                    <button
+                        type="button"
+                        title="פתח חלון עריכה מלא"
+                        onClick={() => setEditingTask({ ...sub, taskId: task.id, customerName: editData.customerDetails?.fullName || '' })}
+                        className="text-slate-400 hover:text-blue-600 px-1 text-sm font-bold cursor-pointer"
+                    >
+                        ✎
+                    </button>
+                </div>
+            </div>
+        );
+    };
+
+    const renderTaskGroup = (task: any) => (
+        <div key={task.id} className="bg-white border border-slate-200 rounded-lg p-3">
+            <div className="flex justify-between items-center border-b border-slate-100 pb-1 mb-1.5">
+                <div className="flex items-center gap-2">
+                    <h4 className="text-xs font-black text-slate-850 flex items-center gap-1.5">
+                        <span>📂</span> {task.title}
+                    </h4>
+                </div>
+                <button
+                    type="button"
+                    disabled={!!editData.isWaiting}
+                    onClick={() => {
+                        if (editData.isWaiting) return;
+                        actions.toggleTaskStatus(task.id, task.status);
+                    }}
+                    className={`px-2 py-0.5 rounded-lg text-[9px] font-bold transition border ${editData.isWaiting ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed' : task.status === 'completed' ? 'cursor-pointer bg-green-50 text-green-700 border-green-200' : 'cursor-pointer bg-slate-900 text-white hover:bg-slate-800'}`}
+                >
+                    {task.status === 'completed' ? '✓ הכל בוצע' : 'סמן הכל כבוצע'}
+                </button>
+            </div>
+
+            <div className="space-y-1.5">
+                {(task.subTasks || []).map((sub: any) => renderSubtaskRow(task, sub))}
+            </div>
+        </div>
+    );
+
+    const renderManualSubtasks = () => (
+        <div className="bg-white border border-slate-200 rounded-lg p-3">
+            <div className="flex justify-between items-center border-b border-slate-100 pb-1 mb-1.5">
+                <div className="flex items-center gap-2">
+                    <h4 className="text-xs font-black text-slate-850 flex items-center gap-1.5">
+                        <span>📂</span> משימות ידניות
+                    </h4>
+                </div>
+            </div>
+            <div className="space-y-1.5">
+                {manualTasks.flatMap((task: any) => (task.subTasks || []).map((sub: any) => renderSubtaskRow(task, sub)))}
+            </div>
+        </div>
+    );
 
     return (
         <div className="p-6 min-h-screen" dir="rtl">
@@ -666,111 +791,17 @@ const CustomerCard: React.FC = () => {
                             {(!editData?.tasks || editData.tasks.length === 0) ? (
                                 <p className="text-sm text-slate-400 italic text-center py-8">לא נוצרו משימות עדיין.</p>
                             ) : (
-                                <div className="space-y-2">
-                                    {editData.tasks.map((task: any) => (
-                                        <div key={task.id} className="bg-white border border-slate-200 rounded-lg p-3">
-                                            {/* כותרת קבוצת משימת האב וסעיף 2 סימון גורף */}
-                                            <div className="flex justify-between items-center border-b border-slate-100 pb-1 mb-1.5">
-                                                <h4 className="text-xs font-black text-slate-850 flex items-center gap-1.5">
-                                                    <span>📂</span> {task.title}
-                                                </h4>
-                                                <button
-                                                    type="button"
-                                                    disabled={!!editData.isWaiting}
-                                                    onClick={() => {
-                                                        if (editData.isWaiting) return;
-                                                        actions.toggleTaskStatus(task.id, task.status);
-                                                    }}
-                                                    className={`px-2 py-0.5 rounded-lg text-[9px] font-bold transition border ${editData.isWaiting ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed' : task.status === 'completed' ? 'cursor-pointer bg-green-50 text-green-700 border-green-200' : 'cursor-pointer bg-slate-900 text-white hover:bg-slate-800'}`}
-                                                >
-                                                    {task.status === 'completed' ? '✓ הכל בוצע' : 'סמן הכל כבוצע'}
-                                                </button>
-                                            </div>
-
-                                            {/* תתי המשימות הפנימיות בשורות שטוחות ויפות */}
-                                            <div className="space-y-1.5">
-                                                {(task.subTasks || []).map((sub: any) => {
-                                                    const dependency = sub.dependsOn
-                                                        ? (task.subTasks || []).find((s: any) => s.registryKey === sub.dependsOn)
-                                                        : undefined;
-                                                    const isBlockedByDependency = !!dependency && !dependency.completed;
-                                                    const isLocked = !!sub.restrictedTo && authService.getCurrentUser() !== sub.restrictedTo;
-                                                    const isDisabled = !!editData.isWaiting || isBlockedByDependency || (isLocked && !sub.completed);
-                                                    const chainPosition = getChainPosition(task.subTasks || [], sub);
-                                                    const familyColor = chainPosition ? getChainFamilyColor(sub.registryKey) : null;
-                                                    const checkboxTitle = isBlockedByDependency ? 'יש להשלים קודם את תת-המשימה הקודמת' : (isLocked ? `מוגבל ל-${sub.restrictedTo}` : undefined);
-                                                    const handleCheckboxChange = (checked: boolean) => {
-                                                        if (editData.isWaiting) {
-                                                            alert("הלקוח במצב \"בהמתנה\" — לא ניתן לסמן ביצוע משימות עד להעברה לטיפול המשרד.");
-                                                            return;
-                                                        }
-                                                        if (!authService.canEditRestricted(sub.restrictedTo)) {
-                                                            alert(`אין לך הרשאה לשנות את הסטטוס של משימה זו — מוגבלת ל-${sub.restrictedTo} בלבד!`);
-                                                            return;
-                                                        }
-                                                        if (isBlockedByDependency) {
-                                                            alert('יש להשלים קודם את תת-המשימה הקודמת בשרשרת.');
-                                                            return;
-                                                        }
-                                                        actions.setSubtaskCompleted(task.id, sub.id, checked);
-                                                    };
-                                                    return (
-                                                        <div key={sub.id} className={`flex items-center justify-between p-2 rounded-lg border transition ${sub.completed ? 'bg-green-50/50 border-green-150' : 'bg-slate-50/50 border-slate-150'}`}>
-                                                            <label className="flex items-center gap-2 cursor-pointer flex-1 min-w-0">
-                                                                {chainPosition ? (
-                                                                    <span className="relative flex items-center shrink-0" title={checkboxTitle}>
-                                                                        <input
-                                                                            type="checkbox"
-                                                                            checked={!!sub.completed}
-                                                                            disabled={isDisabled}
-                                                                            onChange={(e) => handleCheckboxChange(e.target.checked)}
-                                                                            className="peer sr-only"
-                                                                        />
-                                                                        <span className={`relative w-4 h-4 rounded-full border-2 border-slate-300
-                                                                                         peer-checked:border-blue-500 peer-checked:bg-blue-500
-                                                                                         transition-all duration-200 flex items-center justify-center
-                                                                                         shrink-0 select-none ${isDisabled ? 'opacity-50' : 'hover:border-slate-400'}`}>
-                                                                            {chainPosition.hasPrev && <span className="absolute -top-2.5 right-1/2 translate-x-1/2 w-px h-2.5 bg-slate-300" />}
-                                                                            {chainPosition.hasNext && <span className="absolute -bottom-2.5 right-1/2 translate-x-1/2 w-px h-2.5 bg-slate-300" />}
-                                                                            {familyColor && <span className={`absolute -bottom-0.5 -left-0.5 w-1.5 h-1.5 rounded-full border border-white ${familyColor}`} />}
-                                                                            <span className="peer-checked:hidden text-[8px] font-black text-slate-400">{chainPosition.position}</span>
-                                                                            <span className="hidden peer-checked:inline text-white text-[9px] font-black">✓</span>
-                                                                        </span>
-                                                                    </span>
-                                                                ) : (
-                                                                    <input
-                                                                        type="checkbox"
-                                                                        checked={!!sub.completed}
-                                                                        disabled={isDisabled}
-                                                                        title={checkboxTitle}
-                                                                        onChange={(e) => handleCheckboxChange(e.target.checked)}
-                                                                        className={`w-4 h-4 rounded text-blue-600 accent-blue-600 flex-shrink-0 ${isDisabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
-                                                                    />
-                                                                )}
-                                                                <span className={`text-xs font-medium truncate ${sub.completed ? 'line-through text-slate-400' : 'text-slate-700'}`}>
-                                                                    {sub.title}
-                                                                </span>
-                                                            </label>
-                                                            <div className="flex items-center gap-2 flex-shrink-0">
-                                                                <PriorityBadge
-                                                                    priority={sub.priority}
-                                                                    onChange={(p) => actions.updateSubTaskPriority(task.id, sub.id, p as any)}
-                                                                />
-                                                                <button
-                                                                    type="button"
-                                                                    title="פתח חלון עריכה מלא"
-                                                                    onClick={() => setEditingTask({ ...sub, taskId: task.id, customerName: editData.customerDetails?.fullName || '' })}
-                                                                    className="text-slate-400 hover:text-blue-600 px-1 text-sm font-bold cursor-pointer"
-                                                                >
-                                                                    ✎
-                                                                </button>
-                                                            </div>
-                                                        </div>
-                                                    );
-                                                })}
-                                            </div>
+                                <div className="space-y-4">
+                                    {manualTasks.length > 0 && (
+                                        <div className="space-y-2">
+                                            {renderManualSubtasks()}
                                         </div>
-                                    ))}
+                                    )}
+                                    {automaticTasks.length > 0 && (
+                                        <div className="space-y-2">
+                                            {automaticTasks.map(renderTaskGroup)}
+                                        </div>
+                                    )}
                                 </div>
                             )}
                             </div>

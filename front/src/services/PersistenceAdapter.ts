@@ -642,7 +642,6 @@ export const PersistenceAdapter = {
     title: string;
     clientId: string | null;
     registryKey?: string | null;
-    restrictedTo?: string | null;
     priority?: string;
     subTasks: { title: string; restrictedTo?: string | null; dependsOn?: string | null; registryKey?: string | null }[];
     isManual?: boolean;
@@ -654,7 +653,6 @@ export const PersistenceAdapter = {
         customer_id: finalClientId,
         status: 'pending',
         is_manual: taskData.isManual ?? false,
-        restricted_to: taskData.restrictedTo ?? null,
       };
       if (taskData.registryKey) {
         parentInsert.registry_key = taskData.registryKey;
