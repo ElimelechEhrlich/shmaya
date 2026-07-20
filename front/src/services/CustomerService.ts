@@ -116,11 +116,10 @@ export const CustomerService = {
 
         if (!isEdit) {
             if (generatedTasks.length === 0) return;
-            await Promise.all(generatedTasks.map((t: any) => PersistenceAdapter.insertSingleTask({
+            const insertResults = await Promise.all(generatedTasks.map((t: any) => PersistenceAdapter.insertSingleTask({
                 title: t.title,
                 clientId: customerId,
                 registryKey: t.parentTaskId ?? null,
-                restrictedTo: t.restrictedTo ?? null,
                 subTasks: t.subTasks.map((s: any) => ({
                     title: s.title,
                     priority: (s.priority || 'medium') as SubTaskPriority,
@@ -130,6 +129,10 @@ export const CustomerService = {
                     registryKey: s.registryKey ?? null,
                 }))
             } as any)));
+            const failedInsert = insertResults.find((result: any) => !result.success || result.error);
+            if (failedInsert) {
+                throw new Error(failedInsert.error?.message || 'שגיאה בהוספת משימות לקוח');
+            }
             return;
         }
 
@@ -152,30 +155,25 @@ export const CustomerService = {
         }
 
         if (plan.toInsert?.length > 0) {
-            ops.push(...plan.toInsert.map((t: any) => PersistenceAdapter.insertSingleTask({
-                title: t.title,
-                clientId: customerId,
-                registryKey: t.parentTaskId ?? null,
-                restrictedTo: t.restrictedTo ?? null,
-                subTasks: t.subTasks.map((s: any) => ({
-                    title: s.title,
-                    priority: (s.priority || 'medium') as SubTaskPriority,
-                    comment: s.comment || '',
-                    restrictedTo: s.restrictedTo ?? null,
-                    dependsOn: s.dependsOn ?? null,
-                    registryKey: s.registryKey ?? null,
-                }))
-            } as any)));
-        }
-
-        if (plan.toUpdate?.length > 0) {
-            const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-            const validUpdates = plan.toUpdate.filter((t: any) => t.id && uuidRegex.test(t.id)); ops.push(...validUpdates.map((t: any) =>
-                PersistenceAdapter.updateTaskSubtasks(t.id, t.subTasks).then(r => {
-                    if (r.error) throw new Error(r.error.message);
+            ops.push(...plan.toInsert.map((t: any) =>
+                PersistenceAdapter.insertSingleTask({
+                    title: t.title,
+                    clientId: customerId,
+                    registryKey: t.parentTaskId ?? null,
+                    subTasks: t.subTasks.map((s: any) => ({
+                        title: s.title,
+                        priority: (s.priority || 'medium') as SubTaskPriority,
+                        comment: s.comment || '',
+                        restrictedTo: s.restrictedTo ?? null,
+                        dependsOn: s.dependsOn ?? null,
+                        registryKey: s.registryKey ?? null,
+                    })),
+                } as any).then((result: any) => {
+                    if (!result.success || result.error) {
+                        throw new Error(result.error?.message || 'שגיאה בהוספת משימות קיימות');
+                    }
                 })
             ));
-
         }
 
         if (ops.length > 0) await Promise.all(ops);

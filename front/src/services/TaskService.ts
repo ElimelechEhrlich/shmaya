@@ -41,7 +41,6 @@ export interface GeneratedTask {
     id: string;
     parentTaskId: string;
     title: string;
-    restrictedTo: string | null;
     subTasks: GeneratedSubTask[];
 }
 
@@ -61,7 +60,6 @@ export class TaskGeneratorService {
                 id: crypto.randomUUID(),
                 parentTaskId: parentTask.id,
                 title: resolveTitle(parentTask.title, customerData as any),
-                restrictedTo: parentTask.restrictedTo || null,
                 subTasks: parentTask.subTasks
                     .filter((sub: any) => {
                         if (sub.condition) return sub.condition(customerData);

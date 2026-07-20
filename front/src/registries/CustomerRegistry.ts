@@ -719,7 +719,6 @@ interface MergeableTask {
   parentTaskId?: string | null;
   title: string;
   status?: 'pending' | 'completed';
-  restrictedTo?: string | null;
   subTasks: {
     id?: string;
     title: string;

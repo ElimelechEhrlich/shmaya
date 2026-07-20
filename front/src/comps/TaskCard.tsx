@@ -18,7 +18,6 @@ interface SubTask {
 interface Task {
   id: string;
   title: string;
-  restrictedTo?: string | null;
   subTasks: SubTask[];
   status?: string;
   priority?: string;
@@ -38,10 +37,8 @@ export default function TaskCard({
 }: TaskCardProps): React.ReactElement {
   const [isOpen, setIsOpen] = useState<boolean>(false);
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false); // ✨ State לחלון הפרטים
+  const isLocked = false;
   
-  // הגנה קלה: המרה לבוליאני מוחלט כדי למנוע ערכי undefined בהשוואה
-  const isLocked = !!task.restrictedTo && currentUser !== task.restrictedTo;
-
   return (
     <>
       <div className={`w-full border rounded-lg mb-2 overflow-hidden shadow-sm ${isLocked ? 'opacity-50' : 'bg-white'}`}>
@@ -109,11 +106,6 @@ export default function TaskCard({
               );
             })}
             
-            {isLocked && (
-              <p className="text-xs text-amber-600 font-bold mt-2 text-center italic">
-                🔒 משימה זו חסומה לאישור של {task.restrictedTo} בלבד
-              </p>
-            )}
           </div>
         )}
       </div>

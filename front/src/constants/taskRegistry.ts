@@ -68,7 +68,6 @@ export interface RegistryParentTask {
     id: string;
     title: RegistryTitle;
     condition?: (c: RegistryCustomer) => boolean;
-    restrictedTo?: string | null;
     priority?: 'low' | 'medium' | 'high' | 'critical';
     subTasks: RegistrySubTask[];
 }
