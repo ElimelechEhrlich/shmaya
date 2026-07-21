@@ -557,12 +557,12 @@ export default function AddCustomer(): React.ReactElement {
                     </div>
 
                     {/* Right: sticky task preview (1/3 width on desktop) */}
-                    <div className="self-start rounded-2xl border border-slate-200 bg-white p-6 shadow-sm lg:col-span-1 lg:sticky lg:top-4">
+                    <div className="self-start rounded-2xl border border-slate-200 bg-white p-6 shadow-sm lg:col-span-1 lg:sticky lg:top-6">
                         <div className="mb-4 flex items-center justify-between border-b border-slate-100 pb-3">
                             <h3 className="text-[11px] font-black uppercase tracking-[0.2em] text-blue-700">תצוגת משימות</h3>
                             <span className="rounded-full border border-blue-100 bg-blue-50 px-2 py-0.5 text-xs font-bold text-blue-700">{previewTasks.length}</span>
                         </div>
-                        <div className="space-y-3 pl-1 lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto">
+                        <div className="space-y-3 pl-1 lg:max-h-[calc(100vh-13.5rem)] lg:overflow-y-auto">
                             {previewTasks.length > 0 ? (
                                 previewTasks.map((task: any) => <TaskCard key={task.id} task={task} currentUser="מוישי" onSubTaskToggle={() => { }} />)
                             ) : (
