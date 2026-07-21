@@ -148,9 +148,6 @@ export const AUTO_TASKS_CONFIG: RegistryParentTask[] = [
             {
                 id: 'rep_1',
                 title: 'ביטוח לאומי רישום ייצוג בן זוג רשום',
-                getDetails: (c: RegistryCustomer): Record<string, any> => ({
-                    'מספר תיק': c.insuranceDetails?.insuranceId || 'טרם הוזן'
-                })
             },
             {
                 id: 'rep_2',
@@ -255,9 +252,6 @@ export const AUTO_TASKS_CONFIG: RegistryParentTask[] = [
                 title: 'מס הכנסה רישום ייצוג תיק ניכויים',
                 condition: (c: RegistryCustomer): boolean =>
                     !!c.isIncomeTaxActive && !!c.businessDetails?.deductionsFileStatus,
-                getDetails: (c: RegistryCustomer): Record<string, any> => ({
-                    'מספר תיק ניכויים': c.businessDetails?.deductionsId || 'טרם הוזן'
-                }),
             },
             {
                 id: 'it_ded_rep_2',
@@ -298,9 +292,6 @@ export const AUTO_TASKS_CONFIG: RegistryParentTask[] = [
                 title: 'ביטוח לאומי רישום ייצוג תיק ניכויים',
                 condition: (c: RegistryCustomer): boolean =>
                     !!c.isInsuranceActive && !!c.businessDetails?.deductionsFileStatus,
-                getDetails: (c: RegistryCustomer): Record<string, any> => ({
-                    'מספר תיק ניכויים': c.businessDetails?.deductionsId || 'טרם הוזן'
-                }),
             },
             {
                 id: 'ins_ded_rep_2',
