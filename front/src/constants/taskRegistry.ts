@@ -291,34 +291,34 @@ export const AUTO_TASKS_CONFIG: RegistryParentTask[] = [
                 id: 'ins_ded_rep_1',
                 title: 'ביטוח לאומי רישום ייצוג תיק ניכויים',
                 condition: (c: RegistryCustomer): boolean =>
-                    !!c.isInsuranceActive && !!c.businessDetails?.deductionsFileStatus,
+                    !!c.businessDetails?.deductionsFileStatus,
             },
             {
                 id: 'ins_ded_rep_2',
                 title: 'שליחת ייצוג תיק ניכויים ביטוח לאומי לחתימת לקוח',
                 condition: (c: RegistryCustomer): boolean =>
-                    !!c.isInsuranceActive && !!c.businessDetails?.deductionsFileStatus,
+                    !!c.businessDetails?.deductionsFileStatus,
                 dependsOn: 'ins_ded_rep_1',
             },
             {
                 id: 'ins_ded_rep_3',
                 title: 'ייצוג תיק ניכויים ביטוח לאומי נחתם ע"י הלקוח',
                 condition: (c: RegistryCustomer): boolean =>
-                    !!c.isInsuranceActive && !!c.businessDetails?.deductionsFileStatus,
+                    !!c.businessDetails?.deductionsFileStatus,
                 dependsOn: 'ins_ded_rep_2',
             },
             {
                 id: 'ins_ded_rep_4',
                 title: 'ייצוג תיק ניכויים ביטוח לאומי שודר',
                 condition: (c: RegistryCustomer): boolean =>
-                    !!c.isInsuranceActive && !!c.businessDetails?.deductionsFileStatus,
+                    !!c.businessDetails?.deductionsFileStatus,
                 dependsOn: 'ins_ded_rep_3',
             },
             {
                 id: 'ins_ded_rep_5',
                 title: 'ייצוג תיק ניכויים ביטוח לאומי נקלט',
                 condition: (c: RegistryCustomer): boolean =>
-                    !!c.isInsuranceActive && !!c.businessDetails?.deductionsFileStatus,
+                    !!c.businessDetails?.deductionsFileStatus,
                 dependsOn: 'ins_ded_rep_4',
             },
         ],
