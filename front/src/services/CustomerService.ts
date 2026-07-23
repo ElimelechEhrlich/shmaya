@@ -154,6 +154,16 @@ export const CustomerService = {
             }));
         }
 
+        if (plan.toUpdate?.length > 0) {
+            ops.push(...plan.toUpdate.map((u: any) =>
+                PersistenceAdapter.updateTaskSubtasks(u.id, u.subTasks).then((result: any) => {
+                    if (result.error) {
+                        throw new Error(result.error.message || 'שגיאה בעדכון תתי-משימות קיימות');
+                    }
+                })
+            ));
+        }
+
         if (plan.toInsert?.length > 0) {
             ops.push(...plan.toInsert.map((t: any) =>
                 PersistenceAdapter.insertSingleTask({
