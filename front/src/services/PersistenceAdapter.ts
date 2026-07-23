@@ -1071,7 +1071,7 @@ export const PersistenceAdapter = {
   //     תת-המשימה הזו (יש עריכת כותרת inline ב-SubtaskRow.tsx), ההתאמה תישבר בשקט והשורה
   //     תיעלם מכאן בלי שום שגיאה — היא לא תיעלם מהמערכת עצמה, רק מה-section הזה בדשבורד.
   async fetchMoisheOpenTasks(): Promise<DbResult<MoisheOpenTaskRow[]>> {
-    const [approveRes, extraCaseRes] = await Promise.all([
+    const [approveRes, extraCaseRes, incompleteRes] = await Promise.all([
       supabase
         .from('sub_tasks')
         .select('id, title, parent_tasks!inner(id, customer_id, customers(id, full_name, business_name, business_type))')
@@ -1084,13 +1084,35 @@ export const PersistenceAdapter = {
         .eq('is_completed', false)
         .ilike('title', 'פתיחת תיק לקוח נוסף%')
         .eq('parent_tasks.registry_key', 'ADMIN_SETUP'),
+      // כל תת-משימה לא-גמורה במערכת, לכל קטגוריה — משמש להחליט אילו 'approve' מוצגות
+      // (ר' ההערה ליד approveRows למטה, לפני שממציאים מחדש בדיקה מבוססת parent_tasks.status).
+      supabase
+        .from('sub_tasks')
+        .select('id, parent_tasks!inner(customer_id)')
+        .eq('is_completed', false),
     ]);
 
     if (approveRes.error) return { data: null, error: approveRes.error };
     if (extraCaseRes.error) return { data: null, error: extraCaseRes.error };
+    if (incompleteRes.error) return { data: null, error: incompleteRes.error };
 
+    // סופרים, לכל לקוח, כמה תת-משימות לא-גמורות יש לו בכל המערכת (כל הקטגוריות יחד).
+    const incompleteCountByCustomer = new Map<string, number>();
+    for (const row of (incompleteRes.data ?? [])) {
+      const cid = (row as any).parent_tasks?.customer_id;
+      if (!cid) continue;
+      incompleteCountByCustomer.set(cid, (incompleteCountByCustomer.get(cid) ?? 0) + 1);
+    }
+
+    // 'approve' מוצגת רק אם היא תת-המשימה הלא-גמורה **היחידה** של הלקוח, בכל קטגוריה —
+    // כולל ה-sibling 'ardeni_open' תחת אותו OFFICE_HANDLING. במכוון לא נבדק לפי
+    // parent_tasks.status: OFFICE_HANDLING.status תמיד 'pending' כל עוד approve פתוחה,
+    // בלי קשר למצב ardeni_open — כלומר סטטוס הקטגוריה לא נותן מידע על ה-sibling, וצריך
+    // ממילא לרדת לרמת ה-subtask. בדיקה ישירה אחת על כל תתי-המשימות פשוטה יותר מ-hybrid
+    // (parent status לשאר הקטגוריות + subtask-level ל-sibling) ולא תלויה בקאסקייד.
     const approveRows: MoisheOpenTaskRow[] = (approveRes.data ?? [])
       .filter((row: any) => row.parent_tasks?.customer_id && row.parent_tasks.customer_id !== OFFICE_CUSTOMER_ID)
+      .filter((row: any) => incompleteCountByCustomer.get(row.parent_tasks.customer_id) === 1)
       .map((row: any) => ({
         subtaskId: row.id,
         taskId: row.parent_tasks.id,
