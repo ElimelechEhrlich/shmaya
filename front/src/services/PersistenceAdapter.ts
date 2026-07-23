@@ -79,6 +79,17 @@ export interface PersistedSubtaskRow {
   customerCreatedAt?: string | null;
 }
 
+export interface MoisheOpenTaskRow {
+  subtaskId: string;
+  taskId: string;
+  title: string;
+  kind: 'approve' | 'ltd_extra_case';
+  customerId: string;
+  customerName: string;
+  /** Only present for kind==='ltd_extra_case' — feeds navigate('/admin/customers/new', { state }). */
+  ltdPrefill?: { fullName: string; identityId: string; phoneNumber: string; address: string; email: string };
+}
+
 export interface PersistedLog {
   id: string;
   createdAt: string;
@@ -811,7 +822,22 @@ export const PersistenceAdapter = {
       })
       .eq('parent_task_id', parentTaskId);
 
-    return { data: null, error };
+    if (error) return { data: null, error };
+
+    // Cascade: זו פעולה גורפת (כל האחים מקבלים אותו completed בוודאות) — אין צורך לשלוף
+    // מחדש כדי לחשב allDone, אפשר לכתוב את parent_tasks.status ישירות. היסטורית, הפעולה
+    // הזו (הטוגל ברמת האב ב-CustomerCard) קבעה את כל תתי-המשימות אך מעולם לא כתבה את
+    // parent_tasks.status עצמו — מה שהשאיר "השלמת קטגוריה שלמה" תקועה כ-pending לצמיתות.
+    // Best-effort, כמו ב-updateSubtaskStatus.
+    const { error: parentErr } = await supabase
+      .from('parent_tasks')
+      .update({ status: completed ? 'completed' : 'pending' })
+      .eq('id', parentTaskId);
+    if (parentErr) {
+      console.error('[PersistenceAdapter.updateSubtasksStatusByParent] parent status cascade failed:', parentErr.message);
+    }
+
+    return { data: null, error: null };
   },
 
   // ✨ סעיף 1: שינוי דחיפות ברמת תת המשימה בטבלה sub_tasks
@@ -869,7 +895,7 @@ export const PersistenceAdapter = {
   },
 
   async updateSubtaskStatus(
-    _taskId: string,
+    taskId: string,
     subtaskId: string,
     completed: boolean
   ): Promise<DbResult<null>> {
@@ -899,7 +925,34 @@ export const PersistenceAdapter = {
       })
       .eq('id', subtaskId);
 
-    return { data: null, error };
+    if (error) return { data: null, error };
+
+    // Cascade: recompute parent_tasks.status from every sibling sub_task under this
+    // parent (mirrors CustomerRegistry.cascadeOnSubtaskSet). Centralized here so every
+    // caller gets it "for free" — callers used to duplicate this cascade themselves and
+    // some (Tasks.tsx, Dashboard.tsx office tasks, CreateTaskModal.tsx) simply never did,
+    // leaving parent_tasks.status stuck stale even though every subtask was done.
+    // Best-effort: a failure here does not fail the call — the subtask write above already
+    // succeeded, and the user did not directly ask to change the parent's status.
+    const { data: siblings, error: siblingsErr } = await supabase
+      .from('sub_tasks')
+      .select('is_completed')
+      .eq('parent_task_id', taskId);
+
+    if (siblingsErr) {
+      console.error('[PersistenceAdapter.updateSubtaskStatus] cascade sibling fetch failed:', siblingsErr.message);
+    } else {
+      const allDone = (siblings ?? []).length > 0 && siblings.every(s => s.is_completed);
+      const { error: parentErr } = await supabase
+        .from('parent_tasks')
+        .update({ status: allDone ? 'completed' : 'pending' })
+        .eq('id', taskId);
+      if (parentErr) {
+        console.error('[PersistenceAdapter.updateSubtaskStatus] cascade parent status update failed:', parentErr.message);
+      }
+    }
+
+    return { data: null, error: null };
   },
   async updateSubtaskTitle(
     _taskId: string,
@@ -1007,6 +1060,68 @@ export const PersistenceAdapter = {
       data: (data ?? []).map((row: any) => ({ id: row.id, name: getDisplayName(row) })),
       error: null,
     };
+  },
+
+  // "משימות לטיפולי" (מוישי בלבד) — שני סוגי משימות פתוחות בכל המערכת:
+  //  1. 'approve' — תת-משימת registry אמיתית (OFFICE_HANDLING.approve, restrictedTo: 'מוישי').
+  //  2. 'ltd_extra_case' — לא תת-משימת registry! handleLtdCustomerFlow.ts מכניס אותה כשורה
+  //     חד-פעמית ללא registry_key (ר' insertSubtaskUnderRegistry), עם כותרת דינמית
+  //     "פתיחת תיק לקוח נוסף עבור {שם}". אין מפתח יציב לזהות אותה — ההתאמה כאן היא היוריסטית
+  //     (parent=ADMIN_SETUP + registry_key null + קידומת כותרת קבועה). אם מישהו יערוך את כותרת
+  //     תת-המשימה הזו (יש עריכת כותרת inline ב-SubtaskRow.tsx), ההתאמה תישבר בשקט והשורה
+  //     תיעלם מכאן בלי שום שגיאה — היא לא תיעלם מהמערכת עצמה, רק מה-section הזה בדשבורד.
+  async fetchMoisheOpenTasks(): Promise<DbResult<MoisheOpenTaskRow[]>> {
+    const [approveRes, extraCaseRes] = await Promise.all([
+      supabase
+        .from('sub_tasks')
+        .select('id, title, parent_tasks!inner(id, customer_id, customers(id, full_name, business_name, business_type))')
+        .eq('registry_key', 'approve')
+        .eq('is_completed', false),
+      supabase
+        .from('sub_tasks')
+        .select('id, title, parent_tasks!inner(id, customer_id, registry_key, customers(id, full_name, business_name, business_type, identity_id, phone_number, address, email))')
+        .is('registry_key', null)
+        .eq('is_completed', false)
+        .ilike('title', 'פתיחת תיק לקוח נוסף%')
+        .eq('parent_tasks.registry_key', 'ADMIN_SETUP'),
+    ]);
+
+    if (approveRes.error) return { data: null, error: approveRes.error };
+    if (extraCaseRes.error) return { data: null, error: extraCaseRes.error };
+
+    const approveRows: MoisheOpenTaskRow[] = (approveRes.data ?? [])
+      .filter((row: any) => row.parent_tasks?.customer_id && row.parent_tasks.customer_id !== OFFICE_CUSTOMER_ID)
+      .map((row: any) => ({
+        subtaskId: row.id,
+        taskId: row.parent_tasks.id,
+        title: row.title,
+        kind: 'approve' as const,
+        customerId: row.parent_tasks.customer_id,
+        customerName: getDisplayName(row.parent_tasks.customers),
+      }));
+
+    const extraCaseRows: MoisheOpenTaskRow[] = (extraCaseRes.data ?? [])
+      .filter((row: any) => row.parent_tasks?.customer_id && row.parent_tasks.customer_id !== OFFICE_CUSTOMER_ID)
+      .map((row: any) => {
+        const customer = row.parent_tasks.customers;
+        return {
+          subtaskId: row.id,
+          taskId: row.parent_tasks.id,
+          title: row.title,
+          kind: 'ltd_extra_case' as const,
+          customerId: row.parent_tasks.customer_id,
+          customerName: getDisplayName(customer),
+          ltdPrefill: customer ? {
+            fullName: customer.full_name || '',
+            identityId: customer.identity_id || '',
+            phoneNumber: customer.phone_number || '',
+            address: customer.address || '',
+            email: customer.email || '',
+          } : undefined,
+        };
+      });
+
+    return { data: [...approveRows, ...extraCaseRows], error: null };
   },
 
   async fetchCustomerTaskStats(): Promise<DbResult<{ pending: number; completed: number }>> {

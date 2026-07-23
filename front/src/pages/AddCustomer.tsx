@@ -20,6 +20,7 @@ import { handleLtdCustomerFlow } from '../utils/handleLtdCustomerFlow';
 import FilterableSelect from '../comps/FilterableSelect';
 import { branchesList } from '../constants/branches';
 import WhatsAppIcon from '../comps/WhatsAppIcon';
+import AuthorityToggleButton from '../comps/AuthorityToggleButton';
 
 
 interface CustomerFormData {
@@ -630,13 +631,5 @@ const PendingFileRow: React.FC<PendingFileRowProps> = ({ label, file, onSelect, 
 };
 
 const ToggleHeader: React.FC<ToggleHeaderProps> = ({ label, checked, onChange }) => (
-    <label className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition ${checked ? 'bg-blue-50 border-blue-200' : 'bg-slate-50 border-slate-200 hover:border-slate-300'}`}>
-        <input
-            type="checkbox"
-            className="w-5 h-5 cursor-pointer accent-blue-600"
-            checked={checked}
-            onChange={(e) => onChange(e.target.checked)}
-        />
-        <span className={`text-sm font-bold ${checked ? 'text-blue-700' : 'text-slate-600'}`}>{label}</span>
-    </label>
+    <AuthorityToggleButton label={label} active={checked} onClick={() => onChange(!checked)} fullWidth />
 );

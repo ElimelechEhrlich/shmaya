@@ -187,15 +187,9 @@ if (prevVat !== editData.isVatActive)
                     const adminTask = freshCustomer?.tasks?.find(t => t.parentTaskId === 'ADMIN_SETUP');
                     const feeSub = adminTask?.subTasks?.find(s => s.registryKey === 'setup_fee_payment');
                     if (adminTask && feeSub && !!feeSub.completed !== wantCompleted) {
-                        const cascaded = cascadeOnSubtaskSet(
-                            { status: adminTask.status, subTasks: adminTask.subTasks as any },
-                            feeSub.id,
-                            wantCompleted
-                        );
+                        // updateSubtaskStatus מרכז בתוכו את חישוב ה-cascade ל-parent_tasks.status —
+                        // אין צורך יותר בחישוב/קריאה נפרדים כאן.
                         await PersistenceAdapter.updateSubtaskStatus(adminTask.id, feeSub.id, wantCompleted);
-                        if (cascaded.status !== adminTask.status) {
-                            await PersistenceAdapter.updateTaskStatus(adminTask.id, cascaded.status as 'pending' | 'completed');
-                        }
                         await reload();
                     }
                 }
@@ -206,15 +200,9 @@ if (prevVat !== editData.isVatActive)
                     const dedTask = freshCustomer?.tasks?.find(t => t.parentTaskId === 'DEDUCTIONS_FILE');
                     const dedOpenSub = dedTask?.subTasks?.find(s => s.registryKey === 'ded_open');
                     if (dedTask && dedOpenSub && !!dedOpenSub.completed !== wantCompleted) {
-                        const cascaded = cascadeOnSubtaskSet(
-                            { status: dedTask.status, subTasks: dedTask.subTasks as any },
-                            dedOpenSub.id,
-                            wantCompleted
-                        );
+                        // updateSubtaskStatus מרכז בתוכו את חישוב ה-cascade ל-parent_tasks.status —
+                        // אין צורך יותר בחישוב/קריאה נפרדים כאן.
                         await PersistenceAdapter.updateSubtaskStatus(dedTask.id, dedOpenSub.id, wantCompleted);
-                        if (cascaded.status !== dedTask.status) {
-                            await PersistenceAdapter.updateTaskStatus(dedTask.id, cascaded.status as 'pending' | 'completed');
-                        }
                         await reload();
                     }
                 }
@@ -323,14 +311,8 @@ if (!wasLtd && isNowLtd && editData) {
                 return;
             }
 
-            if (nextStatus !== beforeStatus) {
-                const { error: statusErr } = await PersistenceAdapter.updateTaskStatus(taskId, nextStatus);
-                if (statusErr) {
-                    alert(`שגיאה בעדכון סטטוס המשימה: ${statusErr.message}`);
-                    await reload();
-                    return;
-                }
-            }
+            // updateSubtaskStatus מרכז בתוכו כבר את חישוב ה-cascade ל-parent_tasks.status בשרת —
+            // nextStatus/nextSubTasks לעיל משמשים רק לעדכון האופטימי של ה-state המקומי, לא ל-DB.
             // ✨ תלות דו-כיוונית: תשלום עבור פתיחת תיק ↔ שדה setupFeePaid
             if (customerId && targetSub?.registryKey === 'setup_fee_payment') {
                 const nextPaymentDetails = { ...(customer?.paymentDetails ?? {}), setupFeePaid: completed };

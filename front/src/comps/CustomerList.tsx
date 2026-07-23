@@ -5,6 +5,7 @@ import { TaskGeneratorService } from '../services/TaskService';
 import { BUSINESS_TYPE_OPTIONS, calculateWeightedProgress, getCustomerDisplayName } from '../registries/CustomerRegistry';
 import SearchableMultiSelect from './SearchableMultiSelect';
 import { useNavigate } from 'react-router';
+import { authService } from '../services/authService';
 
 interface CustomerFilters {
     search: string;
@@ -13,18 +14,19 @@ interface CustomerFilters {
     isIncomeTaxActive: string;
     isVatActive: string;
     isFinalApproved: string;
-    status: 'all' | 'waiting' | 'active' | 'completed' | 'inactive';
+    status: 'all' | 'not_completed' | 'waiting' | 'active' | 'completed' | 'inactive';
 }
 
-const INITIAL_FILTERS: CustomerFilters = {
+// מוישי רואה כברירת מחדל רק סטטוסים שלא הושלמו; שאר המשתמשים רואים הכל ללא סינון ברירת מחדל.
+const getInitialFilters = (): CustomerFilters => ({
     search: '',
     businessType: [],
     isInsuranceActive: 'all',
     isIncomeTaxActive: 'all',
     isVatActive: 'all',
     isFinalApproved: 'all',
-    status: 'all',
-};
+    status: authService.getCurrentUser() === 'מוישי' ? 'not_completed' : 'all',
+});
 
 // עדיפות: בהמתנה גוברת על הכל (גם על לא-פעיל), אחריה לא-פעיל, ואז לפי אחוז ביצוע.
 function getStatusCategory(client: any, progressPercent: number): 'waiting' | 'inactive' | 'completed' | 'active' {
@@ -33,12 +35,35 @@ function getStatusCategory(client: any, progressPercent: number): 'waiting' | 'i
     return progressPercent === 100 ? 'completed' : 'active';
 }
 
+const STATUS_SORT_RANK: Record<string, number> = { waiting: 0, active: 1, inactive: 2, completed: 3 };
+
+type SortKey = 'name' | 'businessID' | 'businessType' | 'authorities' | 'status' | 'createdAt';
+type SortDir = 'asc' | 'desc';
+
+const SORTABLE_COLUMNS: { key: SortKey; label: string }[] = [
+    { key: 'name', label: 'שם לקוח' },
+    { key: 'businessID', label: 'מזהה עסק' },
+    { key: 'businessType', label: 'סוג עסק' },
+    { key: 'authorities', label: 'רשויות' },
+    { key: 'status', label: 'סטטוס' },
+    { key: 'createdAt', label: 'תאריך יצירה' },
+];
+
 const CustomerList: React.FC = () => {
     const navigate = useNavigate();
     const [customers, setCustomers] = useState<any[]>([]);
     const [loading, setLoading] = useState<boolean>(true);
-    const [filters, setFilters] = useState<CustomerFilters>(INITIAL_FILTERS);
+    const [filters, setFilters] = useState<CustomerFilters>(getInitialFilters);
     const [showFilters, setShowFilters] = useState(false);
+    const [sort, setSort] = useState<{ key: SortKey; dir: SortDir } | null>(null);
+
+    const toggleSort = useCallback((key: SortKey): void => {
+        setSort(prev => {
+            if (!prev || prev.key !== key) return { key, dir: 'asc' };
+            if (prev.dir === 'asc') return { key, dir: 'desc' };
+            return null;
+        });
+    }, []);
 
     const fetchCustomers = useCallback(async (): Promise<void> => {
         setLoading(true);
@@ -78,13 +103,44 @@ getCustomerDisplayName(client).includes(filters.search || '')
         const matchesTax = filters.isIncomeTaxActive === 'all' || String(!!client.isIncomeTaxActive) === filters.isIncomeTaxActive;
         const matchesVat = filters.isVatActive === 'all' || String(!!client.isVatActive) === filters.isVatActive;
         const matchesApproved = filters.isFinalApproved === 'all' || String(isApproved) === filters.isFinalApproved;
-        const matchesStatus = filters.status === 'all' || getStatusCategory(client, progressMap.get(client.id) ?? 0) === filters.status;
+        const statusCategory = getStatusCategory(client, progressMap.get(client.id) ?? 0);
+        const matchesStatus = filters.status === 'all'
+            || (filters.status === 'not_completed' ? statusCategory !== 'completed' : statusCategory === filters.status);
         return matchesSearch && matchesType && matchesInsurance && matchesTax && matchesVat && matchesApproved && matchesStatus;
     }), [customers, filters, finalizationMap, progressMap]);
 
+    const sortedCustomers = useMemo(() => {
+        if (!sort) return filteredCustomers;
+        const { key, dir } = sort;
+        const factor = dir === 'asc' ? 1 : -1;
+        const compare = (a: any, b: any): number => {
+            switch (key) {
+                case 'name':
+                    return getCustomerDisplayName(a).localeCompare(getCustomerDisplayName(b), 'he');
+                case 'businessID':
+                    return (a.businessDetails?.businessID || '').localeCompare(b.businessDetails?.businessID || '', 'he');
+                case 'businessType':
+                    return (a.businessDetails?.businessType || '').localeCompare(b.businessDetails?.businessType || '', 'he');
+                case 'authorities': {
+                    const countOf = (c: any): number => [c.isInsuranceActive, c.isIncomeTaxActive, c.isVatActive].filter(Boolean).length;
+                    return countOf(a) - countOf(b);
+                }
+                case 'status': {
+                    const rankOf = (c: any): number => STATUS_SORT_RANK[getStatusCategory(c, progressMap.get(c.id) ?? 0)];
+                    return rankOf(a) - rankOf(b);
+                }
+                case 'createdAt':
+                    return (a.createdAt || '').localeCompare(b.createdAt || '');
+                default:
+                    return 0;
+            }
+        };
+        return [...filteredCustomers].sort((a, b) => compare(a, b) * factor);
+    }, [filteredCustomers, sort, progressMap]);
+
     const exportToExcel = (): void => {
         const headers = ["שם לקוח", "מזהה עסק", "סוג עסק", "ביטוח לאומי", "מס הכנסה", "מע\"מ", "אישור סופי"];
-        const rows = filteredCustomers.map(client => [
+        const rows = sortedCustomers.map(client => [
             getCustomerDisplayName(client),
             client.businessDetails?.businessID || '',
             client.businessDetails?.businessType || '',
@@ -106,7 +162,8 @@ getCustomerDisplayName(client).includes(filters.search || '')
     };
 
     const resetFilters = (): void => {
-        setFilters(INITIAL_FILTERS);
+        setFilters(getInitialFilters());
+        setSort(null);
     };
 
     if (loading) {
@@ -199,6 +256,7 @@ getCustomerDisplayName(client).includes(filters.search || '')
                         </select>
                         <select className="input-style cursor-pointer" value={filters.status} onChange={(e) => setFilters({ ...filters, status: e.target.value as CustomerFilters['status'] })}>
                             <option value="all">סטטוס (הכל)</option>
+                            <option value="not_completed">לא הושלם</option>
                             <option value="waiting">בהמתנה</option>
                             <option value="active">בטיפול</option>
                             <option value="completed">הושלם</option>
@@ -207,7 +265,7 @@ getCustomerDisplayName(client).includes(filters.search || '')
                     </div>
                     </div>
                     <div className="mt-3 flex justify-between items-center">
-                        <span className="text-xs text-slate-500 font-medium">מציג {filteredCustomers.length} מתוך {customers.length} לקוחות</span>
+                        <span className="text-xs text-slate-500 font-medium">מציג {sortedCustomers.length} מתוך {customers.length} לקוחות</span>
                         <button onClick={resetFilters} className="cursor-pointer text-sm text-blue-600 hover:text-blue-800 font-bold transition">
                             ניקוי סינונים
                         </button>
@@ -219,16 +277,24 @@ getCustomerDisplayName(client).includes(filters.search || '')
                     <table className="w-full text-right border-collapse">
                         <thead className="bg-slate-50 border-b border-slate-200">
                             <tr>
-                                <th className="p-4 text-xs font-bold text-slate-600 uppercase tracking-wider text-center">שם לקוח</th>
-                                <th className="p-4 text-xs font-bold text-slate-600 uppercase tracking-wider text-center">מזהה עסק</th>
-                                <th className="p-4 text-xs font-bold text-slate-600 uppercase tracking-wider text-center">סוג עסק</th>
-                                <th className="p-4 text-xs font-bold text-slate-600 uppercase tracking-wider text-center">רשויות</th>
-                                <th className="p-4 text-xs font-bold text-slate-600 uppercase tracking-wider text-center">סטטוס</th>
-                                <th className="p-4 text-xs font-bold text-slate-600 uppercase tracking-wider text-center">תאריך יצירה</th>
+                                {SORTABLE_COLUMNS.map(col => (
+                                    <th key={col.key} className="p-4 text-xs font-bold text-slate-600 uppercase tracking-wider text-center">
+                                        <button
+                                            type="button"
+                                            onClick={() => toggleSort(col.key)}
+                                            className="cursor-pointer inline-flex items-center gap-1 hover:text-slate-900 transition"
+                                        >
+                                            <span>{col.label}</span>
+                                            <span className="text-[10px] w-3 inline-block">
+                                                {sort?.key === col.key ? (sort.dir === 'asc' ? '▲' : '▼') : ''}
+                                            </span>
+                                        </button>
+                                    </th>
+                                ))}
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
-                            {filteredCustomers.map((client: any) => {
+                            {sortedCustomers.map((client: any) => {
                                 const isApproved = finalizationMap.get(client.id) ?? false;
                                 const isInactive = client.isActive === false;
                                 return (
@@ -263,7 +329,7 @@ getCustomerDisplayName(client).includes(filters.search || '')
                             })}
                         </tbody>
                     </table>
-                    {filteredCustomers.length === 0 && (
+                    {sortedCustomers.length === 0 && (
                         <div className="p-12 text-center text-slate-400 italic">לא נמצאו לקוחות התואמים את הסינון.</div>
                     )}
                 </div>

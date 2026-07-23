@@ -20,6 +20,7 @@ import { branchesList } from '../constants/branches';
 import FilterableSelect from './FilterableSelect';
 import PriorityBadge from './PriorityBadge';
 import WhatsAppIcon from './WhatsAppIcon';
+import AuthorityToggleButton from './AuthorityToggleButton';
 
 
 
@@ -699,7 +700,7 @@ const CustomerCard: React.FC = () => {
                     <div className="space-y-6">
                         <Section title="סטטוס רשויות" icon="🛡️">
                             <div className="space-y-2">
-                                <ToggleRow label="ביטוח לאומי" active={editData.isInsuranceActive} isEditing={isEditing} category={null} field="isInsuranceActive" onChange={actions.updateField} />
+                                <AuthorityToggleButton label="ביטוח לאומי" active={!!editData.isInsuranceActive} disabled={!isEditing} onClick={() => actions.updateField(null, 'isInsuranceActive', !editData.isInsuranceActive)} fullWidth />
                                 {editData.isInsuranceActive && editData.insuranceDetails && (
                                     <div className="pr-4 border-r-2 border-blue-100 space-y-3 mt-2 mb-3">
                                         <EditableRow label="מקדמות ב״ל" value={editData.insuranceDetails?.insurancePrepayment} isEditing={isEditing} category="insuranceDetails" field="insurancePrepayment" onChange={actions.updateField} />
@@ -711,7 +712,7 @@ const CustomerCard: React.FC = () => {
                                     </div>
                                 )}
 
-                                <ToggleRow label="מס הכנסה" active={editData.isIncomeTaxActive} isEditing={isEditing} category={null} field="isIncomeTaxActive" onChange={actions.updateField} />
+                                <AuthorityToggleButton label="מס הכנסה" active={!!editData.isIncomeTaxActive} disabled={!isEditing} onClick={() => actions.updateField(null, 'isIncomeTaxActive', !editData.isIncomeTaxActive)} fullWidth />
                                 {editData.isIncomeTaxActive && (
                                     <div className="pr-4 border-r-2 border-emerald-100 space-y-3 mt-2 mb-3">
                                         <EditableRow label="מקדמות מס" value={editData.incomeTaxDetails?.incomeTaxPrepayment} isEditing={isEditing} category="incomeTaxDetails" field="incomeTaxPrepayment" onChange={actions.updateField} />
@@ -730,7 +731,7 @@ const CustomerCard: React.FC = () => {
 
                                 {isVatRelevant && (
                                     <>
-                                        <ToggleRow label="מע״מ" active={editData.isVatActive} isEditing={isEditing} category={null} field="isVatActive" onChange={actions.updateField} />
+                                        <AuthorityToggleButton label="מע״מ" active={!!editData.isVatActive} disabled={!isEditing} onClick={() => actions.updateField(null, 'isVatActive', !editData.isVatActive)} fullWidth />
                                         {editData.isVatActive && (
                                             <div className="pr-4 border-r-2 border-amber-100 space-y-3 mt-2 mb-3">
                                                 <div className="flex items-center gap-3">

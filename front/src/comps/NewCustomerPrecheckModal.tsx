@@ -16,6 +16,7 @@ import {
     type Customer,
 } from '../registries/CustomerRegistry';
 import FilterableSelect from './FilterableSelect';
+import AuthorityToggleButton from './AuthorityToggleButton';
 
 export interface NewCustomerPrecheckState {
     businessType: BusinessTypeKey;
@@ -160,18 +161,9 @@ const NewCustomerPrecheckModal: React.FC<NewCustomerPrecheckModalProps> = ({ onC
                     <div className="space-y-2">
                         <label className="text-sm font-bold text-slate-700">לטיפולנו / רשויות לטיפול</label>
                         <div className="flex flex-wrap gap-3">
-                            <label className="flex items-center gap-2 cursor-pointer">
-                                <input type="checkbox" className="w-5 h-5 cursor-pointer accent-blue-600" checked={isInsuranceActive} onChange={(e) => setIsInsuranceActive(e.target.checked)} />
-                                <span className="text-sm text-slate-600">ביטוח לאומי</span>
-                            </label>
-                            <label className="flex items-center gap-2 cursor-pointer">
-                                <input type="checkbox" className="w-5 h-5 cursor-pointer accent-blue-600" checked={isIncomeTaxActive} onChange={(e) => setIsIncomeTaxActive(e.target.checked)} />
-                                <span className="text-sm text-slate-600">מס הכנסה</span>
-                            </label>
-                            <label className="flex items-center gap-2 cursor-pointer">
-                                <input type="checkbox" className="w-5 h-5 cursor-pointer accent-blue-600" checked={isVatActive} onChange={(e) => setIsVatActive(e.target.checked)} />
-                                <span className="text-sm text-slate-600">מע״מ</span>
-                            </label>
+                            <AuthorityToggleButton label="ביטוח לאומי" active={isInsuranceActive} onClick={() => setIsInsuranceActive(v => !v)} />
+                            <AuthorityToggleButton label="מס הכנסה" active={isIncomeTaxActive} onClick={() => setIsIncomeTaxActive(v => !v)} />
+                            <AuthorityToggleButton label="מע״מ" active={isVatActive} onClick={() => setIsVatActive(v => !v)} />
                         </div>
                     </div>
 

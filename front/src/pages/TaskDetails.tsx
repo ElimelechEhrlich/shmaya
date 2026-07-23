@@ -81,13 +81,10 @@ export default function TaskDetails(): React.ReactElement {
         );
         setTask({ ...task, status: cascaded.status, subTasks: cascaded.subTasks as any });
 
+        // updateSubtaskStatus מרכז בתוכו כבר את חישוב ה-cascade ל-parent_tasks.status בשרת —
+        // cascaded לעיל משמש רק לעדכון האופטימי של ה-state המקומי, לא ל-DB.
         const { error } = await PersistenceAdapter.updateSubtaskStatus(task.id, subtaskId, newCompleted);
         if (error) { alert(`שגיאה בסימון תת-המשימה: ${translateError(error.message)}`); console.error(error.message); loadTask(); return; }
-
-        if (cascaded.status !== task.status) {
-            const { error: pe } = await PersistenceAdapter.updateTaskStatus(task.id, cascaded.status);
-            if (pe) { alert(`שגיאה בעדכון סטטוס המשימה: ${translateError(pe.message)}`); console.error(pe.message); loadTask(); }
-        }
     }, [task, loadTask]);
 
     const handlePriorityChange = useCallback(async (subtaskId: string, priority: string) => {

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router';
 import { PersistenceAdapter } from '../services/PersistenceAdapter';
-import type { PersistedTask } from '../services/PersistenceAdapter';
+import type { PersistedTask, MoisheOpenTaskRow } from '../services/PersistenceAdapter';
 import { PRIORITY_STYLES } from '../registries/CustomerRegistry';
 import { OfficeTaskModal, type OfficeSubtaskEdit } from '../comps/OfficeTaskModal';
 import { useModal } from '../contexts/ModalContext';
@@ -16,11 +16,13 @@ export default function Dashboard() {
     const modal = useModal();
     const navigate = useNavigate();
     const isShmulik = authService.getCurrentUser() === 'שמוליק';
+    const isMoishe = authService.getCurrentUser() === 'מוישי';
     const [activeCustomers, setActiveCustomers] = useState<number | null>(null);
     const [pendingTasks, setPendingTasks] = useState<number | null>(null);
     const [completedTasks, setCompletedTasks] = useState<number | null>(null);
     const [officeTasks, setOfficeTasks] = useState<PersistedTask[] | null>(null);
     const [waitingCustomers, setWaitingCustomers] = useState<{ id: string; name: string }[] | null>(null);
+    const [myOpenTasks, setMyOpenTasks] = useState<MoisheOpenTaskRow[] | null>(null);
     const [showOpenOnly, setShowOpenOnly] = useState(true);
     const [showCreateOffice, setShowCreateOffice] = useState(false);
     const [editingSubtask, setEditingSubtask] = useState<OfficeSubtaskEdit | null>(null);
@@ -50,7 +52,13 @@ export default function Dashboard() {
                 else setWaitingCustomers(data ?? []);
             });
         }
-    }, [isShmulik]);
+        if (isMoishe) {
+            PersistenceAdapter.fetchMoisheOpenTasks().then(({ data, error }) => {
+                if (error) console.error('[Dashboard] fetchMoisheOpenTasks:', error);
+                else setMyOpenTasks(data ?? []);
+            });
+        }
+    }, [isShmulik, isMoishe]);
 
     const handleSubtaskToggle = useCallback(async (taskId: string, subtaskId: string, completed: boolean) => {
         setOfficeTasks(prev => prev?.map(task =>
@@ -143,6 +151,47 @@ export default function Dashboard() {
                                     className="cursor-pointer flex items-center px-6 py-3 bg-orange-50/40 hover:bg-orange-50 transition-colors"
                                 >
                                     <span className="text-sm font-bold text-orange-900">{c.name}</span>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {/* ─── משימות לטיפולי (מוישי בלבד) ─── */}
+            {isMoishe && (
+                <div className="mt-8 bg-white rounded-2xl border border-blue-200 shadow-sm">
+                    <div className="px-6 py-4 border-b border-blue-100 bg-blue-50/60 rounded-t-2xl">
+                        <h2 className="text-lg font-bold text-blue-900">משימות לטיפולי</h2>
+                    </div>
+                    {myOpenTasks === null ? (
+                        <div className="p-6">
+                            <div className="h-5 w-48 bg-slate-100 rounded animate-pulse" />
+                        </div>
+                    ) : myOpenTasks.length === 0 ? (
+                        <p className="p-6 text-slate-400 text-sm italic">אין משימות פתוחות לטיפולך כרגע</p>
+                    ) : (
+                        <div className="divide-y divide-blue-100">
+                            {myOpenTasks.map(t => (
+                                <div
+                                    key={t.subtaskId}
+                                    className="flex items-center justify-between gap-3 px-6 py-3 bg-blue-50/30 hover:bg-blue-50 transition-colors"
+                                >
+                                    <div
+                                        onClick={() => navigate(`/admin/customers/${t.customerId}`)}
+                                        className="cursor-pointer flex-1 min-w-0"
+                                    >
+                                        <span className="text-sm font-bold text-blue-900">{t.customerName}</span>
+                                        <span className="text-xs text-slate-400 mr-2 truncate">{t.title}</span>
+                                    </div>
+                                    {t.kind === 'ltd_extra_case' && t.ltdPrefill && (
+                                        <button
+                                            onClick={() => navigate('/admin/customers/new', { state: t.ltdPrefill })}
+                                            className="cursor-pointer shrink-0 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold py-1.5 px-3 rounded-lg transition"
+                                        >
+                                            מעבר להקמת תיק לקוח
+                                        </button>
+                                    )}
                                 </div>
                             ))}
                         </div>
