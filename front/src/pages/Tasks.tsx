@@ -310,7 +310,7 @@ export default function Tasks(): React.ReactElement {
                         />
                     </div>
                     <span className="text-xs font-bold text-slate-500 whitespace-nowrap">
-                        {overallStats.percent}% · {overallStats.completed} מתוך {overallStats.total} הושלמו
+                        {overallStats.percent}% · {overallStats.completed} מתוך {overallStats.total} משימות עבור לקוחות בטיפול הושלמו
                     </span>
                 </div>
                 {/* Filter bar */}
