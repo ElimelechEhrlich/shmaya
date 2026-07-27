@@ -104,8 +104,19 @@ export default function Tasks(): React.ReactElement {
     }, [rows]);
 
     const overallStats = useMemo(() => {
-        const total = rows.length;
-        const completed = rows.filter(r => r.completed).length;
+        const byClient = new Map<string, SubtaskViewRow[]>();
+        for (const r of rows) {
+            const key = r.clientId ?? OFFICE_CUSTOMER_ID;
+            if (!byClient.has(key)) byClient.set(key, []);
+            byClient.get(key)!.push(r);
+        }
+        let total = 0;
+        let completed = 0;
+        for (const clientRows of byClient.values()) {
+            if (clientRows.every(r => r.completed)) continue;
+            total += clientRows.length;
+            completed += clientRows.filter(r => r.completed).length;
+        }
         const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
         return { total, completed, percent };
     }, [rows]);
