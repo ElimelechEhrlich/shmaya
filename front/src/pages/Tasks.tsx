@@ -305,14 +305,14 @@ export default function Tasks(): React.ReactElement {
                 <div className="flex-col items-center gap-3 mb-3 px-1">
                     <div className="flex-1 h-1.5 bg-slate-200 rounded-full overflow-hidden">
                         <div
-                            className="h-full {overallStats.total === 0? bg-green-500: bg-blue-500} rounded-full transition-all"
+                            className={`h-full rounded-full transition-all ${overallStats.total === 0 ? 'bg-green-500' : 'bg-blue-500'}`}
                             style={{ width: `${overallStats.percent}%` }}
                         />
                     </div>
-                    <span className="{overallStats.total === 0? text-s: text-xs} font-bold text-slate-500 whitespace-nowrap">
+                    <span className={`font-bold text-slate-500 whitespace-nowrap ${overallStats.total === 0? 'text-s': 'text-xs'}`}>
                         {overallStats.total === 0? `${overallStats.percent}% · הכל הושלם!`
                         :
-                        `${overallStats.percent}% · ${overallStats.completed} מתוך ${overallStats.total} משימות עבור לקוחות בטיפול הושלמו`
+                        `${overallStats.percent}% · ${overallStats.completed} מתוך ${overallStats.total} משימות עבור לקוחות בטיפול הושלמו`}
                     </span>
                 </div>
                 {/* Filter bar */}
