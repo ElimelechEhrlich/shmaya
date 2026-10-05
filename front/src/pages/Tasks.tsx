@@ -305,6 +305,7 @@ export default function Tasks(): React.ReactElement {
                 </div>
 
                 {/* Overall progress */}
+                {!loadError && (
                 <div className="flex-col items-center gap-3 mb-3 px-1">
                     <div className="flex-1 h-1.5 bg-slate-200 rounded-full overflow-hidden">
                         <div
@@ -318,6 +319,7 @@ export default function Tasks(): React.ReactElement {
                         `${overallStats.percent}% · ${overallStats.completed} מתוך ${overallStats.total} משימות עבור לקוחות בטיפול הושלמו`}
                     </span>
                 </div>
+                )}
                 {/* Filter bar */}
                 <div className="card-base p-4 mb-4">
                     <button
