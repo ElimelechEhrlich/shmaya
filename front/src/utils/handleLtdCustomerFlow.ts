@@ -10,7 +10,7 @@ export async function handleLtdCustomerFlow(
         email: string;
     },
     modal: any,
-    navigate: (path: string) => void
+    navigate: (path: string, options?: { state?: unknown }) => void
 ): Promise<void> {
     const { data: allCustomers } = await PersistenceAdapter.fetchAllCustomers();
     const existingMatch = allCustomers?.find((c: any) =>

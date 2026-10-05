@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars -- השירות כבוי בכוונה (ראו CLAUDE.md); הפרמטרים נשמרים להפעלה מחדש */
 // // src/services/LogService.ts
 // //
 // // Replaces the broken src/services/logService.js (which POSTed to the literal

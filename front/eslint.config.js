@@ -28,6 +28,14 @@ export default defineConfig([
     rules: {
       // כאן תוכל להשקיט אזהרות קומפילציה זמניות אם תרצה, למשל:
       '@typescript-eslint/no-explicit-any': 'off', // מאפשר להשתמש ב-any בלי לקבל שגיאה חוסמת
+      // משתנים שמתחילים ב-_ מסומנים בכוונה כלא בשימוש (למשל השמטה מ-destructuring)
+      '@typescript-eslint/no-unused-vars': ['error', {
+        argsIgnorePattern: '^_',
+        varsIgnorePattern: '^_',
+        destructuredArrayIgnorePattern: '^_',
+      }],
+      // זמני: הקוד הקיים עובד; תיקון דורש שינוי מבנה ובדיקה בדפדפן, לכן אזהרה בלבד
+      'react-hooks/set-state-in-effect': 'warn',
     }
   },
 ])

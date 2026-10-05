@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import { PersistenceAdapter } from '../services/PersistenceAdapter';
-import { authService } from '../services/authService';
 
 interface LogEntry {
   id: string;

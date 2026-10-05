@@ -14,9 +14,7 @@ export const TaskDetailsModal: React.FC<TaskDetailsModalProps> = ({ isOpen, onCl
     const customer = task.customer || task; 
     const business = customer?.businessDetails || {};
     const incomeTax = customer?.incomeTaxDetails || {};
-    const vat = customer?.vatDetails || {};
     const insurance = customer?.insuranceDetails || {};
-    const payment = customer?.paymentDetails || {};
 
     return (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 p-4" dir="rtl">
