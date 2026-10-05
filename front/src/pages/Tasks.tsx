@@ -56,6 +56,7 @@ export default function Tasks(): React.ReactElement {
     const [rows, setRows] = useState<SubtaskViewRow[]>([]);
     const [customers, setCustomers] = useState<CustomerOption[]>([]);
     const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState(false);
     const [editingTask, setEditingTask] = useState<SubtaskViewRow | null>(null);
     const [showCreate, setShowCreate] = useState(false);
     const [openAccordions, setOpenAccordions] = useState<Set<string>>(new Set());
@@ -65,12 +66,14 @@ export default function Tasks(): React.ReactElement {
     // ── Data loading ──────────────────────────────────────────────────
     const load = useCallback(async () => {
         setLoading(true);
+        setLoadError(false);
         const [subtasksResult, customersResult] = await Promise.all([
             PersistenceAdapter.fetchAllSubtasksView(),
             PersistenceAdapter.fetchAllCustomers(),
         ]);
         if (subtasksResult.error) {
             alert(`שגיאה בטעינת רשימת המשימות: ${translateError(subtasksResult.error.message)}`);
+            setLoadError(true);
         } else if (subtasksResult.data) {
             const uniqueRows = subtasksResult.data.filter((row, index, self) =>
                 index === self.findIndex(r => r.subtaskId === row.subtaskId)
@@ -399,6 +402,18 @@ export default function Tasks(): React.ReactElement {
                         {[1, 2, 3, 4].map(i => (
                             <div key={i} className="card-base h-16 animate-pulse bg-slate-100 rounded-2xl" />
                         ))}
+                    </div>
+                ) : loadError ? (
+                    <div className="card-base p-8 text-center">
+                        <div className="text-4xl mb-3">⚠️</div>
+                        <h2 className="text-xl font-black text-slate-900 mb-2">לא הצלחנו לטעון את רשימת המשימות</h2>
+                        <p className="text-sm text-slate-500 mb-6">ייתכן שיש בעיית חיבור לאינטרנט או לשרת. הנתונים לא נמחקו — נסה שוב בעוד רגע.</p>
+                        <button
+                            onClick={load}
+                            className="cursor-pointer bg-slate-800 hover:bg-slate-700 text-white font-bold py-2.5 px-6 rounded-xl shadow-md transition"
+                        >
+                            נסה שוב
+                        </button>
                     </div>
                 ) : groupedByClient.length === 0 ? (
                     <div className="card-base p-12 text-center text-slate-400 italic">

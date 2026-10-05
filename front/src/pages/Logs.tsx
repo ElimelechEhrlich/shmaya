@@ -14,9 +14,14 @@ interface LogEntry {
 export default function Logs(): React.ReactElement {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
 
   useEffect(() => {
-    PersistenceAdapter.fetchLogs().then(({ data }) => {
+    PersistenceAdapter.fetchLogs().then(({ data, error }) => {
+      if (error) {
+        console.error('Error fetching logs:', error);
+        setLoadError(true);
+      }
       setLogs(data ?? []);
       setLoading(false);
     });
@@ -37,6 +42,18 @@ export default function Logs(): React.ReactElement {
       {loading ? (
         <div className="flex justify-center py-20">
           <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
+        </div>
+      ) : loadError ? (
+        <div className="card-base p-8 text-center">
+          <div className="text-4xl mb-3">⚠️</div>
+          <h2 className="text-xl font-black text-slate-900 mb-2">לא הצלחנו לטעון את יומן הפעולות</h2>
+          <p className="text-sm text-slate-500 mb-6">ייתכן שיש בעיית חיבור לאינטרנט או לשרת. הנתונים לא נמחקו — נסה שוב בעוד רגע.</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="cursor-pointer bg-slate-800 hover:bg-slate-700 text-white font-bold py-2.5 px-6 rounded-xl shadow-md transition"
+          >
+            נסה שוב
+          </button>
         </div>
       ) : logs.length === 0 ? (
         <p className="text-slate-400 text-center py-20">אין פעולות מתועדות עדיין</p>
