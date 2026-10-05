@@ -79,6 +79,7 @@ export function ModalProvider({ children }: { children: React.ReactNode }): Reac
     );
 }
 
+// eslint-disable-next-line react-refresh/only-export-components -- hook צמוד ל-Provider
 export function useModal(): ModalContextValue {
     const ctx = useContext(ModalContext);
     if (!ctx) throw new Error('useModal must be used inside ModalProvider');

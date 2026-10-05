@@ -110,7 +110,6 @@ export interface DbResult<T> {
 // ──────────────────────────────────────────────────────────────────
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const isUuid = (v: unknown): boolean => typeof v === 'string' && UUID_RE.test(v);
 const TASK_ORDER = AUTO_TASKS_CONFIG.map((t: any) => t.id);
 function getDisplayName(customer: any): string {
     if (customer?.business_type === 'חברה בע"מ' && customer?.business_name) {

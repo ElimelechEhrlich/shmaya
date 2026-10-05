@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test } from '@playwright/test';
 
 const mockCustomers = [
     { fullName: 'אלימלך ארליך', email: 'ee525566@gmail.com', businessName: 'אלימלך ארליך פיתוח', businessType: 'מורשה', isInsurance: true, isIncomeTax: true, isVat: true, employsWorkers: 'yes', needsDeductions: true, setupFee: '1000', monthlyFee: '550', comments: 'הלקוח חדש, לדאוג שיקבל שירות טוב', directDebit: 'כן' },

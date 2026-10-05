@@ -295,7 +295,6 @@ getCustomerDisplayName(client).includes(filters.search || '')
                         </thead>
                         <tbody className="divide-y divide-slate-100">
                             {sortedCustomers.map((client: any) => {
-                                const isApproved = finalizationMap.get(client.id) ?? false;
                                 const isInactive = client.isActive === false;
                                 return (
                                     <tr

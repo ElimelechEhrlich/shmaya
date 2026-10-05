@@ -18,7 +18,6 @@ import {
     PersistenceAdapter,
     type CustomerWithTasks,
     type PersistedTask,
-    type PersistedSubTask,
     type SubTaskPriority,
 } from '../services/PersistenceAdapter';
 import { LogService } from '../services/LogService';
@@ -345,7 +344,7 @@ if (!wasLtd && isNowLtd && editData) {
     authService.getCurrentUser() ?? 'unknown',
     completed ? 'ביצוע משימה' : 'ביטול ביצוע משימה',
     'task', taskId,
-    `${targetSub.title} — ${customer?.customerDetails?.fullName ?? ''}`
+    `${targetSub?.title ?? ""} — ${customer?.customerDetails?.fullName ?? ''}`
 );
 
             await LogService.recordTaskChange(

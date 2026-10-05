@@ -1,6 +1,6 @@
 // src/comps/Header.tsx
 import React, { useState } from 'react';
-import { useLocation, useParams, useNavigate } from "react-router";
+import { useLocation, useNavigate } from "react-router";
 import { authService } from '../services/authService';
 
 interface HeaderProps { onMenuClick?: () => void; }
@@ -11,9 +11,6 @@ export default function Header({ onMenuClick }: HeaderProps):React.ReactElement 
   
   // ניהול הסטייט של החלונית הנפתחת
   const [isDropdownOpen, setIsDropdownOpen] = useState<boolean>(false);
-  
-  // הגדרת טיפוס מפורש לפרמטרים של ה-URL כדי לוודא ש-id מוכר כמחרוזת
-  const { id } = useParams<{ id: string }>();
   
   // משיכת השם מה-localStorage (ברירת מחדל: "אורח")
   const userName: string = localStorage.getItem('user_name') || 'אורח';
