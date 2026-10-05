@@ -53,6 +53,7 @@ const CustomerList: React.FC = () => {
     const navigate = useNavigate();
     const [customers, setCustomers] = useState<any[]>([]);
     const [loading, setLoading] = useState<boolean>(true);
+    const [loadError, setLoadError] = useState<boolean>(false);
     const [filters, setFilters] = useState<CustomerFilters>(getInitialFilters);
     const [showFilters, setShowFilters] = useState(false);
     const [sort, setSort] = useState<{ key: SortKey; dir: SortDir } | null>(null);
@@ -67,9 +68,11 @@ const CustomerList: React.FC = () => {
 
     const fetchCustomers = useCallback(async (): Promise<void> => {
         setLoading(true);
+        setLoadError(false);
         const { data, error } = await PersistenceAdapter.fetchAllCustomersWithTasks();
         if (error) {
             console.error('Error fetching customers:', error);
+            setLoadError(true);
         } else {
             setCustomers(data || []);
         }
@@ -186,6 +189,27 @@ getCustomerDisplayName(client).includes(filters.search || '')
                                 ))}
                             </tbody>
                         </table>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    // כשל בטעינה — מוצג במקום הטבלה, כדי שלא ייראה כאילו אין לקוחות במערכת
+    if (loadError) {
+        return (
+            <div className="p-4 md:p-6 min-h-screen" dir="rtl">
+                <div className="max-w-7xl mx-auto">
+                    <div className="card-base p-8 text-center">
+                        <div className="text-4xl mb-3">⚠️</div>
+                        <h2 className="text-xl font-black text-slate-900 mb-2">לא הצלחנו לטעון את רשימת הלקוחות</h2>
+                        <p className="text-sm text-slate-500 mb-6">ייתכן שיש בעיית חיבור לאינטרנט או לשרת. הנתונים לא נמחקו — נסה שוב בעוד רגע.</p>
+                        <button
+                            onClick={fetchCustomers}
+                            className="cursor-pointer bg-slate-800 hover:bg-slate-700 text-white font-bold py-2.5 px-6 rounded-xl shadow-md transition"
+                        >
+                            נסה שוב
+                        </button>
                     </div>
                 </div>
             </div>
