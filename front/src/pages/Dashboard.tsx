@@ -6,6 +6,7 @@ import { PRIORITY_STYLES } from '../registries/CustomerRegistry';
 import { OfficeTaskModal, type OfficeSubtaskEdit } from '../comps/OfficeTaskModal';
 import { useModal } from '../contexts/ModalContext';
 import { authService } from '../services/authService';
+import ContrealTasksSection from '../comps/ContrealTasksSection';
 
 interface OfficeRow extends OfficeSubtaskEdit {
     taskId: string;
@@ -198,6 +199,9 @@ export default function Dashboard() {
                     )}
                 </div>
             )}
+
+            {/* ─── משימות מקונטריל ─── */}
+            <ContrealTasksSection />
 
             {/* ─── Office tasks ─── */}
             <div className="mt-8 bg-white rounded-2xl border border-slate-200 shadow-sm">

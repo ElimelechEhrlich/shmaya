@@ -90,6 +90,38 @@ export interface MoisheOpenTaskRow {
   ltdPrefill?: { fullName: string; identityId: string; phoneNumber: string; address: string; email: string };
 }
 
+/** משימת קונטריל כפי שמוצגת בדשבורד: תת-משימה + נתוני ה-link (contreal_task_link, קריאה בלבד). */
+export interface ContrealTaskRow {
+  subtaskId: string;
+  taskId: string;               // parent_tasks.id של האב CONTREAL — נדרש ל-updateSubtaskStatus
+  title: string;
+  completed: boolean;
+  assignedTo: string[];          // משתמשי שמעיה ממופים
+  assignees: { id: number; name: string }[]; // השיוך המקורי בקונטריל
+  deadlineDate: string | null;   // "YYYY-MM-DD" — תאריך בלבד, ר' formatContrealDeadline
+  statusName: string | null;
+  priorityName: string | null;
+  projectName: string | null;
+  clientName: string | null;
+  url: string | null;
+  pushError: string | null;
+}
+
+export type ContrealConnectionStatus = 'none' | 'pending' | 'connected' | 'expired';
+
+export interface ContrealSyncResult {
+  ok: boolean;
+  error?: string;
+  created?: number;
+  completedFromContreal?: number;
+  reopenedFromContreal?: number;
+  pushed?: number;
+  pushFailed?: number;
+  deleted?: number;
+  unmappedAssignees?: string[];
+  warnings?: string[];
+}
+
 export interface PersistedLog {
   id: string;
   createdAt: string;
@@ -331,16 +363,84 @@ export const PersistenceAdapter = {
   },
 
   async fetchOfficeTasks(): Promise<DbResult<PersistedTask[]>> {
+    // משימות קונטריל (אב CONTREAL) מוצגות באזור נפרד לפי שיוך לעובד, לא ב"משימות משרד".
+    // .or ולא neq: neq ב-PostgREST מסנן גם registry_key = NULL, וזה היה מעלים משימות משרד רגילות.
     const { data, error } = await supabase
       .from('parent_tasks')
       .select('*, sub_tasks(*)')
       .eq('customer_id', OFFICE_CUSTOMER_ID)
+      .or('registry_key.is.null,registry_key.neq.CONTREAL')
       .order('created_at', { ascending: true });
     if (!data) return { data: null, error };
     return {
       data: data.map(mapTaskRow),
       error,
     };
+  },
+
+  // ── Contreal sync (ר' supabase/functions/contreal-sync) ──
+
+  /** משימות קונטריל. עם שם משתמש: רק המשויכות אליו. null: כולן (מנהל). */
+  async fetchContrealTasks(user: string | null): Promise<DbResult<ContrealTaskRow[]>> {
+    let query = supabase
+      .from('contreal_task_link')
+      .select('subtask_id, assigned_to, contreal_assignees, deadline_date, status_name, priority_name, project_name, client_name, url, push_error, sub_tasks(id, title, is_completed, parent_task_id)');
+    if (user) query = query.contains('assigned_to', [user]);
+    const { data, error } = await query;
+    if (error) return { data: null, error };
+    const rows: ContrealTaskRow[] = (data ?? [])
+      .filter((r: any) => r.sub_tasks)
+      .map((r: any) => ({
+        subtaskId: r.subtask_id,
+        taskId: r.sub_tasks.parent_task_id,
+        title: r.sub_tasks.title,
+        completed: !!r.sub_tasks.is_completed,
+        assignedTo: r.assigned_to ?? [],
+        assignees: r.contreal_assignees ?? [],
+        deadlineDate: r.deadline_date ?? null,
+        statusName: r.status_name ?? null,
+        priorityName: r.priority_name ?? null,
+        projectName: r.project_name ?? null,
+        clientName: r.client_name ?? null,
+        url: r.url ?? null,
+        pushError: r.push_error ?? null,
+      }));
+    // תאריך יעד קרוב קודם; בלי תאריך — בסוף
+    rows.sort((a, b) =>
+      (a.deadlineDate ?? '9999-99-99').localeCompare(b.deadlineDate ?? '9999-99-99') || a.title.localeCompare(b.title, 'he'));
+    return { data: rows, error: null };
+  },
+
+  async invokeContreal<T>(body: Record<string, unknown>): Promise<DbResult<T>> {
+    const { data, error } = await supabase.functions.invoke('contreal-sync', { body });
+    if (error) return { data: null, error: { message: error.message } };
+    return { data: data as T, error: null };
+  },
+
+  fetchContrealStatus(): Promise<DbResult<{ ok: boolean; status: ContrealConnectionStatus; lastSyncedAt: string | null }>> {
+    return this.invokeContreal({ action: 'status' });
+  },
+
+  syncContreal(): Promise<DbResult<ContrealSyncResult>> {
+    return this.invokeContreal({ action: 'sync' });
+  },
+
+  /** דוחף לקונטריל את is_completed הנוכחי של תת-המשימה (הפונקציה קוראת אותו מה-DB). */
+  pushContrealStatus(subtaskId: string): Promise<DbResult<{ ok: boolean; error?: string; skipped?: string }>> {
+    return this.invokeContreal({ action: 'push_status', subtaskId });
+  },
+
+  /**
+   * כתובת התחברות לקונטריל (נתיב /start של ה-Edge Function). הקוד הסודי מוקלד ע"י המנהל
+   * ולא נשמר באתר; בלעדיו הפונקציה מסרבת — כך אף אחד אחר לא יכול לחבר חשבון קונטריל משלו.
+   */
+  contrealConnectUrl(adminKey: string): string {
+    const base = import.meta.env.VITE_SUPABASE_URL;
+    return `${base}/functions/v1/contreal-sync/start?key=${encodeURIComponent(adminKey)}`;
+  },
+
+  fetchContrealTaskDetails(subtaskId: string): Promise<DbResult<{ ok: boolean; error?: string; task?: Record<string, unknown> }>> {
+    return this.invokeContreal({ action: 'task_details', subtaskId });
   },
 
   async fetchCustomerWithTasks(id: string): Promise<DbResult<CustomerWithTasks>> {
