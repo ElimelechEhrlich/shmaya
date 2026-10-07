@@ -97,7 +97,7 @@ export interface ContrealTaskRow {
   title: string;
   completed: boolean;
   assignedTo: string[];          // משתמשי שמעיה ממופים
-  assignees: { id: number; name: string }[]; // השיוך המקורי בקונטריל
+  assignees: { id: number; name: string; shmayaUser: string | null }[]; // השיוך המקורי בקונטריל + המשתמש הממופה בשמעיה
   deadlineDate: string | null;   // "YYYY-MM-DD" — תאריך בלבד, ר' formatContrealDeadline
   statusName: string | null;
   priorityName: string | null;
@@ -119,6 +119,7 @@ export interface ContrealSyncResult {
   pushFailed?: number;
   deleted?: number;
   unmappedAssignees?: string[];
+  autoMapped?: string[];
   warnings?: string[];
 }
 
@@ -396,7 +397,7 @@ export const PersistenceAdapter = {
         title: r.sub_tasks.title,
         completed: !!r.sub_tasks.is_completed,
         assignedTo: r.assigned_to ?? [],
-        assignees: r.contreal_assignees ?? [],
+        assignees: (r.contreal_assignees ?? []).map((a: any) => ({ id: a.id, name: a.name, shmayaUser: a.shmaya_user ?? null })),
         deadlineDate: r.deadline_date ?? null,
         statusName: r.status_name ?? null,
         priorityName: r.priority_name ?? null,

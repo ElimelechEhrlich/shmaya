@@ -294,6 +294,22 @@ function isExcludedTask(t: any): boolean {
 }
 const SYNC_LOCK_MS = 120_000;
 
+// משתמשי שמעיה — חייב להיות זהה ל-ALLOWED_USERS ב-src/services/authService.ts.
+// (ערכי sub_tasks.updated_by מוגבלים לאותם שמות ב-DB.)
+const SHMAYA_USERS = ["מוישי", "יוחנן", "שמוליק"];
+
+/**
+ * שיוך אוטומטי של עובד קונטריל למשתמש שמעיה: השם בקונטריל זהה לשם בשמעיה, או שהמילה
+ * הראשונה שלו זהה ("מוישי שמעיה חשבונאות…" → מוישי). רק כשיש מועמד אחד בדיוק. כתיב שונה
+ * ("מושי") לא מותאם — נשאר לשיוך ידני ב-contreal_user_map.
+ */
+function matchShmayaUser(contrealName: string): string | null {
+  const name = contrealName.replace(/\s+/g, " ").trim();
+  const first = name.split(" ")[0];
+  const candidates = SHMAYA_USERS.filter((u) => u === name || u === first);
+  return candidates.length === 1 ? candidates[0] : null;
+}
+
 async function handleAction(req: Request): Promise<Response> {
   let body: { action?: string; subtaskId?: string; source?: string } = {};
   try { body = await req.json(); } catch { /* empty body */ }
@@ -389,8 +405,11 @@ function isTaskCompleted(t: any): boolean {
 }
 
 function linkFieldsFromTask(t: any, userMap: Map<number, string | null>) {
-  const assignees: { id: number; name: string }[] = (t.assignees ?? []).map((a: any) => ({ id: a.id, name: a.name }));
-  const assignedTo = [...new Set(assignees.map((a) => userMap.get(a.id)).filter((n): n is string => !!n))];
+  // shmaya_user לכל משויך: הדפדפן לא יכול לקרוא את contreal_user_map (RLS), ובזכותו הדשבורד
+  // יודע איזו קבוצת עובד היא של המשתמש המחובר לשמעיה (ומציג אותה ראשונה).
+  const assignees: { id: number; name: string; shmaya_user: string | null }[] = (t.assignees ?? [])
+    .map((a: any) => ({ id: a.id, name: a.name, shmaya_user: userMap.get(a.id) ?? null }));
+  const assignedTo = [...new Set(assignees.map((a) => a.shmaya_user).filter((n): n is string => !!n))];
   return {
     assigned_to: assignedTo,
     contreal_assignees: assignees,
@@ -413,6 +432,43 @@ async function pushToContreal(mcp: McpSession, contrealTaskId: number, completed
   } catch (err) {
     return { ok: false, error: String(err instanceof Error ? err.message : err).slice(0, 300) };
   }
+}
+
+/**
+ * מי סימן. קונטריל רושם כל שינוי בשם המשתמש של החיבור (חיבור אחד, של המנהל), ואין דרך לבצע
+ * פעולה בשם חבר צוות אחר. לכן, כשמי שסימן בשמעיה (sub_tasks.updated_by) אינו המשתמש של
+ * החיבור, מוסיפים על המשימה בקונטריל תגובה עם שמו — כך רואים שם מי באמת סימן.
+ * best-effort: כישלון בתגובה לא מבטל את עדכון הסטטוס.
+ */
+interface Annotator { (contrealTaskId: number, completed: boolean, actor: string | null): Promise<void> }
+
+function makeAnnotator(mcp: McpSession, warnings?: string[]): Annotator {
+  let connectedUser: Promise<string | null> | null = null;
+  // משתמש שמעיה של החיבור: get_me → contreal_user_map.shmaya_user (נשאל פעם אחת לכל בקשה)
+  const resolveConnectedUser = async (): Promise<string | null> => {
+    try {
+      const me = await mcp.call("get_me", {});
+      const id = me?.user?.id;
+      if (!id) return null;
+      const { data } = await db.from("contreal_user_map").select("shmaya_user").eq("contreal_user_id", id).maybeSingle();
+      return data?.shmaya_user ?? null;
+    } catch {
+      return null;
+    }
+  };
+  return async (contrealTaskId, completed, actor) => {
+    if (!actor) return;
+    connectedUser ??= resolveConnectedUser();
+    if ((await connectedUser) === actor) return; // השינוי כבר רשום בקונטריל בשמו
+    const content = completed ? `✓ סומן כבוצע בשמעיה ע״י ${actor}` : `↺ סימון הביצוע בוטל בשמעיה ע״י ${actor}`;
+    try {
+      await mcp.call("add_task_comment", { task_id: contrealTaskId, content });
+    } catch (err) {
+      const msg = `תגובת "סומן ע״י ${actor}" למשימה ${contrealTaskId} לא נוספה: ${String(err instanceof Error ? err.message : err).slice(0, 120)}`;
+      console.error("[contreal-sync]", msg);
+      warnings?.push(msg);
+    }
+  };
 }
 
 async function ensureContrealParent(): Promise<string> {
@@ -469,6 +525,7 @@ async function runSync() {
     created: 0, completedFromContreal: 0, reopenedFromContreal: 0, excluded: 0,
     pushed: 0, pushFailed: 0, deleted: 0,
     unmappedAssignees: [] as string[],
+    autoMapped: [] as string[],
     warnings: [] as string[],
   };
 
@@ -476,6 +533,7 @@ async function runSync() {
   try {
     mcp = await openMcp(token);
     const statusIds = await loadStatuses(mcp);
+    const annotate = makeAnnotator(mcp, result.warnings);
     const open = (await fetchAllOpenTasks(mcp)).filter((t) => !isExcludedTask(t));
     const parentId = await ensureContrealParent();
 
@@ -491,11 +549,35 @@ async function runSync() {
     }
     const { data: mapRows, error: mapErr } = await db.from("contreal_user_map").select("contreal_user_id, contreal_name, shmaya_user");
     if (mapErr) throw mapErr;
+
+    // שיוך אוטומטי לעובדים שעוד לא שויכו. לא דורס שיוך קיים (ידני או אוטומטי), ולא משייך
+    // משתמש שמעיה שכבר משויך לעובד קונטריל אחר, או ששני עובדי קונטריל חדשים מתאימים לו.
+    const taken = new Set((mapRows ?? []).map((r: any) => r.shmaya_user).filter(Boolean));
+    const proposals = new Map<string, any[]>();
+    for (const r of mapRows ?? []) {
+      if (r.shmaya_user) continue;
+      const match = matchShmayaUser(String(r.contreal_name ?? ""));
+      if (match) proposals.set(match, [...(proposals.get(match) ?? []), r]);
+    }
+    for (const [user, rows] of proposals) {
+      if (taken.has(user) || rows.length > 1) {
+        result.warnings.push(`לא שויך אוטומטית ל"${user}": ${rows.map((r) => r.contreal_name).join(", ")} — ${taken.has(user) ? `"${user}" כבר משויך לעובד אחר` : "יותר מעובד אחד מתאים"}. יש לשייך ידנית ב-contreal_user_map.`);
+        continue;
+      }
+      const row = rows[0];
+      const { error } = await db.from("contreal_user_map")
+        .update({ shmaya_user: user, updated_at: nowIso })
+        .eq("contreal_user_id", row.contreal_user_id).is("shmaya_user", null);
+      if (error) { result.warnings.push(`שיוך אוטומטי של ${row.contreal_name} נכשל: ${error.message}`); continue; }
+      row.shmaya_user = user;
+      result.autoMapped.push(`${row.contreal_name} ← ${user}`);
+    }
+
     const userMap = new Map<number, string | null>((mapRows ?? []).map((r: any) => [Number(r.contreal_user_id), r.shmaya_user]));
     result.unmappedAssignees = (mapRows ?? []).filter((r: any) => !r.shmaya_user).map((r: any) => r.contreal_name);
 
     const { data: links, error: linksErr } = await db.from("contreal_task_link")
-      .select("subtask_id, contreal_task_id, synced_completed, push_error, project_name, sub_tasks(id, title, is_completed)");
+      .select("subtask_id, contreal_task_id, synced_completed, push_error, project_name, sub_tasks(id, title, is_completed, updated_by)");
     if (linksErr) throw linksErr;
     const openById = new Map<number, any>(open.map((t) => [Number(t.id), t]));
     const linkedIds = new Set<number>((links ?? []).map((l: any) => Number(l.contreal_task_id)));
@@ -507,7 +589,7 @@ async function runSync() {
       if (l.project_name && EXCLUDED_PROJECT_NAMES.has(String(l.project_name).trim())) continue; // מוסרת למטה
       if (openById.has(id)) { remote.set(id, { task: openById.get(id), deleted: false }); continue; }
       // הושלמה בשני הצדדים ולא חזרה ברשימת הפתוחות → עדיין הושלמה בקונטריל (אילו נפתחה מחדש,
-      // הייתה חוזרת ברשימת הפתוחות). לא בודקים אותה שוב — אחרת כל סנכרון (כל 10 דקות) היה
+      // הייתה חוזרת ברשימת הפתוחות). לא בודקים אותה שוב — אחרת כל סנכרון (כל 5 דקות) היה
       // שולח get_task לכל משימה שהושלמה אי-פעם. מחיר: משימה שהושלמה ואז נמחקה בקונטריל נשארת
       // אצלנו כמשימה שהושלמה (מוסתרת ב"רק פתוחות").
       if (l.synced_completed && (l.sub_tasks as any)?.is_completed) continue;
@@ -560,7 +642,7 @@ async function runSync() {
           pushError = null;
         } else {
           const pushed = await pushToContreal(mcp, id, local, statusIds);
-          if (pushed.ok) { newSynced = local; pushError = null; result.pushed++; }
+          if (pushed.ok) { newSynced = local; pushError = null; result.pushed++; await annotate(id, local, sub.updated_by ?? null); }
           else { pushError = pushed.error; result.pushFailed++; }
         }
       } else if (remoteDone !== synced) {
@@ -636,6 +718,7 @@ async function logCronSync(r: Record<string, number>): Promise<void> {
     r.pushed && `נדחפו ${r.pushed}`,
     r.deleted && `נמחקו ${r.deleted}`,
     r.excluded && `הוסרו (פרויקט מוחרג) ${r.excluded}`,
+    (r as any).autoMapped?.length && `שויכו אוטומטית: ${(r as any).autoMapped.join(", ")}`,
   ].filter(Boolean);
   if (parts.length === 0) return;
   const { error } = await db.from("logs").insert({
@@ -652,7 +735,7 @@ async function logCronSync(r: Record<string, number>): Promise<void> {
 
 async function pushSubtaskStatus(subtaskId: string) {
   const { data: link, error } = await db.from("contreal_task_link")
-    .select("contreal_task_id, synced_completed, sub_tasks(is_completed)")
+    .select("contreal_task_id, synced_completed, sub_tasks(is_completed, updated_by)")
     .eq("subtask_id", subtaskId).maybeSingle();
   if (error) throw error;
   if (!link) return { ok: true, skipped: "not_a_contreal_task" };
@@ -671,6 +754,7 @@ async function pushSubtaskStatus(subtaskId: string) {
   try {
     if (!ids.doneId || !ids.todoId) ids = await loadStatuses(mcp);
     const pushed = await pushToContreal(mcp, Number(link.contreal_task_id), local, ids);
+    if (pushed.ok) await makeAnnotator(mcp)(Number(link.contreal_task_id), local, (link.sub_tasks as any)?.updated_by ?? null);
     await db.from("contreal_task_link").update(pushed.ok
       ? { synced_completed: local, push_error: null, updated_at: new Date().toISOString() }
       : { push_error: pushed.error, updated_at: new Date().toISOString() },

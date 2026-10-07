@@ -82,7 +82,7 @@ export default function ContrealTasksSection(): React.ReactElement | null {
         Promise.resolve().then(() => Promise.all([loadRows(), loadStatus()]));
     }, [loadRows, loadStatus]);
 
-    // הסנכרון האוטומטי (כל 10 דקות, pg_cron) רץ בשרת; כאן רק מרעננים את התצוגה כל דקה,
+    // הסנכרון האוטומטי (כל 5 דקות, pg_cron) רץ בשרת; כאן רק מרעננים את התצוגה כל דקה,
     // כשהלשונית גלויה ואין סנכרון ידני באמצע — כך שינוי מקונטריל מופיע בלי לרענן את הדף.
     useEffect(() => {
         const timer = window.setInterval(() => {
@@ -139,24 +139,29 @@ export default function ContrealTasksSection(): React.ReactElement | null {
         [rows, showOpenOnly],
     );
 
-    // מנהל: קיבוץ לפי עובד. משימה עם כמה עובדים מופיעה אצל כל אחד מהם.
+    // מנהל: קיבוץ לפי עובד. כותרת הקבוצה היא שם המשתמש בשמעיה ("מוישי", "יוחנן"…) כשהעובד
+    // משויך, אחרת השם מקונטריל. משימה עם כמה עובדים מופיעה אצל כל אחד מהם.
+    // סדר: המשימות של המשתמש המחובר לשמעיה, אחר כך "לא משויך", ואז שאר העובדים לפי א״ב.
     const groups = useMemo(() => {
         if (!isManager) return null;
+        const groupKeys = (r: ContrealTaskRow): string[] => {
+            if (r.assignees.length === 0) return [UNASSIGNED];
+            // לפני שהסנכרון רשם shmayaUser לכל משויך: משויך יחיד → assignedTo (אם הוא ממופה)
+            if (r.assignees.length === 1) return [r.assignees[0].shmayaUser ?? r.assignedTo[0] ?? r.assignees[0].name];
+            return [...new Set(r.assignees.map(a => a.shmayaUser ?? a.name))];
+        };
         const map = new Map<string, ContrealTaskRow[]>();
-        for (const r of visibleRows) {
-            const names = r.assignees.length > 0 ? r.assignees.map(a => a.name) : [UNASSIGNED];
-            for (const n of names) map.set(n, [...(map.get(n) ?? []), r]);
-        }
+        for (const r of visibleRows) for (const k of groupKeys(r)) map.set(k, [...(map.get(k) ?? []), r]);
         const openCount = new Map<string, number>();
         for (const r of rows ?? []) {
             if (r.completed) continue;
-            const names = r.assignees.length > 0 ? r.assignees.map(a => a.name) : [UNASSIGNED];
-            for (const n of names) openCount.set(n, (openCount.get(n) ?? 0) + 1);
+            for (const k of groupKeys(r)) openCount.set(k, (openCount.get(k) ?? 0) + 1);
         }
+        const rank = (k: string) => k === currentUser ? 0 : k === UNASSIGNED ? 1 : 2;
         return [...map.entries()]
-            .sort(([a], [b]) => a === UNASSIGNED ? 1 : b === UNASSIGNED ? -1 : a.localeCompare(b, 'he'))
-            .map(([name, list]) => ({ name, list, open: openCount.get(name) ?? 0 }));
-    }, [isManager, visibleRows, rows]);
+            .sort(([a], [b]) => rank(a) - rank(b) || a.localeCompare(b, 'he'))
+            .map(([name, list]) => ({ name, list, open: openCount.get(name) ?? 0, isMine: name === currentUser }));
+    }, [isManager, visibleRows, rows, currentUser]);
 
     if (available !== true) return null;
 
@@ -244,6 +249,7 @@ export default function ContrealTasksSection(): React.ReactElement | null {
                         <div key={g.name}>
                             <div className="px-6 py-2 bg-slate-50 border-y border-slate-100 flex items-center gap-2 sticky top-0 z-10">
                                 <span className="text-xs font-bold text-slate-600">{g.name}</span>
+                                {g.isMine && <span className="text-[11px] text-slate-500">(המשימות שלי)</span>}
                                 <span className="text-[11px] text-violet-700 bg-violet-50 border border-violet-100 rounded-full px-2">{g.open} פתוחות</span>
                             </div>
                             <div className="divide-y divide-slate-100">
@@ -395,6 +401,9 @@ function SyncResultBanner({ result, isManager }: { result: ContrealSyncResult; i
             <p>✓ הסנכרון הושלם{parts.length ? `: ${parts.join(', ')}` : ' — אין שינויים'}.</p>
             {!!result.pushFailed && <p className="text-amber-700">⚠️ {result.pushFailed} עדכונים לא הגיעו לקונטריל — הסנכרון הבא ינסה שוב.</p>}
             {(result.warnings ?? []).map((w, i) => <p key={i} className="text-amber-700">⚠️ {w}</p>)}
+            {isManager && !!result.autoMapped?.length && (
+                <p className="text-slate-600">שויכו אוטומטית לפי שם: {result.autoMapped.join(', ')}. אם משהו לא נכון — מתקנים בטבלה contreal_user_map.</p>
+            )}
             {isManager && !!result.unmappedAssignees?.length && (
                 <p className="text-slate-600">
                     עובדים בקונטריל שעוד לא שויכו למשתמש בשמעיה: {result.unmappedAssignees.join(', ')}.
