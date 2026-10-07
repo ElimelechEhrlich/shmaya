@@ -430,6 +430,15 @@ export const PersistenceAdapter = {
     return this.invokeContreal({ action: 'push_status', subtaskId });
   },
 
+  /**
+   * כתובת התחברות לקונטריל (נתיב /start של ה-Edge Function). הקוד הסודי מוקלד ע"י המנהל
+   * ולא נשמר באתר; בלעדיו הפונקציה מסרבת — כך אף אחד אחר לא יכול לחבר חשבון קונטריל משלו.
+   */
+  contrealConnectUrl(adminKey: string): string {
+    const base = import.meta.env.VITE_SUPABASE_URL;
+    return `${base}/functions/v1/contreal-sync/start?key=${encodeURIComponent(adminKey)}`;
+  },
+
   fetchContrealTaskDetails(subtaskId: string): Promise<DbResult<{ ok: boolean; error?: string; task?: Record<string, unknown> }>> {
     return this.invokeContreal({ action: 'task_details', subtaskId });
   },

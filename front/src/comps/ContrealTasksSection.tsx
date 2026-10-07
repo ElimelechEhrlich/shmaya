@@ -44,6 +44,18 @@ export default function ContrealTasksSection(): React.ReactElement | null {
     const [syncing, setSyncing] = useState(false);
     const [syncResult, setSyncResult] = useState<ContrealSyncResult | null>(null);
     const [detailsFor, setDetailsFor] = useState<ContrealTaskRow | null>(null);
+    // תוצאת ההתחברות: ה-callback של הפונקציה מפנה לדשבורד עם ?contreal=connected / ?error=...
+    const [connectNotice] = useState<'connected' | 'error' | null>(() => {
+        const q = new URLSearchParams(window.location.search);
+        if (q.get('contreal') === 'connected') return 'connected';
+        if (q.has('error')) return 'error';
+        return null;
+    });
+    useEffect(() => {
+        if (!connectNotice) return;
+        // מנקים את הפרמטרים מהכתובת כדי שההודעה לא תחזור ברענון
+        window.history.replaceState(null, '', window.location.pathname);
+    }, [connectNotice]);
 
     const loadRows = useCallback(async () => {
         const { data, error } = await PersistenceAdapter.fetchContrealTasks(isManager ? null : currentUser);
@@ -177,15 +189,23 @@ export default function ContrealTasksSection(): React.ReactElement | null {
             </div>
 
             {/* connection / sync messages */}
-            {notConnected && (
-                <div className="px-6 py-3 text-sm bg-amber-50 text-amber-800 border-b border-amber-100">
-                    {isManager
-                        ? (connection === 'expired'
-                            ? 'החיבור לקונטריל פג. יש להתחבר מחדש דרך קישור הניהול (/start).'
-                            : 'קונטריל עדיין לא מחובר. החיבור נעשה פעם אחת דרך קישור הניהול (/start).')
-                        : 'החיבור לקונטריל לא פעיל — פנה למוישי.'}
+            {connectNotice === 'connected' && connection === 'connected' && (
+                <div className="px-6 py-3 text-sm bg-emerald-50 text-emerald-800 border-b border-emerald-100">
+                    ✓ החיבור לקונטריל הצליח. לחץ "סנכרן מקונטריל" כדי לייבא את המשימות.
                 </div>
             )}
+            {connectNotice === 'error' && notConnected && (
+                <div className="px-6 py-3 text-sm bg-red-50 text-red-700 border-b border-red-100">
+                    ההתחברות לקונטריל לא הושלמה. אפשר לנסות שוב.
+                </div>
+            )}
+            {notConnected && (isManager
+                ? <ConnectContrealBox expired={connection === 'expired'} />
+                : (
+                    <div className="px-6 py-3 text-sm bg-amber-50 text-amber-800 border-b border-amber-100">
+                        החיבור לקונטריל לא פעיל — פנה למוישי.
+                    </div>
+                ))}
             {syncResult && <SyncResultBanner result={syncResult} isManager={isManager} />}
 
             {/* body */}
@@ -282,6 +302,64 @@ function TaskRow({ row, onToggle, onOpen }: {
             )}
             {row.priorityName && (
                 <span className="text-xs px-2 py-0.5 rounded-full border shrink-0 bg-white text-slate-500 border-slate-200">{row.priorityName}</span>
+            )}
+        </div>
+    );
+}
+
+/**
+ * כפתור "התחבר לקונטריל" למנהל. ההתחברות דורשת את הקוד הסודי (CONTREAL_ADMIN_KEY) —
+ * הוא מוקלד כאן, נשלח רק בכתובת ההתחברות, ולא נשמר באתר.
+ */
+function ConnectContrealBox({ expired }: { expired: boolean }): React.ReactElement {
+    const [open, setOpen] = useState(false);
+    const [key, setKey] = useState('');
+    const submit = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!key.trim()) return;
+        window.location.href = PersistenceAdapter.contrealConnectUrl(key.trim());
+    };
+    return (
+        <div className="px-6 py-3 text-sm bg-amber-50 text-amber-800 border-b border-amber-100">
+            <div className="flex items-center gap-3 flex-wrap">
+                <span className="flex-1 min-w-0">
+                    {expired ? 'החיבור לקונטריל פג — יש להתחבר מחדש.' : 'קונטריל עדיין לא מחובר.'}
+                </span>
+                {!open && (
+                    <button
+                        onClick={() => setOpen(true)}
+                        className="cursor-pointer bg-violet-600 hover:bg-violet-700 text-white text-xs font-bold py-1.5 px-3 rounded-lg transition"
+                    >
+                        התחבר לקונטריל
+                    </button>
+                )}
+            </div>
+            {open && (
+                <form onSubmit={submit} className="mt-3 flex items-center gap-2 flex-wrap">
+                    <input
+                        type="password"
+                        autoFocus
+                        autoComplete="off"
+                        value={key}
+                        onChange={e => setKey(e.target.value)}
+                        placeholder="קוד החיבור הסודי"
+                        className="input-style max-w-60 text-sm"
+                        dir="ltr"
+                    />
+                    <button
+                        type="submit"
+                        disabled={!key.trim()}
+                        className="cursor-pointer bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white text-xs font-bold py-2 px-3 rounded-lg transition"
+                    >
+                        המשך לקונטריל
+                    </button>
+                    <button type="button" onClick={() => { setOpen(false); setKey(''); }} className="cursor-pointer text-xs text-slate-500 hover:text-slate-800 px-2">
+                        ביטול
+                    </button>
+                    <p className="basis-full text-[11px] text-amber-700/80">
+                        תועבר להתחברות בקונטריל, ואחריה תחזור לכאן. התחבר עם החשבון שממנו רוצים לסנכרן משימות.
+                    </p>
+                </form>
             )}
         </div>
     );
