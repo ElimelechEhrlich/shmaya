@@ -415,6 +415,43 @@ async function pushToContreal(mcp: McpSession, contrealTaskId: number, completed
   }
 }
 
+/**
+ * מי סימן. קונטריל רושם כל שינוי בשם המשתמש של החיבור (חיבור אחד, של המנהל), ואין דרך לבצע
+ * פעולה בשם חבר צוות אחר. לכן, כשמי שסימן בשמעיה (sub_tasks.updated_by) אינו המשתמש של
+ * החיבור, מוסיפים על המשימה בקונטריל תגובה עם שמו — כך רואים שם מי באמת סימן.
+ * best-effort: כישלון בתגובה לא מבטל את עדכון הסטטוס.
+ */
+interface Annotator { (contrealTaskId: number, completed: boolean, actor: string | null): Promise<void> }
+
+function makeAnnotator(mcp: McpSession, warnings?: string[]): Annotator {
+  let connectedUser: Promise<string | null> | null = null;
+  // משתמש שמעיה של החיבור: get_me → contreal_user_map.shmaya_user (נשאל פעם אחת לכל בקשה)
+  const resolveConnectedUser = async (): Promise<string | null> => {
+    try {
+      const me = await mcp.call("get_me", {});
+      const id = me?.user?.id;
+      if (!id) return null;
+      const { data } = await db.from("contreal_user_map").select("shmaya_user").eq("contreal_user_id", id).maybeSingle();
+      return data?.shmaya_user ?? null;
+    } catch {
+      return null;
+    }
+  };
+  return async (contrealTaskId, completed, actor) => {
+    if (!actor) return;
+    connectedUser ??= resolveConnectedUser();
+    if ((await connectedUser) === actor) return; // השינוי כבר רשום בקונטריל בשמו
+    const content = completed ? `✓ סומן כבוצע בשמעיה ע״י ${actor}` : `↺ סימון הביצוע בוטל בשמעיה ע״י ${actor}`;
+    try {
+      await mcp.call("add_task_comment", { task_id: contrealTaskId, content });
+    } catch (err) {
+      const msg = `תגובת "סומן ע״י ${actor}" למשימה ${contrealTaskId} לא נוספה: ${String(err instanceof Error ? err.message : err).slice(0, 120)}`;
+      console.error("[contreal-sync]", msg);
+      warnings?.push(msg);
+    }
+  };
+}
+
 async function ensureContrealParent(): Promise<string> {
   const find = () => db.from("parent_tasks").select("id")
     .eq("registry_key", CONTREAL_PARENT_KEY).eq("customer_id", OFFICE_CUSTOMER_ID).maybeSingle();
@@ -476,6 +513,7 @@ async function runSync() {
   try {
     mcp = await openMcp(token);
     const statusIds = await loadStatuses(mcp);
+    const annotate = makeAnnotator(mcp, result.warnings);
     const open = (await fetchAllOpenTasks(mcp)).filter((t) => !isExcludedTask(t));
     const parentId = await ensureContrealParent();
 
@@ -495,7 +533,7 @@ async function runSync() {
     result.unmappedAssignees = (mapRows ?? []).filter((r: any) => !r.shmaya_user).map((r: any) => r.contreal_name);
 
     const { data: links, error: linksErr } = await db.from("contreal_task_link")
-      .select("subtask_id, contreal_task_id, synced_completed, push_error, project_name, sub_tasks(id, title, is_completed)");
+      .select("subtask_id, contreal_task_id, synced_completed, push_error, project_name, sub_tasks(id, title, is_completed, updated_by)");
     if (linksErr) throw linksErr;
     const openById = new Map<number, any>(open.map((t) => [Number(t.id), t]));
     const linkedIds = new Set<number>((links ?? []).map((l: any) => Number(l.contreal_task_id)));
@@ -560,7 +598,7 @@ async function runSync() {
           pushError = null;
         } else {
           const pushed = await pushToContreal(mcp, id, local, statusIds);
-          if (pushed.ok) { newSynced = local; pushError = null; result.pushed++; }
+          if (pushed.ok) { newSynced = local; pushError = null; result.pushed++; await annotate(id, local, sub.updated_by ?? null); }
           else { pushError = pushed.error; result.pushFailed++; }
         }
       } else if (remoteDone !== synced) {
@@ -652,7 +690,7 @@ async function logCronSync(r: Record<string, number>): Promise<void> {
 
 async function pushSubtaskStatus(subtaskId: string) {
   const { data: link, error } = await db.from("contreal_task_link")
-    .select("contreal_task_id, synced_completed, sub_tasks(is_completed)")
+    .select("contreal_task_id, synced_completed, sub_tasks(is_completed, updated_by)")
     .eq("subtask_id", subtaskId).maybeSingle();
   if (error) throw error;
   if (!link) return { ok: true, skipped: "not_a_contreal_task" };
@@ -671,6 +709,7 @@ async function pushSubtaskStatus(subtaskId: string) {
   try {
     if (!ids.doneId || !ids.todoId) ids = await loadStatuses(mcp);
     const pushed = await pushToContreal(mcp, Number(link.contreal_task_id), local, ids);
+    if (pushed.ok) await makeAnnotator(mcp)(Number(link.contreal_task_id), local, (link.sub_tasks as any)?.updated_by ?? null);
     await db.from("contreal_task_link").update(pushed.ok
       ? { synced_completed: local, push_error: null, updated_at: new Date().toISOString() }
       : { push_error: pushed.error, updated_at: new Date().toISOString() },
