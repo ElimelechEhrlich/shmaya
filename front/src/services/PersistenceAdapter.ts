@@ -119,6 +119,7 @@ export interface ContrealSyncResult {
   pushFailed?: number;
   deleted?: number;
   unmappedAssignees?: string[];
+  autoMapped?: string[];
   warnings?: string[];
 }
 

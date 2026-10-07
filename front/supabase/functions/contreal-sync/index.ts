@@ -294,6 +294,22 @@ function isExcludedTask(t: any): boolean {
 }
 const SYNC_LOCK_MS = 120_000;
 
+// משתמשי שמעיה — חייב להיות זהה ל-ALLOWED_USERS ב-src/services/authService.ts.
+// (ערכי sub_tasks.updated_by מוגבלים לאותם שמות ב-DB.)
+const SHMAYA_USERS = ["מוישי", "יוחנן", "שמוליק"];
+
+/**
+ * שיוך אוטומטי של עובד קונטריל למשתמש שמעיה: השם בקונטריל זהה לשם בשמעיה, או שהמילה
+ * הראשונה שלו זהה ("מוישי שמעיה חשבונאות…" → מוישי). רק כשיש מועמד אחד בדיוק. כתיב שונה
+ * ("מושי") לא מותאם — נשאר לשיוך ידני ב-contreal_user_map.
+ */
+function matchShmayaUser(contrealName: string): string | null {
+  const name = contrealName.replace(/\s+/g, " ").trim();
+  const first = name.split(" ")[0];
+  const candidates = SHMAYA_USERS.filter((u) => u === name || u === first);
+  return candidates.length === 1 ? candidates[0] : null;
+}
+
 async function handleAction(req: Request): Promise<Response> {
   let body: { action?: string; subtaskId?: string; source?: string } = {};
   try { body = await req.json(); } catch { /* empty body */ }
@@ -506,6 +522,7 @@ async function runSync() {
     created: 0, completedFromContreal: 0, reopenedFromContreal: 0, excluded: 0,
     pushed: 0, pushFailed: 0, deleted: 0,
     unmappedAssignees: [] as string[],
+    autoMapped: [] as string[],
     warnings: [] as string[],
   };
 
@@ -529,6 +546,30 @@ async function runSync() {
     }
     const { data: mapRows, error: mapErr } = await db.from("contreal_user_map").select("contreal_user_id, contreal_name, shmaya_user");
     if (mapErr) throw mapErr;
+
+    // שיוך אוטומטי לעובדים שעוד לא שויכו. לא דורס שיוך קיים (ידני או אוטומטי), ולא משייך
+    // משתמש שמעיה שכבר משויך לעובד קונטריל אחר, או ששני עובדי קונטריל חדשים מתאימים לו.
+    const taken = new Set((mapRows ?? []).map((r: any) => r.shmaya_user).filter(Boolean));
+    const proposals = new Map<string, any[]>();
+    for (const r of mapRows ?? []) {
+      if (r.shmaya_user) continue;
+      const match = matchShmayaUser(String(r.contreal_name ?? ""));
+      if (match) proposals.set(match, [...(proposals.get(match) ?? []), r]);
+    }
+    for (const [user, rows] of proposals) {
+      if (taken.has(user) || rows.length > 1) {
+        result.warnings.push(`לא שויך אוטומטית ל"${user}": ${rows.map((r) => r.contreal_name).join(", ")} — ${taken.has(user) ? `"${user}" כבר משויך לעובד אחר` : "יותר מעובד אחד מתאים"}. יש לשייך ידנית ב-contreal_user_map.`);
+        continue;
+      }
+      const row = rows[0];
+      const { error } = await db.from("contreal_user_map")
+        .update({ shmaya_user: user, updated_at: nowIso })
+        .eq("contreal_user_id", row.contreal_user_id).is("shmaya_user", null);
+      if (error) { result.warnings.push(`שיוך אוטומטי של ${row.contreal_name} נכשל: ${error.message}`); continue; }
+      row.shmaya_user = user;
+      result.autoMapped.push(`${row.contreal_name} ← ${user}`);
+    }
+
     const userMap = new Map<number, string | null>((mapRows ?? []).map((r: any) => [Number(r.contreal_user_id), r.shmaya_user]));
     result.unmappedAssignees = (mapRows ?? []).filter((r: any) => !r.shmaya_user).map((r: any) => r.contreal_name);
 
@@ -674,6 +715,7 @@ async function logCronSync(r: Record<string, number>): Promise<void> {
     r.pushed && `נדחפו ${r.pushed}`,
     r.deleted && `נמחקו ${r.deleted}`,
     r.excluded && `הוסרו (פרויקט מוחרג) ${r.excluded}`,
+    (r as any).autoMapped?.length && `שויכו אוטומטית: ${(r as any).autoMapped.join(", ")}`,
   ].filter(Boolean);
   if (parts.length === 0) return;
   const { error } = await db.from("logs").insert({

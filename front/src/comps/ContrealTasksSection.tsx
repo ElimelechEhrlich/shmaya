@@ -395,6 +395,9 @@ function SyncResultBanner({ result, isManager }: { result: ContrealSyncResult; i
             <p>✓ הסנכרון הושלם{parts.length ? `: ${parts.join(', ')}` : ' — אין שינויים'}.</p>
             {!!result.pushFailed && <p className="text-amber-700">⚠️ {result.pushFailed} עדכונים לא הגיעו לקונטריל — הסנכרון הבא ינסה שוב.</p>}
             {(result.warnings ?? []).map((w, i) => <p key={i} className="text-amber-700">⚠️ {w}</p>)}
+            {isManager && !!result.autoMapped?.length && (
+                <p className="text-slate-600">שויכו אוטומטית לפי שם: {result.autoMapped.join(', ')}. אם משהו לא נכון — מתקנים בטבלה contreal_user_map.</p>
+            )}
             {isManager && !!result.unmappedAssignees?.length && (
                 <p className="text-slate-600">
                     עובדים בקונטריל שעוד לא שויכו למשתמש בשמעיה: {result.unmappedAssignees.join(', ')}.
