@@ -451,6 +451,8 @@ function nameOf(v: any): string {
 
 // ── קבצים: הפונקציה מוסיפה לכל קובץ `link` (get_file_link). תמונה מוצגת, שאר הקבצים — כפתור פתיחה ──
 
+// קישור לקובץ מקונטריל פג אחרי 5 דקות; מרעננים אחרי 4.
+const FILE_LINK_REFRESH_MS = 4 * 60_000;
 const IMAGE_EXT = /\.(png|jpe?g|gif|webp|bmp|svg|heic)$/i;
 
 function fileName(f: any): string {
@@ -651,17 +653,35 @@ function ContrealTaskDetailsModal({ row, onClose }: { row: ContrealTaskRow; onCl
 
     useEffect(() => {
         let cancelled = false;
-        PersistenceAdapter.fetchContrealTaskDetails(row.subtaskId).then(({ data, error: err }) => {
-            if (cancelled) return;
-            if (err || !data?.ok) {
-                setError(data?.error === 'deleted_in_contreal' ? 'המשימה נמחקה בקונטריל.'
-                    : data?.error === 'not_connected' ? 'קונטריל לא מחובר.'
-                    : 'לא הצלחנו לטעון את פרטי המשימה מקונטריל.');
-                return;
-            }
-            setTask(data.task ?? {});
-        });
-        return () => { cancelled = true; };
+        let loadedAt = 0;
+        const load = (silent: boolean) => {
+            PersistenceAdapter.fetchContrealTaskDetails(row.subtaskId).then(({ data, error: err }) => {
+                if (cancelled) return;
+                if (err || !data?.ok) {
+                    // רענון שקט שנכשל — משאירים את מה שכבר מוצג
+                    if (silent) return;
+                    setError(data?.error === 'deleted_in_contreal' ? 'המשימה נמחקה בקונטריל.'
+                        : data?.error === 'not_connected' ? 'קונטריל לא מחובר.'
+                        : 'לא הצלחנו לטעון את פרטי המשימה מקונטריל.');
+                    return;
+                }
+                loadedAt = Date.now();
+                setTask(data.task ?? {});
+            });
+        };
+        load(false);
+        // הקישורים לקבצים מקונטריל תקפים 5 דקות בלבד (X-Goog-Expires=300) —
+        // כל עוד החלונית פתוחה מרעננים אותם, וגם מיד כשחוזרים ללשונית אחרי זמן.
+        const refreshIfStale = () => {
+            if (loadedAt && document.visibilityState === 'visible' && Date.now() - loadedAt > FILE_LINK_REFRESH_MS) load(true);
+        };
+        const timer = window.setInterval(refreshIfStale, 30_000);
+        document.addEventListener('visibilitychange', refreshIfStale);
+        return () => {
+            cancelled = true;
+            window.clearInterval(timer);
+            document.removeEventListener('visibilitychange', refreshIfStale);
+        };
     }, [row.subtaskId]);
 
     const known = new Set(FIELD_LABELS.map(([k]) => k));
