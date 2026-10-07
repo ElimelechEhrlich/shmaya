@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { PersistenceAdapter } from '../services/PersistenceAdapter';
+import { formatContrealDateTime } from '../utils/formatContrealDeadline';
 
 interface LogEntry {
   id: string;
@@ -17,6 +18,19 @@ const TABS: { key: LogTab; label: string }[] = [
   { key: 'actions', label: 'יומן פעולות' },
   { key: 'contreal_sync', label: 'סנכרוני קונטריל' },
 ];
+
+/**
+ * פרטי סנכרון נשמרים כ"נוספו 0, נסגרו 1, ..." — בטאב הסנכרונים מציגים רק מה שהשתנה,
+ * כדי שהשורה תהיה קצרה (גם בטלפון). טקסט שלא בפורמט הזה מוצג כמו שהוא.
+ */
+function syncSummary(details: string | undefined): string {
+  if (!details) return '';
+  const parts = details.split(',').map(x => x.trim()).filter(Boolean);
+  const counters = parts.filter(x => /\s\d+$/.test(x));
+  if (counters.length === 0) return details;
+  const changed = parts.filter(x => !/\s0$/.test(x));
+  return changed.length ? changed.join(', ') : 'ללא שינויים';
+}
 
 export default function Logs(): React.ReactElement {
   const [tab, setTab] = useState<LogTab>('actions');
@@ -37,6 +51,19 @@ export default function Logs(): React.ReactElement {
     });
     return () => { cancelled = true; };
   }, [tab]);
+
+  // זמן הסנכרון האחרון (כולל אוטומטיים שלא שינו כלום ולכן לא נרשמו ביומן)
+  const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
+  useEffect(() => {
+    if (tab !== 'contreal_sync') return;
+    let cancelled = false;
+    PersistenceAdapter.fetchContrealStatus().then(({ data }) => {
+      if (!cancelled && data?.ok) setLastSyncedAt(data.lastSyncedAt ?? null);
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [tab]);
+
+  const isSyncTab = tab === 'contreal_sync';
 
   const selectTab = (next: LogTab) => {
     if (next === tab) return;
@@ -73,6 +100,13 @@ export default function Logs(): React.ReactElement {
         ))}
       </div>
 
+      {isSyncTab && (
+        <p className="text-xs text-slate-500 mb-4 leading-relaxed">
+          הסנכרון האוטומטי רץ כל 5 דקות, ונרשם כאן רק כשמשהו השתנה. סנכרון ידני נרשם תמיד.
+          {lastSyncedAt && <> הסנכרון האחרון: <span className="font-bold text-slate-700">{formatContrealDateTime(lastSyncedAt)}</span>.</>}
+        </p>
+      )}
+
       {loading ? (
         <div className="flex justify-center py-20">
           <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
@@ -98,7 +132,7 @@ export default function Logs(): React.ReactElement {
               <tr>
                 <th className="text-right p-4 font-bold text-slate-600">תאריך ושעה</th>
                 <th className="text-right p-4 font-bold text-slate-600">משתמש</th>
-                <th className="text-right p-4 font-bold text-slate-600">פעולה</th>
+                {!isSyncTab && <th className="text-right p-4 font-bold text-slate-600">פעולה</th>}
                 <th className="text-right p-4 font-bold text-slate-600">פרטים</th>
               </tr>
             </thead>
@@ -107,12 +141,14 @@ export default function Logs(): React.ReactElement {
                 <tr key={log.id} className="border-b border-slate-50 hover:bg-slate-50 transition">
                   <td className="p-4 text-slate-500 whitespace-nowrap">{formatDate(log.created_at)}</td>
                   <td className="p-4 font-medium text-slate-700">{log.actor}</td>
-                  <td className="p-4">
-                    <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full text-xs font-bold">
-                      {log.action}
-                    </span>
-                  </td>
-                  <td className="p-4 text-slate-600">{log.payload?.details}</td>
+                  {!isSyncTab && (
+                    <td className="p-4">
+                      <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full text-xs font-bold">
+                        {log.action}
+                      </span>
+                    </td>
+                  )}
+                  <td className="p-4 text-slate-600">{isSyncTab ? syncSummary(log.payload?.details) : log.payload?.details}</td>
                 </tr>
               ))}
             </tbody>
