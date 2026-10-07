@@ -139,31 +139,28 @@ export default function ContrealTasksSection(): React.ReactElement | null {
         [rows, showOpenOnly],
     );
 
-    // מנהל: קיבוץ לפי עובד. משימה עם כמה עובדים מופיעה אצל כל אחד מהם.
+    // מנהל: קיבוץ לפי עובד. כותרת הקבוצה היא שם המשתמש בשמעיה ("מוישי", "יוחנן"…) כשהעובד
+    // משויך, אחרת השם מקונטריל. משימה עם כמה עובדים מופיעה אצל כל אחד מהם.
+    // סדר: המשימות של המשתמש המחובר לשמעיה, אחר כך "לא משויך", ואז שאר העובדים לפי א״ב.
     const groups = useMemo(() => {
         if (!isManager) return null;
+        const groupKeys = (r: ContrealTaskRow): string[] => {
+            if (r.assignees.length === 0) return [UNASSIGNED];
+            // לפני שהסנכרון רשם shmayaUser לכל משויך: משויך יחיד → assignedTo (אם הוא ממופה)
+            if (r.assignees.length === 1) return [r.assignees[0].shmayaUser ?? r.assignedTo[0] ?? r.assignees[0].name];
+            return [...new Set(r.assignees.map(a => a.shmayaUser ?? a.name))];
+        };
         const map = new Map<string, ContrealTaskRow[]>();
-        for (const r of visibleRows) {
-            const names = r.assignees.length > 0 ? r.assignees.map(a => a.name) : [UNASSIGNED];
-            for (const n of names) map.set(n, [...(map.get(n) ?? []), r]);
-        }
+        for (const r of visibleRows) for (const k of groupKeys(r)) map.set(k, [...(map.get(k) ?? []), r]);
         const openCount = new Map<string, number>();
         for (const r of rows ?? []) {
             if (r.completed) continue;
-            const names = r.assignees.length > 0 ? r.assignees.map(a => a.name) : [UNASSIGNED];
-            for (const n of names) openCount.set(n, (openCount.get(n) ?? 0) + 1);
+            for (const k of groupKeys(r)) openCount.set(k, (openCount.get(k) ?? 0) + 1);
         }
-        // הקבוצה של המשתמש המחובר לשמעיה (למשל מוישי) — ראשונה. מזוהה לפי shmayaUser של המשויך;
-        // לפני שהסנכרון הספיק לרשום אותו — לפי משימה עם משויך יחיד ש-assignedTo שלה כולל את המשתמש.
-        const mine = new Set<string>();
-        for (const r of rows ?? []) {
-            for (const a of r.assignees) if (a.shmayaUser && a.shmayaUser === currentUser) mine.add(a.name);
-            if (r.assignees.length === 1 && currentUser && r.assignedTo.includes(currentUser)) mine.add(r.assignees[0].name);
-        }
-        const rank = (name: string) => mine.has(name) ? 0 : name === UNASSIGNED ? 2 : 1;
+        const rank = (k: string) => k === currentUser ? 0 : k === UNASSIGNED ? 1 : 2;
         return [...map.entries()]
             .sort(([a], [b]) => rank(a) - rank(b) || a.localeCompare(b, 'he'))
-            .map(([name, list]) => ({ name, list, open: openCount.get(name) ?? 0, isMine: mine.has(name) }));
+            .map(([name, list]) => ({ name, list, open: openCount.get(name) ?? 0, isMine: name === currentUser }));
     }, [isManager, visibleRows, rows, currentUser]);
 
     if (available !== true) return null;
