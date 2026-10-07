@@ -5,15 +5,18 @@
 // אמיתיים ולא על הנחות. אין כאן עדיין סנכרון ואין כתיבה לטבלאות המשימות.
 //
 // נתיבים (GET, נפתחים ישירות בדפדפן):
-//   /contreal-sync/start      — מתחיל התחברות. מסרב אם כבר מחובר (status = connected).
+//   /contreal-sync/start?key=...  — מתחיל התחברות. מסרב אם כבר מחובר (status = connected).
 //   /contreal-sync/callback   — לכאן קונטריל מחזיר אחרי ההתחברות. מפנה חזרה לדשבורד.
 //   /contreal-sync/status     — מצב החיבור, בלי טוקנים.
 //   /contreal-sync/discover?key=...            — initialize + tools/list + search_tasks לדוגמה.
 //   /contreal-sync/discover?key=...&refresh=1  — גם בודק רענון טוקן (האם ה-refresh token מתחלף).
 //   /contreal-sync/discover?key=...&raw=1      — עוקף את ה-SDK ומשתמש ב-JSON-RPC ישיר.
+//   /contreal-sync/disconnect?key=...&confirm=1 — מנתק את החשבון הנוכחי (מבטל טוקנים בקונטריל
+//                                                 ומאפס את החיבור), כדי לחבר חשבון אחר דרך /start.
 //
-// discover מחזיר תוכן אמיתי של משימות, ולכן הוא חסום ב-secret ‏CONTREAL_ADMIN_KEY.
-// אם ה-secret לא מוגדר, discover כבוי לגמרי.
+// start, discover ו-disconnect חסומים ב-secret ‏CONTREAL_ADMIN_KEY: start כדי שאף אחד אחר
+// לא יחבר חשבון קונטריל משלו, discover כי הוא מחזיר תוכן אמיתי של משימות, ו-disconnect
+// כי הוא מנתק. אם ה-secret לא מוגדר, שלושתם כבויים.
 //
 // פריסה: supabase functions deploy contreal-sync --no-verify-jwt
 //   (--no-verify-jwt הכרחי: ההפניה של קונטריל ל-/callback היא GET בלי כותרת Authorization.)
@@ -53,13 +56,15 @@ Deno.serve(async (req: Request) => {
   try {
     switch (route) {
       case "start":
-        return await handleStart();
+        return requireAdminKey(url) ?? await handleStart();
       case "callback":
         return await handleCallback(url);
       case "status":
         return await handleStatus();
       case "discover":
-        return await handleDiscover(url);
+        return requireAdminKey(url) ?? await handleDiscover(url);
+      case "disconnect":
+        return requireAdminKey(url) ?? await handleDisconnect(url);
       default:
         return json({ error: `Unknown route: ${route}` }, 404);
     }
@@ -76,9 +81,9 @@ Deno.serve(async (req: Request) => {
 async function handleStart(): Promise<Response> {
   const auth = await readAuth();
   // נעילה: אחרי שהחיבור הצליח, אי אפשר להתחיל חיבור חדש (למשל לחשבון קונטריל אחר)
-  // דרך הנתיב הזה. החלפת חשבון: לאפס את השורה ב-contreal_auth ידנית ב-Supabase.
+  // דרך הנתיב הזה. החלפת חשבון: קודם /disconnect, ואז /start מחדש.
   if (auth.status === "connected") {
-    return html("כבר מחובר לקונטריל", "החיבור לקונטריל כבר פעיל. אין צורך להתחבר שוב.", 409);
+    return html("כבר מחובר לקונטריל", "החיבור לקונטריל כבר פעיל. כדי לחבר חשבון אחר, נתק קודם דרך /disconnect.", 409);
   }
 
   const meta = await fetchAuthServerMetadata();
@@ -184,9 +189,6 @@ async function handleStatus(): Promise<Response> {
 }
 
 async function handleDiscover(url: URL): Promise<Response> {
-  if (!ADMIN_KEY) return json({ error: "discover כבוי: לא הוגדר CONTREAL_ADMIN_KEY" }, 403);
-  if (url.searchParams.get("key") !== ADMIN_KEY) return json({ error: "מפתח שגוי" }, 403);
-
   const report: Record<string, unknown> = { redirectUri: REDIRECT_URI };
 
   if (url.searchParams.get("refresh") === "1") {
@@ -208,6 +210,51 @@ async function handleDiscover(url: URL): Promise<Response> {
   }
 
   return json(report);
+}
+
+/**
+ * ניתוק החשבון הנוכחי, כדי לחבר חשבון קונטריל אחר (למשל מעבר מחשבון בדיקה לחשבון המנהל).
+ * מבטל את הטוקנים בקונטריל (best-effort) ומאפס את החיבור. client_id נשמר — הוא רישום של
+ * שמעיה כאפליקציה, לא של משתמש. דורש confirm=1 כדי שפתיחה בטעות של הקישור לא תנתק.
+ * הערה לשלבים 1–4: ניתוק יצטרך גם לנקות את משימות הקונטריל שסונכרנו מהחשבון הקודם.
+ */
+async function handleDisconnect(url: URL): Promise<Response> {
+  if (url.searchParams.get("confirm") !== "1") {
+    return html("לאשר ניתוק?", "הניתוק יבטל את החיבור הנוכחי לקונטריל. כדי לאשר, הוסף לכתובת ‎&confirm=1", 400);
+  }
+  const auth = await readAuth();
+  const revoked: Record<string, string> = {};
+  try {
+    const meta = await fetchAuthServerMetadata();
+    if (meta.revocation_endpoint && auth.client_id) {
+      for (const [hint, token] of [["refresh_token", auth.refresh_token], ["access_token", auth.access_token]] as const) {
+        if (!token) continue;
+        const res = await fetch(meta.revocation_endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({ token, token_type_hint: hint, client_id: auth.client_id }),
+        });
+        revoked[hint] = res.ok ? "revoked" : `HTTP ${res.status}`;
+      }
+    }
+  } catch (err) {
+    // ביטול בקונטריל הוא best-effort: גם אם נכשל, מנתקים אצלנו
+    console.error("[contreal-sync] revoke failed:", err);
+    revoked.error = String(err);
+  }
+  await updateAuth({
+    status: "none",
+    access_token: null,
+    refresh_token: null,
+    expires_at: null,
+    pkce_verifier: null,
+    oauth_state: null,
+    status_id_done: null,
+    status_id_todo: null,
+    last_synced_at: null,
+    sync_lock_until: null,
+  });
+  return json({ disconnected: true, previousStatus: auth.status, revoked });
 }
 
 // ──────────────────────────────────────────────────────────────────
@@ -430,6 +477,22 @@ async function fetchAuthServerMetadata(): Promise<Record<string, string>> {
   if (!res.ok) throw new Error(`Contreal OAuth metadata: HTTP ${res.status}`);
   metadataCache = await res.json();
   return metadataCache!;
+}
+
+/** מחזיר תגובת 403 אם המפתח חסר או שגוי, אחרת null. */
+function requireAdminKey(url: URL): Response | null {
+  if (!ADMIN_KEY) return json({ error: "כבוי: לא הוגדר CONTREAL_ADMIN_KEY" }, 403);
+  const given = url.searchParams.get("key") ?? "";
+  if (!timingSafeEqual(given, ADMIN_KEY)) return json({ error: "מפתח שגוי" }, 403);
+  return null;
+}
+
+function timingSafeEqual(a: string, b: string): boolean {
+  const ea = new TextEncoder().encode(a);
+  const eb = new TextEncoder().encode(b);
+  let diff = ea.length ^ eb.length;
+  for (let i = 0; i < Math.max(ea.length, eb.length); i++) diff |= (ea[i] ?? 0) ^ (eb[i] ?? 0);
+  return diff === 0;
 }
 
 function randomUrlSafe(bytes: number): string {
