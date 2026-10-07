@@ -270,6 +270,9 @@ const FULL_CUSTOMER_SELECT = '*, parent_tasks(*, sub_tasks(*))';
 // Public adapter
 // ──────────────────────────────────────────────────────────────────
 
+
+/** ה-action של רשומות הסנכרון עם קונטריל ב-logs (נכתב גם ע"י ה-Edge Function, logCronSync). */
+export const CONTREAL_SYNC_LOG_ACTION = 'סנכרון קונטריל';
 export const PersistenceAdapter = {
   async insertSubtaskUnderRegistry(
     customerId: string,
@@ -1306,10 +1309,17 @@ export const PersistenceAdapter = {
         // לוגים לא חוסמים את הפעולה הראשית
     }
 },
-  async fetchLogs(): Promise<DbResult<any[]>> {
-    const { data, error } = await supabase
-        .from('logs')
-        .select('*')
+  /**
+   * יומן הפעולות. רשומות "סנכרון קונטריל" (ידני ואוטומטי) מוצגות בטאב נפרד,
+   * ולכן מסוננות כבר בשאילתה — כדי שלא יתפסו את 500 השורות של היומן הרגיל.
+   */
+  async fetchLogs(kind: 'actions' | 'contreal_sync' = 'actions'): Promise<DbResult<any[]>> {
+    let query = supabase.from('logs').select('*');
+    // action הוא NOT NULL, כך ש-neq לא מעלים שורות
+    query = kind === 'contreal_sync'
+        ? query.eq('action', CONTREAL_SYNC_LOG_ACTION)
+        : query.neq('action', CONTREAL_SYNC_LOG_ACTION);
+    const { data, error } = await query
         .order('created_at', { ascending: false })
         .limit(500);
     return { data, error };

@@ -15,6 +15,7 @@ import {
     type ContrealConnectionStatus,
     type ContrealSyncResult,
     type ContrealTaskRow,
+    CONTREAL_SYNC_LOG_ACTION,
 } from '../services/PersistenceAdapter';
 import { authService } from '../services/authService';
 import { formatContrealDateTime, formatContrealDeadline, type DeadlineTone } from '../utils/formatContrealDeadline';
@@ -106,7 +107,7 @@ export default function ContrealTasksSection(): React.ReactElement | null {
         if (data?.ok) {
             await PersistenceAdapter.insertLog(
                 // entity_id הוא uuid שמאפשר NULL; לסנכרון אין ישות אחת
-                currentUser ?? 'unknown', 'סנכרון קונטריל', 'system', null as unknown as string,
+                currentUser ?? 'unknown', CONTREAL_SYNC_LOG_ACTION, 'system', null as unknown as string,
                 `נוספו ${data.created ?? 0}, נסגרו ${data.completedFromContreal ?? 0}, נפתחו ${data.reopenedFromContreal ?? 0}, נדחפו ${data.pushed ?? 0}, נמחקו ${data.deleted ?? 0}`,
             ).catch(() => {});
         }
