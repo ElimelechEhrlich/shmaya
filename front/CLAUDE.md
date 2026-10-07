@@ -95,6 +95,8 @@ Migrations applied (in order):
 - `db/migrations/0005_backfill_customer_columns.sql` — copies data from legacy detail tables → `customers` columns.
 - `db/migrations/0006_fix_fee_column_types.sql` — changes `setup_fee` / `monthly_fee` from `text` to `numeric`.
 - `db/migrations/0007_drop_legacy_detail_tables.sql` — drops the five legacy 1:1 detail tables (applied 2026-06-23).
+- `0009`–`0025` — see the files in `db/migrations/`.
+- `db/migrations/0026_contreal_auth.sql` / `0027_contreal_tasks.sql` — Contreal sync (see below).
 
 ### Live schema (reference only — not for execution)
 
@@ -154,7 +156,7 @@ CREATE TABLE public.sub_tasks (
   id              uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
   parent_task_id  uuid        NOT NULL REFERENCES parent_tasks(id),
   title           text        NOT NULL,
-  completed       boolean     NOT NULL DEFAULT false,
+  is_completed    boolean     NOT NULL DEFAULT false,
   priority        text        NOT NULL DEFAULT 'medium',
   comment         text        DEFAULT '',
   updated_at      timestamptz,
@@ -179,6 +181,16 @@ RLS reminder: a Supabase table created via the dashboard defaults to RLS-enabled
 ## `restrictedTo` — single-user lock
 
 Parent tasks may carry `restrictedTo: 'מוישי'`. `TaskCard` greys out and disables subtask checkboxes when `currentUser !== task.restrictedTo`. The string `"מוישי"` is hardcoded both as the only authorized login and as the only restriction value — if you generalize one, generalize the other.
+
+## Contreal sync
+
+Tasks managed in Contreal (WhatsApp agent "אלה") are mirrored into Shmaya; completion is two-way, everything else comes from Contreal only.
+
+- **Edge Function** `supabase/functions/contreal-sync/index.ts` talks to Contreal's MCP server (`https://api.contreal.io/mcp`, OAuth 2.0 + PKCE, refresh token rotates on every refresh). Deployed with `--no-verify-jwt` (the OAuth callback is a plain GET). Site actions are `POST { action }`: `status`, `sync`, `push_status {subtaskId}`, `task_details {subtaskId}`. Admin GET routes `/start`, `/discover`, `/disconnect` require the `CONTREAL_ADMIN_KEY` secret.
+- **Tables**: `contreal_auth` (tokens; RLS, no policies), `contreal_task_link` (sub_task ↔ Contreal task; browser may only SELECT), `contreal_user_map` (Contreal user → Shmaya user, filled by hand in the Table Editor). The link deliberately is NOT a `sub_tasks` column: the anon key can write `sub_tasks`, so a column there would let anyone point a row at any Contreal task and close it.
+- Each Contreal task is one `sub_task` under the office parent `registry_key = 'CONTREAL'`. `fetchOfficeTasks` excludes that parent (with `.or('registry_key.is.null,registry_key.neq.CONTREAL')` — a plain `neq` would also drop the NULL-key office parents). The dashboard shows them in `ContrealTasksSection` (managers from `CONTREAL_MANAGERS`: all, grouped by worker; others: only tasks whose `assigned_to` includes them). In Shmaya they can only be checked off — no edit/delete.
+- **Conflicts**: `sub_tasks.is_completed != contreal_task_link.synced_completed` means a Shmaya change that has not reached Contreal yet; sync pushes it instead of overwriting it. More than 5 deletions in one sync → nothing is deleted.
+- **Dates**: `deadline_date` is a plain `YYYY-MM-DD`; always format it with `src/utils/formatContrealDeadline.ts` (never `new Date('YYYY-MM-DD')`).
 
 ## Deeper architectural docs
 

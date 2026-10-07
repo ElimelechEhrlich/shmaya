@@ -1,5 +1,8 @@
 export const ALLOWED_USERS: string[] = ["מוישי", "יוחנן", "שמוליק"];
 
+// רואים את כל משימות קונטריל, מקובצות לפי עובד. שאר המשתמשים רואים רק את המשויכות אליהם.
+export const CONTREAL_MANAGERS: string[] = ["מוישי"];
+
 export interface AuthService {
   login(username: string | null | undefined): boolean;
   isAuthenticated(): boolean;
@@ -8,6 +11,7 @@ export interface AuthService {
   canDelete(): boolean;
   canEditRestricted(restrictedTo: string | null | undefined): boolean;
   canManageWaitingStatus(): boolean;
+  isContrealManager(): boolean;
 }
 
 export const authService: AuthService = {
@@ -49,5 +53,10 @@ export const authService: AuthService = {
   canManageWaitingStatus(): boolean {
     const user = this.getCurrentUser();
     return user === 'שמוליק' || user === 'מוישי';
+  },
+
+  isContrealManager(): boolean {
+    const user = this.getCurrentUser();
+    return !!user && CONTREAL_MANAGERS.includes(user);
   },
 };
