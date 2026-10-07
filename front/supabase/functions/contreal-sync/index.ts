@@ -1,10 +1,17 @@
-// Supabase Edge Function: contreal-sync — שלב 0 (חיבור + בדיקת תשובות אמיתיות)
+// Supabase Edge Function: contreal-sync — סנכרון משימות קונטריל ↔ שמעיה
 //
-// מטרה בשלב הזה: להתחבר פעם אחת לשרת ה-MCP של קונטריל (OAuth 2.0 + PKCE, לקוח ציבורי)
-// ולהחזיר את התשובות הגולמיות שלו, כדי לבנות את הסנכרון עצמו (שלבים 1–4) על נתונים
-// אמיתיים ולא על הנחות. אין כאן עדיין סנכרון ואין כתיבה לטבלאות המשימות.
+// מתחבר פעם אחת לשרת ה-MCP של קונטריל (OAuth 2.0 + PKCE, לקוח ציבורי), מייבא את המשימות
+// הפתוחות כתתי-משימות תחת אב משרדי אחד (registry_key = 'CONTREAL'), ומחזיר לקונטריל סימון
+// בוצע/לא בוצע שנעשה בשמעיה. דו-כיווני לסטטוס בלבד; כותרת, תאריך יעד, שיוך וכו' — רק מקונטריל.
 //
-// נתיבים (GET, נפתחים ישירות בדפדפן):
+// פעולות מהאתר (POST /contreal-sync, גוף JSON { action, ... } — דרך supabase.functions.invoke):
+//   status                       — מצב החיבור, בלי טוקנים.
+//   sync                         — סנכרון מלא (ר' runSync).
+//   push_status  { subtaskId }   — דוחף לקונטריל את is_completed הנוכחי של תת-המשימה (נקרא מה-DB).
+//   task_details { subtaskId }   — כל פרטי המשימה מקונטריל (get_task), לחלונית הפרטים.
+//   subtaskId בלבד: מזהה המשימה בקונטריל נלקח מ-contreal_task_link, שהדפדפן לא יכול לכתוב אליה.
+//
+// נתיבי ניהול (GET, נפתחים ישירות בדפדפן):
 //   /contreal-sync/start?key=...  — מתחיל התחברות. מסרב אם כבר מחובר (status = connected).
 //   /contreal-sync/callback   — לכאן קונטריל מחזיר אחרי ההתחברות. מפנה חזרה לדשבורד.
 //   /contreal-sync/status     — מצב החיבור, בלי טוקנים.
@@ -25,7 +32,7 @@
 // Secrets: SITE_URL (קיים), CONTREAL_ADMIN_KEY (חדש, לשלב 0).
 // SUPABASE_URL ו-SUPABASE_SERVICE_ROLE_KEY מסופקים אוטומטית ע"י Supabase.
 //
-// טבלה: contreal_auth (מיגרציה 0026) — RLS בלי policies, נגישה רק עם service role.
+// טבלאות: contreal_auth (0026), contreal_task_link + contreal_user_map (0027).
 
 import { createClient } from "npm:@supabase/supabase-js@2";
 
@@ -66,6 +73,9 @@ Deno.serve(async (req: Request) => {
         return requireAdminKey(url) ?? await handleDiscover(url);
       case "disconnect":
         return requireAdminKey(url) ?? await handleDisconnect(url);
+      case "contreal-sync":
+        if (req.method === "POST") return await handleAction(req);
+        return json({ error: "POST only" }, 405);
       default:
         return json({ error: `Unknown route: ${route}` }, 404);
     }
@@ -219,7 +229,8 @@ async function handleDiscover(url: URL): Promise<Response> {
  * ניתוק החשבון הנוכחי, כדי לחבר חשבון קונטריל אחר (למשל מעבר מחשבון בדיקה לחשבון המנהל).
  * מבטל את הטוקנים בקונטריל (best-effort) ומאפס את החיבור. client_id נשמר — הוא רישום של
  * שמעיה כאפליקציה, לא של משתמש. דורש confirm=1 כדי שפתיחה בטעות של הקישור לא תנתק.
- * הערה לשלבים 1–4: ניתוק יצטרך גם לנקות את משימות הקונטריל שסונכרנו מהחשבון הקודם.
+ * מנקה גם את משימות הקונטריל שסונכרנו מהחשבון הקודם ואת מיפוי העובדים — אחרת הסנכרון
+ * מהחשבון החדש היה רואה אותן כ"נמחקו" (ותנאי הבטיחות היה עוצר אותו).
  */
 async function handleDisconnect(url: URL): Promise<Response> {
   if (url.searchParams.get("confirm") !== "1") {
@@ -245,6 +256,7 @@ async function handleDisconnect(url: URL): Promise<Response> {
     console.error("[contreal-sync] revoke failed:", err);
     revoked.error = String(err);
   }
+  const cleared = await clearSyncedData();
   await updateAuth({
     status: "none",
     access_token: null,
@@ -257,7 +269,412 @@ async function handleDisconnect(url: URL): Promise<Response> {
     last_synced_at: null,
     sync_lock_until: null,
   });
-  return json({ disconnected: true, previousStatus: auth.status, revoked });
+  return json({ disconnected: true, previousStatus: auth.status, revoked, cleared });
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Actions from the site (POST)
+// ──────────────────────────────────────────────────────────────────
+
+const OFFICE_CUSTOMER_ID = "00000000-0000-0000-0000-000000000000";
+const CONTREAL_PARENT_KEY = "CONTREAL";
+const CONTREAL_PARENT_TITLE = "משימות מקונטריל";
+const UPDATED_BY = "קונטריל";
+// תנאי בטיחות: סנכרון שמוצא יותר משימות "שנמחקו" מזה — לא מוחק כלום ומחזיר אזהרה.
+const MAX_DELETIONS_PER_SYNC = 5;
+const SYNC_LOCK_MS = 120_000;
+
+async function handleAction(req: Request): Promise<Response> {
+  let body: { action?: string; subtaskId?: string } = {};
+  try { body = await req.json(); } catch { /* empty body */ }
+  switch (body.action) {
+    case "status": {
+      const auth = await readAuth();
+      return json({ ok: true, status: auth.status, lastSyncedAt: auth.last_synced_at });
+    }
+    case "sync":
+      return json(await runSync());
+    case "push_status":
+      if (!isUuid(body.subtaskId)) return json({ ok: false, error: "bad_subtask_id" }, 400);
+      return json(await pushSubtaskStatus(body.subtaskId!));
+    case "task_details":
+      if (!isUuid(body.subtaskId)) return json({ ok: false, error: "bad_subtask_id" }, 400);
+      return json(await taskDetails(body.subtaskId!));
+    default:
+      return json({ ok: false, error: `unknown_action: ${body.action}` }, 400);
+  }
+}
+
+// ── MCP session (one connection per request) ──
+
+class ToolError extends Error {}
+
+interface McpSession {
+  call: (tool: string, args: Record<string, unknown>) => Promise<any>;
+  close: () => Promise<void>;
+}
+
+async function openMcp(token: string): Promise<McpSession> {
+  const { Client } = await import("npm:@modelcontextprotocol/sdk@1/client/index.js");
+  const { StreamableHTTPClientTransport } = await import("npm:@modelcontextprotocol/sdk@1/client/streamableHttp.js");
+  const client = new Client({ name: "shmaya", version: "1.0.0" });
+  await client.connect(new StreamableHTTPClientTransport(new URL(MCP_URL), {
+    requestInit: { headers: { Authorization: `Bearer ${token}` } },
+  }));
+  return {
+    call: async (tool, args) => {
+      const parsed = parseToolResult(await client.callTool({ name: tool, arguments: args }));
+      if (parsed.isError) throw new ToolError(String(parsed.data));
+      return parsed.data;
+    },
+    close: () => client.close(),
+  };
+}
+
+/** קונטריל עונה "המשימה לא נמצאה." למשימה שנמחקה (אומת ב-discover). */
+function isNotFound(err: unknown): boolean {
+  return err instanceof ToolError && /לא נמצא|not found/i.test(err.message);
+}
+
+// ── Contreal task helpers ──
+
+interface ContrealStatusIds { doneId: number | null; todoId: number | null }
+
+/** הסטטוסים של החברה: "הושלם" = is_completed, "לביצוע" = ברירת המחדל הפתוחה. נשמרים ב-contreal_auth. */
+async function loadStatuses(mcp: McpSession): Promise<ContrealStatusIds> {
+  const data = await mcp.call("list_statuses_and_priorities", {});
+  const statuses: any[] = data?.task_statuses ?? [];
+  const done = statuses.find((st) => truthy(st.is_completed));
+  const todo = statuses.find((st) => truthy(st.is_default) && !truthy(st.is_completed))
+    ?? statuses.find((st) => !truthy(st.is_completed));
+  const ids = { doneId: done?.id ?? null, todoId: todo?.id ?? null };
+  await updateAuth({ status_id_done: ids.doneId, status_id_todo: ids.todoId });
+  return ids;
+}
+
+async function fetchAllOpenTasks(mcp: McpSession): Promise<any[]> {
+  const all: any[] = [];
+  let offset = 0;
+  for (let page = 0; page < 50; page++) {
+    const data = await mcp.call("search_tasks", { state: "open", limit: 100, offset });
+    const items: any[] = data?.items ?? [];
+    all.push(...items);
+    if (!data?.has_more || items.length === 0) return all;
+    offset = data.next_offset ?? offset + items.length;
+  }
+  throw new Error("search_tasks: too many pages");
+}
+
+function truthy(v: unknown): boolean {
+  return v === true || v === 1 || v === "1";
+}
+
+function isTaskCompleted(t: any): boolean {
+  return !!t?.completed_at || truthy(t?.status?.is_completed);
+}
+
+function linkFieldsFromTask(t: any, userMap: Map<number, string | null>) {
+  const assignees: { id: number; name: string }[] = (t.assignees ?? []).map((a: any) => ({ id: a.id, name: a.name }));
+  const assignedTo = [...new Set(assignees.map((a) => userMap.get(a.id)).filter((n): n is string => !!n))];
+  return {
+    assigned_to: assignedTo,
+    contreal_assignees: assignees,
+    deadline_date: t.deadline_date ?? null,
+    status_name: t.status?.name ?? null,
+    priority_name: t.priority?.priority_name ?? t.priority?.name ?? null,
+    project_name: t.project?.name ?? null,
+    client_name: t.client?.name ?? t.client?.business_name ?? null,
+    url: t.url ?? null,
+  };
+}
+
+async function pushToContreal(mcp: McpSession, contrealTaskId: number, completed: boolean, ids: ContrealStatusIds):
+  Promise<{ ok: true } | { ok: false; error: string }> {
+  const statusId = completed ? ids.doneId : ids.todoId;
+  if (!statusId) return { ok: false, error: "סטטוסי קונטריל לא ידועים" };
+  try {
+    await mcp.call("update_task", { task_id: contrealTaskId, status_id: statusId });
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: String(err instanceof Error ? err.message : err).slice(0, 300) };
+  }
+}
+
+async function ensureContrealParent(): Promise<string> {
+  const find = () => db.from("parent_tasks").select("id")
+    .eq("registry_key", CONTREAL_PARENT_KEY).eq("customer_id", OFFICE_CUSTOMER_ID).maybeSingle();
+  const { data: existing, error } = await find();
+  if (error) throw error;
+  if (existing) return existing.id;
+  const { data: created, error: insErr } = await db.from("parent_tasks").insert({
+    customer_id: OFFICE_CUSTOMER_ID,
+    registry_key: CONTREAL_PARENT_KEY,
+    title: CONTREAL_PARENT_TITLE,
+    status: "pending",
+  }).select("id").single();
+  if (!insErr) return created.id;
+  // סנכרון מקביל יצר אותו בינתיים (אינדקס ייחודי, מיגרציה 0027)
+  const { data: again } = await find();
+  if (again) return again.id;
+  throw insErr;
+}
+
+async function recomputeParentStatus(parentId: string): Promise<void> {
+  const { data } = await db.from("sub_tasks").select("is_completed").eq("parent_task_id", parentId);
+  const allDone = (data ?? []).length > 0 && (data ?? []).every((r: any) => r.is_completed);
+  await db.from("parent_tasks").update({ status: allDone ? "completed" : "pending" }).eq("id", parentId);
+}
+
+// ── sync ──
+
+/**
+ * סנכרון מלא. לכל משימה מקושרת:
+ *  - נמחקה בקונטריל ("המשימה לא נמצאה")  → נמחקת אצלנו (אלא אם יותר מ-MAX_DELETIONS_PER_SYNC).
+ *  - is_completed אצלנו ≠ synced_completed → שונתה בשמעיה ולא הגיעה לקונטריל: דוחפים (שמעיה גוברת).
+ *  - אחרת, אם המצב בקונטריל ≠ synced_completed → מחילים אצלנו, בעדכון מותנה בערך הקודם
+ *    (סימון שקרה באמצע הסנכרון לא נדרס; הוא יידחף בסנכרון הבא).
+ * משימות פתוחות חדשות נוצרות כתתי-משימות. משימות שלא חזרו ברשימת הפתוחות נבדקות אחת-אחת
+ * ב-get_task (search_tasks לא תומך בחיפוש לפי מזהים); תקלה בבדיקה = לא נוגעים, לא מוחקים.
+ */
+async function runSync() {
+  const token = await getAccessToken();
+  if (!token) return { ok: false, error: "not_connected" };
+
+  const nowIso = new Date().toISOString();
+  const { data: locked, error: lockErr } = await db.from("contreal_auth")
+    .update({ sync_lock_until: new Date(Date.now() + SYNC_LOCK_MS).toISOString() })
+    .eq("id", 1)
+    .or(`sync_lock_until.is.null,sync_lock_until.lt.${nowIso}`)
+    .select("id");
+  if (lockErr) throw lockErr;
+  if (!locked || locked.length === 0) return { ok: false, error: "sync_running" };
+
+  const result = {
+    ok: true,
+    created: 0, completedFromContreal: 0, reopenedFromContreal: 0,
+    pushed: 0, pushFailed: 0, deleted: 0,
+    unmappedAssignees: [] as string[],
+    warnings: [] as string[],
+  };
+
+  let mcp: McpSession | null = null;
+  try {
+    mcp = await openMcp(token);
+    const statusIds = await loadStatuses(mcp);
+    const open = await fetchAllOpenTasks(mcp);
+    const parentId = await ensureContrealParent();
+
+    // עובדים: כל מי שמופיע כ-assignee נרשם ב-contreal_user_map (בלי לדרוס shmaya_user)
+    const seen = new Map<number, string>();
+    for (const t of open) for (const a of t.assignees ?? []) seen.set(a.id, a.name);
+    if (seen.size > 0) {
+      const { error } = await db.from("contreal_user_map").upsert(
+        [...seen].map(([id, name]) => ({ contreal_user_id: id, contreal_name: name, updated_at: nowIso })),
+        { onConflict: "contreal_user_id" },
+      );
+      if (error) throw error;
+    }
+    const { data: mapRows, error: mapErr } = await db.from("contreal_user_map").select("contreal_user_id, contreal_name, shmaya_user");
+    if (mapErr) throw mapErr;
+    const userMap = new Map<number, string | null>((mapRows ?? []).map((r: any) => [Number(r.contreal_user_id), r.shmaya_user]));
+    result.unmappedAssignees = (mapRows ?? []).filter((r: any) => !r.shmaya_user).map((r: any) => r.contreal_name);
+
+    const { data: links, error: linksErr } = await db.from("contreal_task_link")
+      .select("subtask_id, contreal_task_id, synced_completed, push_error, sub_tasks(id, title, is_completed)");
+    if (linksErr) throw linksErr;
+    const openById = new Map<number, any>(open.map((t) => [Number(t.id), t]));
+    const linkedIds = new Set<number>((links ?? []).map((l: any) => Number(l.contreal_task_id)));
+
+    // מצב בקונטריל לכל משימה מקושרת
+    const remote = new Map<number, { task: any; deleted: boolean }>();
+    for (const l of links ?? []) {
+      const id = Number(l.contreal_task_id);
+      if (openById.has(id)) { remote.set(id, { task: openById.get(id), deleted: false }); continue; }
+      try {
+        remote.set(id, { task: await mcp.call("get_task", { task_id: id }), deleted: false });
+      } catch (err) {
+        if (isNotFound(err)) remote.set(id, { task: null, deleted: true });
+        else result.warnings.push(`משימה ${id}: לא הצלחתי לבדוק את מצבה (${String(err).slice(0, 120)}) — לא שיניתי אותה`);
+      }
+    }
+
+    const deletions = [...remote.values()].filter((r) => r.deleted).length;
+    const skipDeletes = deletions > MAX_DELETIONS_PER_SYNC;
+    if (skipDeletes) {
+      result.warnings.push(`${deletions} משימות נראות כמחוקות בקונטריל — יותר מ-${MAX_DELETIONS_PER_SYNC}, ולכן לא נמחק כלום. יש לבדוק ידנית.`);
+    }
+
+    for (const l of links ?? []) {
+      const id = Number(l.contreal_task_id);
+      const r = remote.get(id);
+      const sub = l.sub_tasks as any;
+      if (!r || !sub) continue;
+
+      if (r.deleted) {
+        if (!skipDeletes) {
+          const { error } = await db.from("sub_tasks").delete().eq("id", sub.id);
+          if (error) result.warnings.push(`מחיקת משימה ${id} נכשלה: ${error.message}`);
+          else result.deleted++;
+        }
+        continue;
+      }
+
+      const t = r.task;
+      const remoteDone = isTaskCompleted(t);
+      const local = !!sub.is_completed;
+      const synced = !!l.synced_completed;
+      let newSynced = synced;
+      let pushError: string | null = l.push_error ?? null;
+
+      if (local !== synced) {
+        if (remoteDone === local) {
+          newSynced = local; // כבר מסונכרן בפועל (סומן בשני הצדדים)
+          pushError = null;
+        } else {
+          const pushed = await pushToContreal(mcp, id, local, statusIds);
+          if (pushed.ok) { newSynced = local; pushError = null; result.pushed++; }
+          else { pushError = pushed.error; result.pushFailed++; }
+        }
+      } else if (remoteDone !== synced) {
+        const { data: upd, error } = await db.from("sub_tasks")
+          .update({ is_completed: remoteDone, updated_at: nowIso, updated_by: UPDATED_BY })
+          .eq("id", sub.id).eq("is_completed", synced)
+          .select("id");
+        if (error) result.warnings.push(`עדכון משימה ${id} נכשל: ${error.message}`);
+        else if (upd && upd.length > 0) {
+          newSynced = remoteDone;
+          if (remoteDone) result.completedFromContreal++; else result.reopenedFromContreal++;
+        }
+      }
+
+      if (t?.title && t.title !== sub.title) {
+        await db.from("sub_tasks").update({ title: t.title }).eq("id", sub.id);
+      }
+
+      const { error: linkErr } = await db.from("contreal_task_link").update({
+        ...linkFieldsFromTask(t, userMap),
+        synced_completed: newSynced,
+        push_error: pushError,
+        last_seen_at: nowIso,
+        updated_at: nowIso,
+      }).eq("subtask_id", sub.id);
+      if (linkErr) result.warnings.push(`עדכון קישור ${id} נכשל: ${linkErr.message}`);
+    }
+
+    // משימות פתוחות חדשות
+    for (const t of open) {
+      const id = Number(t.id);
+      if (linkedIds.has(id)) continue;
+      const { data: sub, error: subErr } = await db.from("sub_tasks").insert({
+        parent_task_id: parentId,
+        title: t.title,
+        is_completed: false,
+        priority: "medium",
+        comment: "",
+        updated_at: nowIso,
+        updated_by: UPDATED_BY,
+      }).select("id").single();
+      if (subErr) { result.warnings.push(`יצירת משימה ${id} נכשלה: ${subErr.message}`); continue; }
+      const { error: linkErr } = await db.from("contreal_task_link").insert({
+        subtask_id: sub.id,
+        contreal_task_id: id,
+        ...linkFieldsFromTask(t, userMap),
+        synced_completed: false,
+        last_seen_at: nowIso,
+      });
+      if (linkErr) {
+        // למשל סנכרון מקביל כבר קישר אותה — לא משאירים תת-משימה יתומה
+        await db.from("sub_tasks").delete().eq("id", sub.id);
+        result.warnings.push(`קישור משימה ${id} נכשל: ${linkErr.message}`);
+        continue;
+      }
+      result.created++;
+    }
+
+    await recomputeParentStatus(parentId);
+    await updateAuth({ last_synced_at: new Date().toISOString() });
+    return result;
+  } finally {
+    if (mcp) await mcp.close().catch(() => {});
+    await db.from("contreal_auth").update({ sync_lock_until: null }).eq("id", 1);
+  }
+}
+
+// ── push_status ──
+
+async function pushSubtaskStatus(subtaskId: string) {
+  const { data: link, error } = await db.from("contreal_task_link")
+    .select("contreal_task_id, synced_completed, sub_tasks(is_completed)")
+    .eq("subtask_id", subtaskId).maybeSingle();
+  if (error) throw error;
+  if (!link) return { ok: true, skipped: "not_a_contreal_task" };
+  const local = !!(link.sub_tasks as any)?.is_completed;
+  if (local === !!link.synced_completed) return { ok: true, skipped: "already_synced" };
+
+  const token = await getAccessToken();
+  if (!token) {
+    await db.from("contreal_task_link").update({ push_error: "אין חיבור לקונטריל" }).eq("subtask_id", subtaskId);
+    return { ok: false, error: "not_connected" };
+  }
+  const auth = await db.from("contreal_auth").select("status_id_done, status_id_todo").eq("id", 1).single();
+  let ids: ContrealStatusIds = { doneId: auth.data?.status_id_done ?? null, todoId: auth.data?.status_id_todo ?? null };
+
+  const mcp = await openMcp(token);
+  try {
+    if (!ids.doneId || !ids.todoId) ids = await loadStatuses(mcp);
+    const pushed = await pushToContreal(mcp, Number(link.contreal_task_id), local, ids);
+    await db.from("contreal_task_link").update(pushed.ok
+      ? { synced_completed: local, push_error: null, updated_at: new Date().toISOString() }
+      : { push_error: pushed.error, updated_at: new Date().toISOString() },
+    ).eq("subtask_id", subtaskId);
+    return pushed.ok ? { ok: true } : { ok: false, error: pushed.error };
+  } finally {
+    await mcp.close().catch(() => {});
+  }
+}
+
+// ── task_details ──
+
+// שדות של get_task שלא מוצגים בחלונית (רשימות עזר לעריכה, לא פרטי המשימה)
+const DETAILS_OMIT = new Set(["available_statuses", "available_priorities", "assignable_members"]);
+
+async function taskDetails(subtaskId: string) {
+  const { data: link, error } = await db.from("contreal_task_link")
+    .select("contreal_task_id").eq("subtask_id", subtaskId).maybeSingle();
+  if (error) throw error;
+  if (!link) return { ok: false, error: "not_a_contreal_task" };
+  const token = await getAccessToken();
+  if (!token) return { ok: false, error: "not_connected" };
+  const mcp = await openMcp(token);
+  try {
+    const task = await mcp.call("get_task", { task_id: Number(link.contreal_task_id) });
+    const details = Object.fromEntries(Object.entries(task ?? {}).filter(([k]) => !DETAILS_OMIT.has(k)));
+    return { ok: true, task: details };
+  } catch (err) {
+    if (isNotFound(err)) return { ok: false, error: "deleted_in_contreal" };
+    return { ok: false, error: String(err instanceof Error ? err.message : err).slice(0, 300) };
+  } finally {
+    await mcp.close().catch(() => {});
+  }
+}
+
+// ── disconnect cleanup ──
+
+async function clearSyncedData() {
+  const { data: parent } = await db.from("parent_tasks").select("id")
+    .eq("registry_key", CONTREAL_PARENT_KEY).eq("customer_id", OFFICE_CUSTOMER_ID).maybeSingle();
+  let subtasks = 0;
+  if (parent) {
+    const { data: removed } = await db.from("sub_tasks").delete().eq("parent_task_id", parent.id).select("id");
+    subtasks = removed?.length ?? 0;
+    await db.from("parent_tasks").delete().eq("id", parent.id);
+  }
+  const { data: users } = await db.from("contreal_user_map").delete().gte("contreal_user_id", 0).select("contreal_user_id");
+  return { subtasks, userMappings: users?.length ?? 0 };
+}
+
+function isUuid(v: unknown): boolean {
+  return typeof v === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
 }
 
 // ──────────────────────────────────────────────────────────────────
