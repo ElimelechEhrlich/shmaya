@@ -9,6 +9,7 @@
 //   sync                         — סנכרון מלא (ר' runSync).
 //   push_status  { subtaskId }   — דוחף לקונטריל את is_completed הנוכחי של תת-המשימה (נקרא מה-DB).
 //   task_details { subtaskId }   — כל פרטי המשימה מקונטריל (get_task), לחלונית הפרטים.
+//                                  לכל קובץ (במשימה ובתגובות) נוסף `link` מ-get_file_link.
 //   completed_tasks { user }     — משימות שהושלמו, ישירות מקונטריל (user=null: כולן; אחרת רק שלו).
 //   subtaskId בלבד: מזהה המשימה בקונטריל נלקח מ-contreal_task_link, שהדפדפן לא יכול לכתוב אליה.
 //
@@ -910,6 +911,7 @@ async function taskDetails(subtaskId: string) {
   try {
     const task = await mcp.call("get_task", { task_id: Number(link.contreal_task_id) });
     const details = Object.fromEntries(Object.entries(task ?? {}).filter(([k]) => !DETAILS_OMIT.has(k)));
+    await attachFileLinks(mcp, details);
     return { ok: true, task: details };
   } catch (err) {
     if (isNotFound(err)) return { ok: false, error: "deleted_in_contreal" };
@@ -917,6 +919,87 @@ async function taskDetails(subtaskId: string) {
   } finally {
     await mcp.close().catch(() => {});
   }
+}
+
+// ── קבצים: get_task מחזיר רק פרטי קובץ ומזהה; get_file_link נותן קישור לקובץ עצמו ──
+
+const FILE_KEYS = ["files", "attachments"];
+const MAX_FILE_LINKS = 30;
+
+/** קובץ ברשימה יכול להגיע כמזהה בלבד או כאובייקט; מחזיר אובייקט עם id (או null). */
+function asFileObject(f: unknown): Record<string, any> | null {
+  if (typeof f === "number" || (typeof f === "string" && /^\d+$/.test(f))) return { id: Number(f) };
+  if (f && typeof f === "object") return f as Record<string, any>;
+  return null;
+}
+
+function fileIdOf(f: Record<string, any>): number | string | null {
+  return f.id ?? f.file_id ?? null;
+}
+
+/** מחלץ קישור https מתשובת get_file_link (מחרוזת, או אובייקט עם url/link/... גם בתוך data/file). */
+function extractFileLink(res: unknown): string | null {
+  const isHttps = (v: unknown) => typeof v === "string" && /^https:\/\/\S+$/.test(v.trim());
+  if (isHttps(res)) return (res as string).trim();
+  if (typeof res === "string") {
+    const m = /https:\/\/[^\s"'<>]+/.exec(res);
+    return m ? m[0] : null;
+  }
+  if (!res || typeof res !== "object") return null;
+  const o = res as Record<string, any>;
+  for (const k of ["url", "link", "download_url", "signed_url", "file_url", "href", "view_url", "public_url"]) {
+    if (isHttps(o[k])) return o[k].trim();
+  }
+  for (const k of ["data", "file", "result"]) {
+    const inner = extractFileLink(o[k]);
+    if (inner) return inner;
+  }
+  return null;
+}
+
+/**
+ * מוסיף לכל קובץ במשימה ובתגובות (כולל תשובות לתגובות) שדה `link` — קישור לקובץ עצמו
+ * מ-get_file_link. הקבצים לא נשמרים בשמעיה; הקישור נוצר מחדש בכל פתיחה של החלונית.
+ * best-effort: כשל בקובץ אחד מסמן רק אותו (`link_error`) ולא מפיל את החלונית.
+ */
+async function attachFileLinks(mcp: McpSession, task: Record<string, any>) {
+  const files: Record<string, any>[] = [];
+  const collect = (holder: Record<string, any>) => {
+    for (const key of FILE_KEYS) {
+      if (!Array.isArray(holder[key])) continue;
+      holder[key] = holder[key].map(asFileObject).filter(Boolean);
+      for (const f of holder[key]) if (fileIdOf(f) !== null) files.push(f);
+    }
+  };
+  const walkComments = (list: unknown, depth = 0) => {
+    if (!Array.isArray(list) || depth > 5) return;
+    for (const c of list) {
+      if (!c || typeof c !== "object") continue;
+      collect(c);
+      walkComments((c as any).replies, depth + 1);
+    }
+  };
+  collect(task);
+  walkComments(task.comments);
+
+  await mapLimit(files.slice(0, MAX_FILE_LINKS), 5, async (f) => {
+    try {
+      const res = await mcp.call("get_file_link", { file_id: Number(fileIdOf(f)) });
+      const url = extractFileLink(res);
+      if (url) f.link = url;
+      else f.link_error = "no_link: " + JSON.stringify(res).slice(0, 200);
+      // פרטים שאולי חסרים ברשימה אבל מגיעים בתשובה (שם, סוג)
+      if (res && typeof res === "object") {
+        const r = (res as any).file ?? res;
+        for (const k of ["name", "file_name", "original_name", "mime_type", "content_type", "size"]) {
+          if (f[k] === undefined && r[k] !== undefined && typeof r[k] !== "object") f[k] = r[k];
+        }
+      }
+    } catch (err) {
+      f.link_error = String(err instanceof Error ? err.message : err).slice(0, 200);
+    }
+  });
+  if (files.length > MAX_FILE_LINKS) task.files_truncated = true;
 }
 
 // ── disconnect cleanup ──
@@ -954,7 +1037,7 @@ const DISCOVERY_CALLS: { label: string; tool: string; args: Record<string, unkno
 ];
 
 // כלים שה-schema המלא שלהם נחוץ לשלבים 1–4 (כתיבה וקריאה של משימה בודדת).
-const FULL_SCHEMA_TOOLS = /^(get_task|update_task|update_tasks|create_task|complete_task)$/;
+const FULL_SCHEMA_TOOLS = /^(get_task|update_task|update_tasks|create_task|complete_task|get_file_link|search_files)$/;
 
 /** content[0].text של תשובת MCP — מפוענח כ-JSON אם אפשר. */
 function parseToolResult(result: any) {
