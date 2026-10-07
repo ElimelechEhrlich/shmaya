@@ -279,7 +279,8 @@ async function handleDisconnect(url: URL): Promise<Response> {
 const OFFICE_CUSTOMER_ID = "00000000-0000-0000-0000-000000000000";
 const CONTREAL_PARENT_KEY = "CONTREAL";
 const CONTREAL_PARENT_TITLE = "משימות מקונטריל";
-const UPDATED_BY = "קונטריל";
+// sub_tasks.updated_by הוא enum של משתמשי שמעיה (users) — שינוי שמקורו בקונטריל נשאר בלי שם משתמש.
+const UPDATED_BY = null;
 // תנאי בטיחות: סנכרון שמוצא יותר משימות "שנמחקו" מזה — לא מוחק כלום ומחזיר אזהרה.
 const MAX_DELETIONS_PER_SYNC = 5;
 const SYNC_LOCK_MS = 120_000;
