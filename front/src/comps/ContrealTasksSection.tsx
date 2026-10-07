@@ -41,7 +41,6 @@ export default function ContrealTasksSection(): React.ReactElement | null {
     const [loadError, setLoadError] = useState(false);
     const [connection, setConnection] = useState<ContrealConnectionStatus | 'unknown'>('unknown');
     const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
-    const [showOpenOnly, setShowOpenOnly] = useState(true);
     const [syncing, setSyncing] = useState(false);
     const [syncResult, setSyncResult] = useState<ContrealSyncResult | null>(null);
     const [detailsFor, setDetailsFor] = useState<ContrealTaskRow | null>(null);
@@ -134,11 +133,12 @@ export default function ContrealTasksSection(): React.ReactElement | null {
         }
     }, [loadRows, currentUser]);
 
-    // משימה שסומנה כבוצעה אבל העדכון לא הגיע לקונטריל נשארת גלויה גם במצב "רק פתוחות",
+    // מוצגות רק משימות פתוחות (משימות שהושלמו — בחלון "משימות שהושלמו").
+    // משימה שסומנה כבוצעה אבל העדכון לא הגיע לקונטריל נשארת גלויה,
     // אחרת האזהרה (⚠️) נעלמת יחד עם השורה והמשתמש לא יודע שקונטריל לא עודכן.
     const visibleRows = useMemo(
-        () => (rows ?? []).filter(r => !showOpenOnly || !r.completed || !!r.pushError),
-        [rows, showOpenOnly],
+        () => (rows ?? []).filter(r => !r.completed || !!r.pushError),
+        [rows],
     );
 
     // מנהל: קיבוץ לפי עובד. כותרת הקבוצה היא שם המשתמש בשמעיה ("מוישי", "יוחנן"…) כשהעובד
@@ -181,21 +181,6 @@ export default function ContrealTasksSection(): React.ReactElement | null {
                         <p className="text-[11px] text-slate-400 mt-0.5">סונכרן לאחרונה: {formatContrealDateTime(lastSyncedAt)}</p>
                     )}
                 </div>
-                <label className="flex items-center gap-2 cursor-pointer select-none">
-                    <input
-                        type="checkbox"
-                        checked={showOpenOnly}
-                        onChange={e => setShowOpenOnly(e.target.checked)}
-                        className="peer sr-only"
-                    />
-                    <span className="w-4 h-4 rounded border-2 border-slate-300
-                                     peer-checked:border-violet-500 peer-checked:bg-violet-500
-                                     transition-all duration-150 flex items-center justify-center
-                                     text-transparent peer-checked:text-white text-[9px] font-black shrink-0">
-                        ✓
-                    </span>
-                    <span className="text-xs text-slate-500 font-medium">הצג רק משימות פתוחות</span>
-                </label>
                 <button
                     onClick={() => setShowCompleted(true)}
                     className="cursor-pointer bg-white hover:bg-violet-50 text-violet-700 border border-violet-200 text-xs font-bold py-1.5 px-3 rounded-lg transition"
