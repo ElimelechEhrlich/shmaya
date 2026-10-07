@@ -11,13 +11,23 @@ interface LogEntry {
   payload: { details: string };
 }
 
+type LogTab = 'actions' | 'contreal_sync';
+
+const TABS: { key: LogTab; label: string }[] = [
+  { key: 'actions', label: 'יומן פעולות' },
+  { key: 'contreal_sync', label: 'סנכרוני קונטריל' },
+];
+
 export default function Logs(): React.ReactElement {
+  const [tab, setTab] = useState<LogTab>('actions');
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
 
   useEffect(() => {
-    PersistenceAdapter.fetchLogs().then(({ data, error }) => {
+    let cancelled = false;
+    PersistenceAdapter.fetchLogs(tab).then(({ data, error }) => {
+      if (cancelled) return;
       if (error) {
         console.error('Error fetching logs:', error);
         setLoadError(true);
@@ -25,7 +35,15 @@ export default function Logs(): React.ReactElement {
       setLogs(data ?? []);
       setLoading(false);
     });
-  }, []);
+    return () => { cancelled = true; };
+  }, [tab]);
+
+  const selectTab = (next: LogTab) => {
+    if (next === tab) return;
+    setLoading(true);
+    setLoadError(false);
+    setTab(next);
+  };
 
   const formatDate = (iso: string) => {
     const d = new Date(iso);
@@ -37,7 +55,23 @@ export default function Logs(): React.ReactElement {
 
   return (
     <div className="p-4 md:p-6 max-w-5xl mx-auto" dir="rtl">
-      <h1 className="text-2xl font-black text-slate-800 mb-6">יומן פעולות</h1>
+      <h1 className="text-2xl font-black text-slate-800 mb-4">יומן פעולות</h1>
+
+      <div className="flex gap-1 mb-6 border-b border-slate-200" role="tablist">
+        {TABS.map(t => (
+          <button
+            key={t.key}
+            role="tab"
+            aria-selected={tab === t.key}
+            onClick={() => selectTab(t.key)}
+            className={`cursor-pointer px-4 py-2 text-sm font-bold border-b-2 -mb-px transition ${
+              tab === t.key ? 'border-blue-600 text-blue-700' : 'border-transparent text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
 
       {loading ? (
         <div className="flex justify-center py-20">
@@ -56,7 +90,7 @@ export default function Logs(): React.ReactElement {
           </button>
         </div>
       ) : logs.length === 0 ? (
-        <p className="text-slate-400 text-center py-20">אין פעולות מתועדות עדיין</p>
+        <p className="text-slate-400 text-center py-20">{tab === 'contreal_sync' ? 'אין סנכרונים מתועדים עדיין' : 'אין פעולות מתועדות עדיין'}</p>
       ) : (
         <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-x-auto">
           <table className="w-full text-sm">

@@ -54,7 +54,7 @@ All authenticated routes are nested under `/admin/*` inside `<Layout>` (Sidebar 
 - `/admin/customers/:id` → `CustomerCard` (powered by `useCustomer`)
 - `/admin/tasks` → `Tasks` (subtask-centric, cross-customer)
 - `/admin/tasks/:id` → `TaskDetails` (placeholder)
-- `/admin/logs` → `Logs` (live from `logs` table; Excel export)
+- `/admin/logs` → `Logs` (live from `logs` table; Excel export). Two tabs: "יומן פעולות" (everything except Contreal syncs) and "סנכרוני קונטריל" (`action = CONTREAL_SYNC_LOG_ACTION`, manual and cron), filtered in the query so syncs never fill the 500-row limit.
 
 ## Task generation
 
