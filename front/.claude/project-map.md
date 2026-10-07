@@ -357,6 +357,27 @@ These are intentionally deferred — flagged here so future work can pick them u
 7. **`subtaskIds` on `SERVICES` is informational.** The generator iterates `AUTO_TASKS_CONFIG[*].subTasks`, not this array. Adding a subtask requires touching both files.
 8. **`Logs` page still shows hardcoded mock data**, separate from the broader logging fix.
 
+### 10.1 Still to handle (added 2026-10-06, after PRs #14–#15)
+
+> Note: items 2 and 8 above are outdated — `Logs.tsx` now reads live from the `logs` table via `PersistenceAdapter.fetchLogs()`.
+
+**Lint warnings (temporarily non-blocking).** `react-hooks/set-state-in-effect` was downgraded from error to warning in `eslint.config.js` so lint passes. These work today; fixing them changes render behaviour, so fix one at a time and verify each in a browser. Then restore the rule to `error`.
+
+- `set-state-in-effect` (6): `CustomerList.tsx:83`, `useCustomer.ts:101`, `AddCustomer.tsx:119`, `TaskDetails.tsx:52`, `Tasks.tsx:87`, `Tasks.tsx:202`
+- `exhaustive-deps` (9): `CustomerCard.tsx:252/261/272` (`actions`), `useCustomer.ts:223` (`modal`, `navigate`), `useCustomer.ts:356` (`customerId`), `useCustomer.ts:410/444` (`customer.customerDetails.fullName`), `Dashboard.tsx:87` (`modal`), `Tasks.tsx:282` (`modal`). Adding a dependency changes when the callback is recreated — check each for stale-closure bugs vs. extra re-runs.
+
+**Load-error UX.** Customers, Tasks and Logs show an error message + retry on fetch failure (PR #15). Not yet done:
+- `Dashboard` — on failure it only logs to console and shows empty/zero stats.
+- `Tasks` — while loading, the overall progress bar may show "100% · הכל הושלם!" (computed from an empty list). Verify and hide it during `loading` too.
+
+**Tooling.**
+- `npm run build` does not type-check (Vite only). Consider `"build": "tsc --noEmit && vite build"` — a type error once slipped past a green build.
+- Without `.env` (`VITE_SUPABASE_*`) the build still "succeeds" but the bundle only throws "Missing Supabase environment variables". Vercel has the vars; local/CI builds need them.
+- Tests (`tests/`, `e2e/` Playwright) exist but no `npm test` script runs them. `e2e/test-{1,2,3}.spec.ts` are recorded stubs with no assertions.
+- `README.md` is still the Vite template.
+
+**Docs drift in `CLAUDE.md`.** "No test runner is configured" (Playwright is installed); "Defensive `insertLog` (UUID-validates `entityId`)" — the unused `isUuid` helper was removed in PR #14, `insertLog` does not validate.
+
 ---
 
 *Generated after the four-pass refactor (Registry → Adapter → LogService → useCustomer hook). The file describes intended current state; verify against `git log` if discrepancies appear.*
