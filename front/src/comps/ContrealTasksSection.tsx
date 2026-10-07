@@ -82,7 +82,7 @@ export default function ContrealTasksSection(): React.ReactElement | null {
         Promise.resolve().then(() => Promise.all([loadRows(), loadStatus()]));
     }, [loadRows, loadStatus]);
 
-    // הסנכרון האוטומטי (כל 10 דקות, pg_cron) רץ בשרת; כאן רק מרעננים את התצוגה כל דקה,
+    // הסנכרון האוטומטי (כל 5 דקות, pg_cron) רץ בשרת; כאן רק מרעננים את התצוגה כל דקה,
     // כשהלשונית גלויה ואין סנכרון ידני באמצע — כך שינוי מקונטריל מופיע בלי לרענן את הדף.
     useEffect(() => {
         const timer = window.setInterval(() => {

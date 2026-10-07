@@ -545,7 +545,7 @@ async function runSync() {
       if (l.project_name && EXCLUDED_PROJECT_NAMES.has(String(l.project_name).trim())) continue; // מוסרת למטה
       if (openById.has(id)) { remote.set(id, { task: openById.get(id), deleted: false }); continue; }
       // הושלמה בשני הצדדים ולא חזרה ברשימת הפתוחות → עדיין הושלמה בקונטריל (אילו נפתחה מחדש,
-      // הייתה חוזרת ברשימת הפתוחות). לא בודקים אותה שוב — אחרת כל סנכרון (כל 10 דקות) היה
+      // הייתה חוזרת ברשימת הפתוחות). לא בודקים אותה שוב — אחרת כל סנכרון (כל 5 דקות) היה
       // שולח get_task לכל משימה שהושלמה אי-פעם. מחיר: משימה שהושלמה ואז נמחקה בקונטריל נשארת
       // אצלנו כמשימה שהושלמה (מוסתרת ב"רק פתוחות").
       if (l.synced_completed && (l.sub_tasks as any)?.is_completed) continue;
