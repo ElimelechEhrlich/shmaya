@@ -11,6 +11,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
     PersistenceAdapter,
+    type ContrealCompletedTask,
     type ContrealConnectionStatus,
     type ContrealSyncResult,
     type ContrealTaskRow,
@@ -44,6 +45,7 @@ export default function ContrealTasksSection(): React.ReactElement | null {
     const [syncing, setSyncing] = useState(false);
     const [syncResult, setSyncResult] = useState<ContrealSyncResult | null>(null);
     const [detailsFor, setDetailsFor] = useState<ContrealTaskRow | null>(null);
+    const [showCompleted, setShowCompleted] = useState(false);
     // תוצאת ההתחברות: ה-callback של הפונקציה מפנה לדשבורד עם ?contreal=connected / ?error=...
     const [connectNotice] = useState<'connected' | 'error' | null>(() => {
         const q = new URLSearchParams(window.location.search);
@@ -195,6 +197,12 @@ export default function ContrealTasksSection(): React.ReactElement | null {
                     <span className="text-xs text-slate-500 font-medium">הצג רק משימות פתוחות</span>
                 </label>
                 <button
+                    onClick={() => setShowCompleted(true)}
+                    className="cursor-pointer bg-white hover:bg-violet-50 text-violet-700 border border-violet-200 text-xs font-bold py-1.5 px-3 rounded-lg transition"
+                >
+                    ✓ משימות שהושלמו
+                </button>
+                <button
                     onClick={handleSync}
                     disabled={syncing}
                     className="cursor-pointer bg-violet-600 hover:bg-violet-700 disabled:opacity-60 disabled:cursor-wait text-white text-xs font-bold py-1.5 px-3 rounded-lg transition flex items-center gap-1"
@@ -265,6 +273,9 @@ export default function ContrealTasksSection(): React.ReactElement | null {
             )}
 
             {detailsFor && <ContrealTaskDetailsModal row={detailsFor} onClose={() => setDetailsFor(null)} />}
+            {showCompleted && (
+                <CompletedTasksModal user={isManager ? null : currentUser} currentUser={currentUser} onClose={() => setShowCompleted(false)} />
+            )}
         </div>
     );
 }
@@ -471,6 +482,104 @@ function renderField(key: string, value: any): React.ReactNode {
     if (typeof value === 'object') return nameOf(value);
     if (typeof value === 'boolean') return value ? 'כן' : 'לא';
     return String(value);
+}
+
+// ──────────────────────────────────────────────────────────────────
+// "משימות שהושלמו" — נטען ישירות מקונטריל בכל פתיחה (לא נשמר בשמעיה).
+// מנהל: כולן, מקובצות לפי עובד (אותו סדר כמו בדשבורד). עובד: רק שלו.
+// ──────────────────────────────────────────────────────────────────
+
+function CompletedTasksModal({ user, currentUser, onClose }: {
+    user: string | null;
+    currentUser: string | null;
+    onClose: () => void;
+}): React.ReactElement {
+    const [tasks, setTasks] = useState<ContrealCompletedTask[] | null>(null);
+    const [error, setError] = useState<string | null>(null);
+    const [truncated, setTruncated] = useState(false);
+
+    useEffect(() => {
+        let cancelled = false;
+        PersistenceAdapter.fetchContrealCompleted(user).then(({ data, error: err }) => {
+            if (cancelled) return;
+            if (err || !data?.ok) {
+                setError(data?.error === 'not_connected' ? 'קונטריל לא מחובר.' : 'לא הצלחנו לטעון את המשימות שהושלמו מקונטריל.');
+                return;
+            }
+            setTruncated(!!data.truncated);
+            setTasks(data.tasks ?? []);
+        });
+        return () => { cancelled = true; };
+    }, [user]);
+
+    const groups = useMemo(() => {
+        if (!tasks) return null;
+        if (user) return [{ name: '', list: tasks }];
+        const map = new Map<string, ContrealCompletedTask[]>();
+        for (const t of tasks) {
+            const keys = t.assignees.length ? [...new Set(t.assignees.map(a => a.shmayaUser ?? a.name))] : [UNASSIGNED];
+            for (const k of keys) map.set(k, [...(map.get(k) ?? []), t]);
+        }
+        const rank = (k: string) => k === currentUser ? 0 : k === UNASSIGNED ? 1 : 2;
+        return [...map.entries()]
+            .sort(([a], [b]) => rank(a) - rank(b) || a.localeCompare(b, 'he'))
+            .map(([name, list]) => ({ name, list }));
+    }, [tasks, user, currentUser]);
+
+    return (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={onClose} dir="rtl">
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
+                <div className="px-6 py-4 border-b border-slate-100 flex items-center gap-3">
+                    <h3 className="flex-1 text-lg font-bold text-slate-900">
+                        {user ? 'המשימות שהשלמתי' : 'משימות שהושלמו — כל העובדים'}
+                        {tasks && <span className="text-sm font-normal text-slate-400 mr-2">({tasks.length})</span>}
+                    </h3>
+                    <button onClick={onClose} className="cursor-pointer text-slate-400 hover:text-slate-700 text-xl leading-none" aria-label="סגירה">×</button>
+                </div>
+                <div className="overflow-y-auto">
+                    {error ? (
+                        <p className="p-6 text-red-600 text-sm">{error}</p>
+                    ) : !groups ? (
+                        <div className="p-6 space-y-2">{[1, 2, 3].map(i => <div key={i} className="h-4 bg-slate-100 rounded animate-pulse" />)}</div>
+                    ) : tasks!.length === 0 ? (
+                        <p className="p-6 text-slate-400 text-sm italic">אין משימות שהושלמו.</p>
+                    ) : (
+                        groups.map(g => (
+                            <div key={g.name || 'mine'}>
+                                {g.name && (
+                                    <div className="px-6 py-2 bg-slate-50 border-y border-slate-100 flex items-center gap-2 sticky top-0">
+                                        <span className="text-xs font-bold text-slate-600">{g.name}</span>
+                                        {g.name === currentUser && <span className="text-[11px] text-slate-500">(המשימות שלי)</span>}
+                                        <span className="text-[11px] text-slate-500 bg-white border border-slate-200 rounded-full px-2">{g.list.length}</span>
+                                    </div>
+                                )}
+                                <div className="divide-y divide-slate-100">
+                                    {g.list.map(t => {
+                                        const safeUrl = t.url && t.url.startsWith('https://app.contreal.io/') ? t.url : null;
+                                        return (
+                                            <div key={`${g.name}:${t.id}`} className="px-6 py-3 flex items-center gap-3">
+                                                <span className="w-5 h-5 rounded-full bg-emerald-500 text-white text-[11px] font-black flex items-center justify-center shrink-0">✓</span>
+                                                <div className="flex-1 min-w-0">
+                                                    <span className="text-sm text-slate-700 block">{t.title}</span>
+                                                    <span className="text-[11px] text-slate-400 block mt-0.5">
+                                                        {[t.completedAt ? `הושלמה ${formatContrealDateTime(t.completedAt)}` : null, t.projectName, t.clientName].filter(Boolean).join(' · ')}
+                                                    </span>
+                                                </div>
+                                                {safeUrl && (
+                                                    <a href={safeUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-violet-700 hover:underline shrink-0">פתח בקונטריל ↗</a>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        ))
+                    )}
+                    {truncated && <p className="px-6 py-3 text-[11px] text-slate-400">מוצגות 300 המשימות האחרונות בלבד.</p>}
+                </div>
+            </div>
+        </div>
+    );
 }
 
 function ContrealTaskDetailsModal({ row, onClose }: { row: ContrealTaskRow; onClose: () => void }): React.ReactElement {
