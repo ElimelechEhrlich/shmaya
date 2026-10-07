@@ -8,7 +8,7 @@
 //   /contreal-sync/start?key=...  — מתחיל התחברות. מסרב אם כבר מחובר (status = connected).
 //   /contreal-sync/callback   — לכאן קונטריל מחזיר אחרי ההתחברות. מפנה חזרה לדשבורד.
 //   /contreal-sync/status     — מצב החיבור, בלי טוקנים.
-//   /contreal-sync/discover?key=...            — initialize + tools/list + search_tasks לדוגמה.
+//   /contreal-sync/discover?key=...            — initialize + סיכום הכלים + קריאות קריאה-בלבד לדוגמה.
 //   /contreal-sync/discover?key=...&refresh=1  — גם בודק רענון טוקן (האם ה-refresh token מתחלף).
 //   /contreal-sync/discover?key=...&raw=1      — עוקף את ה-SDK ומשתמש ב-JSON-RPC ישיר.
 //   /contreal-sync/disconnect?key=...&confirm=1 — מנתק את החשבון הנוכחי (מבטל טוקנים בקונטריל
@@ -261,18 +261,34 @@ async function handleDisconnect(url: URL): Promise<Response> {
 // MCP — two clients, so stage 0 tells us which one works in Edge Runtime
 // ──────────────────────────────────────────────────────────────────
 
-// קריאות לדוגמה: אחת בלי fields (לראות ברירת מחדל), ואחת עם השדות מהמסמך.
-const SAMPLE_CALLS: { label: string; args: Record<string, unknown> }[] = [
-  { label: "all_default_fields", args: { completionState: "all", limit: 5 } },
-  {
-    label: "all_doc_fields",
-    args: {
-      completionState: "all",
-      limit: 5,
-      fields: ["title", "description", "status_id", "status", "deadline_date", "completed_at", "updated_at", "assignees"],
-    },
-  },
+// קריאות הבדיקה, לפי ה-schema האמיתי שהחזיר tools/list (סבב ראשון של discover):
+// search_tasks מקבל state/limit/offset (לא completionState/fields/taskIds), והשרת דוחה
+// פרמטרים לא מוכרים (additionalProperties: false).
+const DISCOVERY_CALLS: { label: string; tool: string; args: Record<string, unknown> }[] = [
+  { label: "get_me", tool: "get_me", args: {} },
+  { label: "statuses_and_priorities", tool: "list_statuses_and_priorities", args: {} },
+  { label: "team_members", tool: "list_team_members", args: { limit: 20 } },
+  { label: "open_tasks", tool: "search_tasks", args: { state: "open", limit: 5 } },
+  { label: "completed_tasks", tool: "search_tasks", args: { state: "completed", limit: 2 } },
 ];
+
+// כלים שה-schema המלא שלהם נחוץ לשלבים 1–4 (כתיבה וקריאה של משימה בודדת).
+const FULL_SCHEMA_TOOLS = /^(get_task|update_task|update_tasks|create_task|complete_task)$/;
+
+/** content[0].text של תשובת MCP — מפוענח כ-JSON אם אפשר. */
+function parseToolResult(result: any) {
+  const text = result?.content?.find((c: any) => c.type === "text")?.text;
+  let data: unknown = text;
+  try { data = JSON.parse(text); } catch { /* נשאר טקסט */ }
+  return { isError: !!result?.isError, data, otherContentTypes: (result?.content ?? []).filter((c: any) => c.type !== "text").map((c: any) => c.type) };
+}
+
+/** מחפש את מזהה המשימה הראשונה בתשובת search_tasks, בלי להניח את המבנה המדויק. */
+function firstTaskId(data: any): number | null {
+  const list = Array.isArray(data) ? data : (data?.tasks ?? data?.items ?? data?.results ?? data?.data);
+  const id = Array.isArray(list) ? list[0]?.id : null;
+  return typeof id === "number" ? id : null;
+}
 
 async function discoverWithSdk(token: string) {
   const out: Record<string, unknown> = { ok: false };
@@ -286,16 +302,37 @@ async function discoverWithSdk(token: string) {
     });
     await client.connect(transport);
     out.serverVersion = client.getServerVersion?.();
-    out.tools = await client.listTools();
-    const samples: Record<string, unknown> = {};
-    for (const call of SAMPLE_CALLS) {
+
+    // סיכום קצר של כל הכלים (כדי שהתשובה לא תהיה ארוכה מדי), ו-schema מלא רק לכלים הרלוונטיים
+    const { tools } = await client.listTools();
+    out.toolsSummary = tools.map((t: any) => ({
+      name: t.name,
+      readOnly: t.annotations?.readOnlyHint ?? null,
+      destructive: t.annotations?.destructiveHint ?? null,
+      params: Object.keys(t.inputSchema?.properties ?? {}),
+      required: t.inputSchema?.required ?? [],
+    }));
+    out.fullSchemas = tools
+      .filter((t: any) => FULL_SCHEMA_TOOLS.test(t.name))
+      .map((t: any) => ({ name: t.name, description: t.description, inputSchema: t.inputSchema }));
+
+    const call = async (tool: string, args: Record<string, unknown>) => {
       try {
-        samples[call.label] = await client.callTool({ name: "search_tasks", arguments: call.args });
+        return parseToolResult(await client.callTool({ name: tool, arguments: args }));
       } catch (err) {
-        samples[call.label] = { error: String(err) };
+        return { error: String(err) };
       }
-    }
-    out.samples = samples;
+    };
+
+    const calls: Record<string, unknown> = {};
+    for (const c of DISCOVERY_CALLS) calls[c.label] = await call(c.tool, c.args);
+
+    // משימה אחת במלואה (תיאור, תאריכים, assignees...), ואיך נראית תשובה למשימה שלא קיימת
+    const openId = firstTaskId((calls.open_tasks as any)?.data);
+    if (openId) calls.get_task_first_open = await call("get_task", { task_id: openId });
+    calls.get_task_missing = await call("get_task", { task_id: 999999999 });
+
+    out.calls = calls;
     await client.close();
     out.ok = true;
   } catch (err) {
@@ -352,9 +389,9 @@ async function discoverWithRawRpc(token: string) {
     out.initializedNotification = await rpc("notifications/initialized", undefined, true);
     out.tools = await rpc("tools/list", {});
     const samples: Record<string, unknown> = {};
-    for (const call of SAMPLE_CALLS) {
+    for (const call of DISCOVERY_CALLS) {
       try {
-        samples[call.label] = await rpc("tools/call", { name: "search_tasks", arguments: call.args });
+        samples[call.label] = await rpc("tools/call", { name: call.tool, arguments: call.args });
       } catch (err) {
         samples[call.label] = { error: String(err) };
       }
