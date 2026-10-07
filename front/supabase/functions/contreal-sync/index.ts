@@ -8,7 +8,8 @@
 //   /contreal-sync/start?key=...  — מתחיל התחברות. מסרב אם כבר מחובר (status = connected).
 //   /contreal-sync/callback   — לכאן קונטריל מחזיר אחרי ההתחברות. מפנה חזרה לדשבורד.
 //   /contreal-sync/status     — מצב החיבור, בלי טוקנים.
-//   /contreal-sync/discover?key=...            — initialize + סיכום הכלים + קריאות קריאה-בלבד לדוגמה.
+//   /contreal-sync/discover?key=...            — קריאות קריאה-בלבד לדוגמה (מקוצרות).
+//   /contreal-sync/discover?key=...&part=tools — במקום זה: סיכום הכלים וה-schema של כלי המשימות.
 //   /contreal-sync/discover?key=...&refresh=1  — גם בודק רענון טוקן (האם ה-refresh token מתחלף).
 //   /contreal-sync/discover?key=...&raw=1      — עוקף את ה-SDK ומשתמש ב-JSON-RPC ישיר.
 //   /contreal-sync/disconnect?key=...&confirm=1 — מנתק את החשבון הנוכחי (מבטל טוקנים בקונטריל
@@ -202,8 +203,10 @@ async function handleDiscover(url: URL): Promise<Response> {
   report.auth = { status: auth.status, hasRefreshToken: !!auth.refresh_token, expiresAt: auth.expires_at };
 
   const forceRaw = url.searchParams.get("raw") === "1";
+  // ברירת מחדל: רק תוצאות הקריאות (מקוצרות). part=tools מחזיר במקום זה את רשימת הכלים.
+  const part = url.searchParams.get("part") === "tools" ? "tools" : "calls";
   if (!forceRaw) {
-    report.sdk = await discoverWithSdk(token);
+    report.sdk = await discoverWithSdk(token, part);
   }
   if (forceRaw || !(report.sdk as { ok?: boolean })?.ok) {
     report.raw = await discoverWithRawRpc(token);
@@ -268,7 +271,7 @@ const DISCOVERY_CALLS: { label: string; tool: string; args: Record<string, unkno
   { label: "get_me", tool: "get_me", args: {} },
   { label: "statuses_and_priorities", tool: "list_statuses_and_priorities", args: {} },
   { label: "team_members", tool: "list_team_members", args: { limit: 20 } },
-  { label: "open_tasks", tool: "search_tasks", args: { state: "open", limit: 5 } },
+  { label: "open_tasks", tool: "search_tasks", args: { state: "open", limit: 3 } },
   { label: "completed_tasks", tool: "search_tasks", args: { state: "completed", limit: 2 } },
 ];
 
@@ -290,7 +293,21 @@ function firstTaskId(data: any): number | null {
   return typeof id === "number" ? id : null;
 }
 
-async function discoverWithSdk(token: string) {
+/** מקצר תשובה גדולה כדי שתיכנס בהודעה אחת: מחרוזות ארוכות ומערכים ארוכים נחתכים. */
+function trimForReport(value: unknown, depth = 0): unknown {
+  if (typeof value === "string") return value.length > 200 ? `${value.slice(0, 200)}… (${value.length} chars)` : value;
+  if (Array.isArray(value)) {
+    const head = value.slice(0, 3).map((v) => trimForReport(v, depth + 1));
+    return value.length > 3 ? [...head, `… +${value.length - 3} more`] : head;
+  }
+  if (value && typeof value === "object") {
+    if (depth > 6) return "{…}";
+    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, trimForReport(v, depth + 1)]));
+  }
+  return value;
+}
+
+async function discoverWithSdk(token: string, part: "tools" | "calls" = "calls") {
   const out: Record<string, unknown> = { ok: false };
   try {
     const { Client } = await import("npm:@modelcontextprotocol/sdk@1/client/index.js");
@@ -303,6 +320,7 @@ async function discoverWithSdk(token: string) {
     await client.connect(transport);
     out.serverVersion = client.getServerVersion?.();
 
+    if (part === "tools") {
     // סיכום קצר של כל הכלים (כדי שהתשובה לא תהיה ארוכה מדי), ו-schema מלא רק לכלים הרלוונטיים
     const { tools } = await client.listTools();
     out.toolsSummary = tools.map((t: any) => ({
@@ -315,6 +333,10 @@ async function discoverWithSdk(token: string) {
     out.fullSchemas = tools
       .filter((t: any) => FULL_SCHEMA_TOOLS.test(t.name))
       .map((t: any) => ({ name: t.name, description: t.description, inputSchema: t.inputSchema }));
+    await client.close();
+    out.ok = true;
+    return out;
+    }
 
     const call = async (tool: string, args: Record<string, unknown>) => {
       try {
@@ -332,7 +354,7 @@ async function discoverWithSdk(token: string) {
     if (openId) calls.get_task_first_open = await call("get_task", { task_id: openId });
     calls.get_task_missing = await call("get_task", { task_id: 999999999 });
 
-    out.calls = calls;
+    out.calls = trimForReport(calls);
     await client.close();
     out.ok = true;
   } catch (err) {
