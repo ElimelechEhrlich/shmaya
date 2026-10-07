@@ -283,18 +283,32 @@ const CONTREAL_PARENT_TITLE = "משימות מקונטריל";
 const UPDATED_BY = null;
 // תנאי בטיחות: סנכרון שמוצא יותר משימות "שנמחקו" מזה — לא מוחק כלום ומחזיר אזהרה.
 const MAX_DELETIONS_PER_SYNC = 5;
+// פרויקטים שלא מייבאים לשמעיה. "פרויקט לדוגמה" הוא פרויקט ההדגמה שקונטריל יוצר לכל חשבון חדש.
+// משימה מפרויקט כזה לא נוצרת, ומשימה שכבר יובאה (או הועברה אליו) מוסרת משמעיה — בקונטריל
+// עצמו לא נוגעים. זו החרגה מכוונת, לא מחיקה בקונטריל, ולכן לא נספרת בתנאי הבטיחות.
+const EXCLUDED_PROJECT_NAMES = new Set(["פרויקט לדוגמה"]);
+
+function isExcludedTask(t: any): boolean {
+  const name = t?.project?.name;
+  return typeof name === "string" && EXCLUDED_PROJECT_NAMES.has(name.trim());
+}
 const SYNC_LOCK_MS = 120_000;
 
 async function handleAction(req: Request): Promise<Response> {
-  let body: { action?: string; subtaskId?: string } = {};
+  let body: { action?: string; subtaskId?: string; source?: string } = {};
   try { body = await req.json(); } catch { /* empty body */ }
   switch (body.action) {
     case "status": {
       const auth = await readAuth();
       return json({ ok: true, status: auth.status, lastSyncedAt: auth.last_synced_at });
     }
-    case "sync":
-      return json(await runSync());
+    case "sync": {
+      const result = await runSync();
+      // הסנכרון האוטומטי (pg_cron, מיגרציה 0028) רושם ביומן הפעולות רק כשמשהו השתנה.
+      // סנכרון ידני נרשם מהדשבורד.
+      if (body.source === "cron" && result.ok) await logCronSync(result as any);
+      return json(result);
+    }
     case "push_status":
       if (!isUuid(body.subtaskId)) return json({ ok: false, error: "bad_subtask_id" }, 400);
       return json(await pushSubtaskStatus(body.subtaskId!));
@@ -452,7 +466,7 @@ async function runSync() {
 
   const result = {
     ok: true,
-    created: 0, completedFromContreal: 0, reopenedFromContreal: 0,
+    created: 0, completedFromContreal: 0, reopenedFromContreal: 0, excluded: 0,
     pushed: 0, pushFailed: 0, deleted: 0,
     unmappedAssignees: [] as string[],
     warnings: [] as string[],
@@ -462,7 +476,7 @@ async function runSync() {
   try {
     mcp = await openMcp(token);
     const statusIds = await loadStatuses(mcp);
-    const open = await fetchAllOpenTasks(mcp);
+    const open = (await fetchAllOpenTasks(mcp)).filter((t) => !isExcludedTask(t));
     const parentId = await ensureContrealParent();
 
     // עובדים: כל מי שמופיע כ-assignee נרשם ב-contreal_user_map (בלי לדרוס shmaya_user)
@@ -481,7 +495,7 @@ async function runSync() {
     result.unmappedAssignees = (mapRows ?? []).filter((r: any) => !r.shmaya_user).map((r: any) => r.contreal_name);
 
     const { data: links, error: linksErr } = await db.from("contreal_task_link")
-      .select("subtask_id, contreal_task_id, synced_completed, push_error, sub_tasks(id, title, is_completed)");
+      .select("subtask_id, contreal_task_id, synced_completed, push_error, project_name, sub_tasks(id, title, is_completed)");
     if (linksErr) throw linksErr;
     const openById = new Map<number, any>(open.map((t) => [Number(t.id), t]));
     const linkedIds = new Set<number>((links ?? []).map((l: any) => Number(l.contreal_task_id)));
@@ -490,7 +504,13 @@ async function runSync() {
     const remote = new Map<number, { task: any; deleted: boolean }>();
     for (const l of links ?? []) {
       const id = Number(l.contreal_task_id);
+      if (l.project_name && EXCLUDED_PROJECT_NAMES.has(String(l.project_name).trim())) continue; // מוסרת למטה
       if (openById.has(id)) { remote.set(id, { task: openById.get(id), deleted: false }); continue; }
+      // הושלמה בשני הצדדים ולא חזרה ברשימת הפתוחות → עדיין הושלמה בקונטריל (אילו נפתחה מחדש,
+      // הייתה חוזרת ברשימת הפתוחות). לא בודקים אותה שוב — אחרת כל סנכרון (כל 10 דקות) היה
+      // שולח get_task לכל משימה שהושלמה אי-פעם. מחיר: משימה שהושלמה ואז נמחקה בקונטריל נשארת
+      // אצלנו כמשימה שהושלמה (מוסתרת ב"רק פתוחות").
+      if (l.synced_completed && (l.sub_tasks as any)?.is_completed) continue;
       try {
         remote.set(id, { task: await mcp.call("get_task", { task_id: id }), deleted: false });
       } catch (err) {
@@ -509,6 +529,13 @@ async function runSync() {
       const id = Number(l.contreal_task_id);
       const r = remote.get(id);
       const sub = l.sub_tasks as any;
+      const excludedByLink = !!l.project_name && EXCLUDED_PROJECT_NAMES.has(String(l.project_name).trim());
+      if (sub && (excludedByLink || (r?.task && isExcludedTask(r.task)))) {
+        const { error } = await db.from("sub_tasks").delete().eq("id", sub.id);
+        if (error) result.warnings.push(`הסרת משימה ${id} (פרויקט מוחרג) נכשלה: ${error.message}`);
+        else result.excluded++;
+        continue;
+      }
       if (!r || !sub) continue;
 
       if (r.deleted) {
@@ -599,6 +626,26 @@ async function runSync() {
     if (mcp) await mcp.close().catch(() => {});
     await db.from("contreal_auth").update({ sync_lock_until: null }).eq("id", 1);
   }
+}
+
+async function logCronSync(r: Record<string, number>): Promise<void> {
+  const parts = [
+    r.created && `נוספו ${r.created}`,
+    r.completedFromContreal && `נסגרו ${r.completedFromContreal}`,
+    r.reopenedFromContreal && `נפתחו ${r.reopenedFromContreal}`,
+    r.pushed && `נדחפו ${r.pushed}`,
+    r.deleted && `נמחקו ${r.deleted}`,
+    r.excluded && `הוסרו (פרויקט מוחרג) ${r.excluded}`,
+  ].filter(Boolean);
+  if (parts.length === 0) return;
+  const { error } = await db.from("logs").insert({
+    actor: "סנכרון אוטומטי",
+    action: "סנכרון קונטריל",
+    entity_type: "system",
+    entity_id: null,
+    payload: { details: parts.join(", ") },
+  });
+  if (error) console.error("[contreal-sync] cron log insert failed:", error.message);
 }
 
 // ── push_status ──
