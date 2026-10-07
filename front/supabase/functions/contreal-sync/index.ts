@@ -405,8 +405,11 @@ function isTaskCompleted(t: any): boolean {
 }
 
 function linkFieldsFromTask(t: any, userMap: Map<number, string | null>) {
-  const assignees: { id: number; name: string }[] = (t.assignees ?? []).map((a: any) => ({ id: a.id, name: a.name }));
-  const assignedTo = [...new Set(assignees.map((a) => userMap.get(a.id)).filter((n): n is string => !!n))];
+  // shmaya_user לכל משויך: הדפדפן לא יכול לקרוא את contreal_user_map (RLS), ובזכותו הדשבורד
+  // יודע איזו קבוצת עובד היא של המשתמש המחובר לשמעיה (ומציג אותה ראשונה).
+  const assignees: { id: number; name: string; shmaya_user: string | null }[] = (t.assignees ?? [])
+    .map((a: any) => ({ id: a.id, name: a.name, shmaya_user: userMap.get(a.id) ?? null }));
+  const assignedTo = [...new Set(assignees.map((a) => a.shmaya_user).filter((n): n is string => !!n))];
   return {
     assigned_to: assignedTo,
     contreal_assignees: assignees,
