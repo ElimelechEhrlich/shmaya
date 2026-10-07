@@ -9,6 +9,7 @@
 //   sync                         — סנכרון מלא (ר' runSync).
 //   push_status  { subtaskId }   — דוחף לקונטריל את is_completed הנוכחי של תת-המשימה (נקרא מה-DB).
 //   task_details { subtaskId }   — כל פרטי המשימה מקונטריל (get_task), לחלונית הפרטים.
+//   completed_tasks { user }     — משימות שהושלמו, ישירות מקונטריל (user=null: כולן; אחרת רק שלו).
 //   subtaskId בלבד: מזהה המשימה בקונטריל נלקח מ-contreal_task_link, שהדפדפן לא יכול לכתוב אליה.
 //
 // נתיבי ניהול (GET, נפתחים ישירות בדפדפן):
@@ -35,6 +36,8 @@
 // טבלאות: contreal_auth (0026), contreal_task_link + contreal_user_map (0027).
 
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { Client } from "npm:@modelcontextprotocol/sdk@1/client/index.js";
+import { StreamableHTTPClientTransport } from "npm:@modelcontextprotocol/sdk@1/client/streamableHttp.js";
 
 const CONTREAL_BASE = "https://api.contreal.io";
 const MCP_URL = `${CONTREAL_BASE}/mcp`;
@@ -311,7 +314,7 @@ function matchShmayaUser(contrealName: string): string | null {
 }
 
 async function handleAction(req: Request): Promise<Response> {
-  let body: { action?: string; subtaskId?: string; source?: string } = {};
+  let body: { action?: string; subtaskId?: string; source?: string; user?: string | null } = {};
   try { body = await req.json(); } catch { /* empty body */ }
   switch (body.action) {
     case "status": {
@@ -331,6 +334,9 @@ async function handleAction(req: Request): Promise<Response> {
     case "task_details":
       if (!isUuid(body.subtaskId)) return json({ ok: false, error: "bad_subtask_id" }, 400);
       return json(await taskDetails(body.subtaskId!));
+    case "completed_tasks":
+      if (body.user != null && !SHMAYA_USERS.includes(body.user)) return json({ ok: false, error: "bad_user" }, 400);
+      return json(await completedTasks(body.user ?? null));
     default:
       return json({ ok: false, error: `unknown_action: ${body.action}` }, 400);
   }
@@ -346,8 +352,6 @@ interface McpSession {
 }
 
 async function openMcp(token: string): Promise<McpSession> {
-  const { Client } = await import("npm:@modelcontextprotocol/sdk@1/client/index.js");
-  const { StreamableHTTPClientTransport } = await import("npm:@modelcontextprotocol/sdk@1/client/streamableHttp.js");
   const client = new Client({ name: "shmaya", version: "1.0.0" });
   await client.connect(new StreamableHTTPClientTransport(new URL(MCP_URL), {
     requestInit: { headers: { Authorization: `Bearer ${token}` } },
@@ -381,6 +385,22 @@ async function loadStatuses(mcp: McpSession): Promise<ContrealStatusIds> {
   const ids = { doneId: done?.id ?? null, todoId: todo?.id ?? null };
   await updateAuth({ status_id_done: ids.doneId, status_id_todo: ids.todoId });
   return ids;
+}
+
+/** מזהי הסטטוסים השמורים ב-contreal_auth; טוען מקונטריל רק אם עוד לא נשמרו. */
+async function cachedStatuses(mcp: McpSession): Promise<ContrealStatusIds> {
+  const { data } = await db.from("contreal_auth").select("status_id_done, status_id_todo").eq("id", 1).single();
+  if (data?.status_id_done && data?.status_id_todo) return { doneId: Number(data.status_id_done), todoId: Number(data.status_id_todo) };
+  return loadStatuses(mcp);
+}
+
+/** מריץ fn על כל הפריטים, עד `limit` במקביל. */
+async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const out: R[] = new Array(items.length);
+  let next = 0;
+  const worker = async () => { while (next < items.length) { const i = next++; out[i] = await fn(items[i]); } };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return out;
 }
 
 async function fetchAllOpenTasks(mcp: McpSession): Promise<any[]> {
@@ -424,12 +444,26 @@ function linkFieldsFromTask(t: any, userMap: Map<number, string | null>) {
 
 async function pushToContreal(mcp: McpSession, contrealTaskId: number, completed: boolean, ids: ContrealStatusIds):
   Promise<{ ok: true } | { ok: false; error: string }> {
-  const statusId = completed ? ids.doneId : ids.todoId;
-  if (!statusId) return { ok: false, error: "סטטוסי קונטריל לא ידועים" };
-  try {
+  const attempt = async (statusIds: ContrealStatusIds) => {
+    const statusId = completed ? statusIds.doneId : statusIds.todoId;
+    if (!statusId) throw new Error("סטטוסי קונטריל לא ידועים");
     await mcp.call("update_task", { task_id: contrealTaskId, status_id: statusId });
+  };
+  try {
+    await attempt(ids);
     return { ok: true };
   } catch (err) {
+    // ייתכן שהסטטוסים השמורים כבר לא בתוקף (הוגדרו מחדש בקונטריל) — טוענים מחדש ומנסים פעם אחת
+    if (err instanceof ToolError && !isNotFound(err)) {
+      try {
+        const fresh = await loadStatuses(mcp);
+        if (fresh.doneId !== ids.doneId || fresh.todoId !== ids.todoId) {
+          Object.assign(ids, fresh);
+          await attempt(ids);
+          return { ok: true };
+        }
+      } catch { /* נופלים לשגיאה המקורית */ }
+    }
     return { ok: false, error: String(err instanceof Error ? err.message : err).slice(0, 300) };
   }
 }
@@ -469,6 +503,13 @@ function makeAnnotator(mcp: McpSession, warnings?: string[]): Annotator {
       warnings?.push(msg);
     }
   };
+}
+
+/** ערכי link להשוואה: מערכים/אובייקטים ריקים ו-null שקולים, ותאריך נחתך ל-YYYY-MM-DD. */
+function normalizeLinkValue(key: string, v: unknown): unknown {
+  if (v === undefined) return null;
+  if (key === "deadline_date" && typeof v === "string") return v.slice(0, 10);
+  return v;
 }
 
 async function ensureContrealParent(): Promise<string> {
@@ -527,14 +568,19 @@ async function runSync() {
     unmappedAssignees: [] as string[],
     autoMapped: [] as string[],
     warnings: [] as string[],
+    timingsMs: {} as Record<string, number>,
   };
 
   let mcp: McpSession | null = null;
   try {
+    const t0 = Date.now();
+    const mark = (label: string) => { result.timingsMs[label] = Date.now() - t0; };
     mcp = await openMcp(token);
-    const statusIds = await loadStatuses(mcp);
+    mark("connect");
+    const statusIds = await cachedStatuses(mcp);
     const annotate = makeAnnotator(mcp, result.warnings);
     const open = (await fetchAllOpenTasks(mcp)).filter((t) => !isExcludedTask(t));
+    mark("fetchOpen");
     const parentId = await ensureContrealParent();
 
     // עובדים: כל מי שמופיע כ-assignee נרשם ב-contreal_user_map (בלי לדרוס shmaya_user)
@@ -577,13 +623,14 @@ async function runSync() {
     result.unmappedAssignees = (mapRows ?? []).filter((r: any) => !r.shmaya_user).map((r: any) => r.contreal_name);
 
     const { data: links, error: linksErr } = await db.from("contreal_task_link")
-      .select("subtask_id, contreal_task_id, synced_completed, push_error, project_name, sub_tasks(id, title, is_completed, updated_by)");
+      .select("subtask_id, contreal_task_id, synced_completed, push_error, project_name, assigned_to, contreal_assignees, deadline_date, status_name, priority_name, client_name, url, sub_tasks(id, title, is_completed, updated_by)");
     if (linksErr) throw linksErr;
     const openById = new Map<number, any>(open.map((t) => [Number(t.id), t]));
     const linkedIds = new Set<number>((links ?? []).map((l: any) => Number(l.contreal_task_id)));
 
     // מצב בקונטריל לכל משימה מקושרת
     const remote = new Map<number, { task: any; deleted: boolean }>();
+    const toCheck: number[] = [];
     for (const l of links ?? []) {
       const id = Number(l.contreal_task_id);
       if (l.project_name && EXCLUDED_PROJECT_NAMES.has(String(l.project_name).trim())) continue; // מוסרת למטה
@@ -593,14 +640,20 @@ async function runSync() {
       // שולח get_task לכל משימה שהושלמה אי-פעם. מחיר: משימה שהושלמה ואז נמחקה בקונטריל נשארת
       // אצלנו כמשימה שהושלמה (מוסתרת ב"רק פתוחות").
       if (l.synced_completed && (l.sub_tasks as any)?.is_completed) continue;
+      toCheck.push(id);
+    }
+    // בדיקות get_task במקביל (עד 5 בבת אחת) במקום אחת-אחת
+    await mapLimit(toCheck, 5, async (id) => {
       try {
-        remote.set(id, { task: await mcp.call("get_task", { task_id: id }), deleted: false });
+        remote.set(id, { task: await mcp!.call("get_task", { task_id: id }), deleted: false });
       } catch (err) {
         if (isNotFound(err)) remote.set(id, { task: null, deleted: true });
         else result.warnings.push(`משימה ${id}: לא הצלחתי לבדוק את מצבה (${String(err).slice(0, 120)}) — לא שיניתי אותה`);
       }
-    }
+    });
+    mark("checkLinked");
 
+    const writes: (() => Promise<void>)[] = [];
     const deletions = [...remote.values()].filter((r) => r.deleted).length;
     const skipDeletes = deletions > MAX_DELETIONS_PER_SYNC;
     if (skipDeletes) {
@@ -658,24 +711,28 @@ async function runSync() {
       }
 
       if (t?.title && t.title !== sub.title) {
-        await db.from("sub_tasks").update({ title: t.title }).eq("id", sub.id);
+        writes.push(async () => { await db.from("sub_tasks").update({ title: t.title }).eq("id", sub.id); });
       }
 
-      const { error: linkErr } = await db.from("contreal_task_link").update({
-        ...linkFieldsFromTask(t, userMap),
-        synced_completed: newSynced,
-        push_error: pushError,
-        last_seen_at: nowIso,
-        updated_at: nowIso,
-      }).eq("subtask_id", sub.id);
-      if (linkErr) result.warnings.push(`עדכון קישור ${id} נכשל: ${linkErr.message}`);
+      // כותבים את ה-link רק כשמשהו בו השתנה (רוב הסנכרונים — כלום), ובמקביל בסוף הלולאה
+      const fields = { ...linkFieldsFromTask(t, userMap), synced_completed: newSynced, push_error: pushError };
+      const changed = (Object.keys(fields) as (keyof typeof fields)[])
+        .some((k) => JSON.stringify(normalizeLinkValue(k, (l as any)[k])) !== JSON.stringify(normalizeLinkValue(k, fields[k])));
+      if (changed) {
+        writes.push(async () => {
+          const { error: linkErr } = await db.from("contreal_task_link")
+            .update({ ...fields, last_seen_at: nowIso, updated_at: nowIso }).eq("subtask_id", sub.id);
+          if (linkErr) result.warnings.push(`עדכון קישור ${id} נכשל: ${linkErr.message}`);
+        });
+      }
     }
+    await mapLimit(writes, 8, (w) => w());
+    mark("updateLinked");
 
-    // משימות פתוחות חדשות
-    for (const t of open) {
-      const id = Number(t.id);
-      if (linkedIds.has(id)) continue;
-      const { data: sub, error: subErr } = await db.from("sub_tasks").insert({
+    // משימות פתוחות חדשות — הכנסה מרוכזת (שתי קריאות במקום שתיים לכל משימה)
+    const fresh = open.filter((t) => !linkedIds.has(Number(t.id)));
+    if (fresh.length > 0) {
+      const { data: subs, error: subErr } = await db.from("sub_tasks").insert(fresh.map((t) => ({
         parent_task_id: parentId,
         title: t.title,
         is_completed: false,
@@ -683,23 +740,33 @@ async function runSync() {
         comment: "",
         updated_at: nowIso,
         updated_by: UPDATED_BY,
-      }).select("id").single();
-      if (subErr) { result.warnings.push(`יצירת משימה ${id} נכשלה: ${subErr.message}`); continue; }
-      const { error: linkErr } = await db.from("contreal_task_link").insert({
-        subtask_id: sub.id,
-        contreal_task_id: id,
-        ...linkFieldsFromTask(t, userMap),
-        synced_completed: false,
-        last_seen_at: nowIso,
-      });
-      if (linkErr) {
-        // למשל סנכרון מקביל כבר קישר אותה — לא משאירים תת-משימה יתומה
-        await db.from("sub_tasks").delete().eq("id", sub.id);
-        result.warnings.push(`קישור משימה ${id} נכשל: ${linkErr.message}`);
-        continue;
+      }))).select("id");
+      if (subErr || !subs || subs.length !== fresh.length) {
+        result.warnings.push(`יצירת ${fresh.length} משימות חדשות נכשלה: ${subErr?.message ?? "מספר שורות לא תואם"}`);
+      } else {
+        const linkRows = fresh.map((t, i) => ({
+          subtask_id: subs[i].id,
+          contreal_task_id: Number(t.id),
+          ...linkFieldsFromTask(t, userMap),
+          synced_completed: false,
+          last_seen_at: nowIso,
+        }));
+        const { error: linkErr } = await db.from("contreal_task_link").insert(linkRows);
+        if (!linkErr) {
+          result.created += fresh.length;
+        } else {
+          // למשל סנכרון מקביל כבר קישר חלק מהן — עוברים אחת-אחת, ולא משאירים תת-משימה יתומה
+          for (const row of linkRows) {
+            const { error } = await db.from("contreal_task_link").insert(row);
+            if (error) {
+              await db.from("sub_tasks").delete().eq("id", row.subtask_id);
+              result.warnings.push(`קישור משימה ${row.contreal_task_id} נכשל: ${error.message}`);
+            } else result.created++;
+          }
+        }
       }
-      result.created++;
     }
+    mark("createNew");
 
     await recomputeParentStatus(parentId);
     await updateAuth({ last_synced_at: new Date().toISOString() });
@@ -760,6 +827,68 @@ async function pushSubtaskStatus(subtaskId: string) {
       : { push_error: pushed.error, updated_at: new Date().toISOString() },
     ).eq("subtask_id", subtaskId);
     return pushed.ok ? { ok: true } : { ok: false, error: pushed.error };
+  } finally {
+    await mcp.close().catch(() => {});
+  }
+}
+
+// ── completed_tasks ──
+
+const COMPLETED_MAX_PAGES = 3; // עד 300 משימות שהושלמו (החדשות ביותר)
+
+/**
+ * משימות שהושלמו, ישירות מקונטריל (לא נשמרות בשמעיה) — לחלון "משימות שהושלמו".
+ * user = null: כולן (מנהל). user = שם משתמש בשמעיה: רק המשויכות לעובדי הקונטריל שממופים אליו.
+ */
+async function completedTasks(user: string | null) {
+  const token = await getAccessToken();
+  if (!token) return { ok: false, error: "not_connected" };
+
+  const { data: mapRows, error } = await db.from("contreal_user_map").select("contreal_user_id, shmaya_user");
+  if (error) throw error;
+  const userMap = new Map<number, string | null>((mapRows ?? []).map((r: any) => [Number(r.contreal_user_id), r.shmaya_user]));
+  let assigneeIds: number[] | null = null;
+  if (user) {
+    assigneeIds = (mapRows ?? []).filter((r: any) => r.shmaya_user === user).map((r: any) => Number(r.contreal_user_id));
+    if (assigneeIds.length === 0) return { ok: true, tasks: [], truncated: false, notMapped: true };
+  }
+
+  const mcp = await openMcp(token);
+  try {
+    const all: any[] = [];
+    let offset = 0;
+    let truncated = false;
+    for (let page = 0; page < COMPLETED_MAX_PAGES; page++) {
+      const data = await mcp.call("search_tasks", {
+        state: "completed", limit: 100, offset,
+        ...(assigneeIds ? { assignee_ids: assigneeIds } : {}),
+      });
+      const items: any[] = data?.items ?? [];
+      all.push(...items);
+      if (!data?.has_more || items.length === 0) break;
+      offset = data.next_offset ?? offset + items.length;
+      if (page === COMPLETED_MAX_PAGES - 1) truncated = true;
+    }
+    const tasks = all
+      .filter((t) => !isExcludedTask(t))
+      .map((t) => {
+        const f = linkFieldsFromTask(t, userMap);
+        return {
+          id: Number(t.id),
+          title: t.title,
+          completedAt: t.completed_at ?? null,
+          deadlineDate: f.deadline_date,
+          projectName: f.project_name,
+          clientName: f.client_name,
+          priorityName: f.priority_name,
+          url: f.url,
+          assignees: f.contreal_assignees.map((a) => ({ id: a.id, name: a.name, shmayaUser: a.shmaya_user })),
+        };
+      })
+      .sort((a, b) => String(b.completedAt ?? "").localeCompare(String(a.completedAt ?? "")));
+    return { ok: true, tasks, truncated };
+  } catch (err) {
+    return { ok: false, error: String(err instanceof Error ? err.message : err).slice(0, 300) };
   } finally {
     await mcp.close().catch(() => {});
   }
@@ -859,8 +988,6 @@ function trimForReport(value: unknown, depth = 0): unknown {
 async function discoverWithSdk(token: string, part: "tools" | "calls" = "calls") {
   const out: Record<string, unknown> = { ok: false };
   try {
-    const { Client } = await import("npm:@modelcontextprotocol/sdk@1/client/index.js");
-    const { StreamableHTTPClientTransport } = await import("npm:@modelcontextprotocol/sdk@1/client/streamableHttp.js");
 
     const client = new Client({ name: "shmaya", version: "0.1.0" });
     const transport = new StreamableHTTPClientTransport(new URL(MCP_URL), {

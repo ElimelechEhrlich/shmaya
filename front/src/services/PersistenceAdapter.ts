@@ -109,6 +109,19 @@ export interface ContrealTaskRow {
 
 export type ContrealConnectionStatus = 'none' | 'pending' | 'connected' | 'expired';
 
+/** משימה שהושלמה בקונטריל — נטענת בלחיצה, לא נשמרת בשמעיה. */
+export interface ContrealCompletedTask {
+  id: number;
+  title: string;
+  completedAt: string | null;
+  deadlineDate: string | null;
+  projectName: string | null;
+  clientName: string | null;
+  priorityName: string | null;
+  url: string | null;
+  assignees: { id: number; name: string; shmayaUser: string | null }[];
+}
+
 export interface ContrealSyncResult {
   ok: boolean;
   error?: string;
@@ -438,6 +451,11 @@ export const PersistenceAdapter = {
   contrealConnectUrl(adminKey: string): string {
     const base = import.meta.env.VITE_SUPABASE_URL;
     return `${base}/functions/v1/contreal-sync/start?key=${encodeURIComponent(adminKey)}`;
+  },
+
+  /** משימות שהושלמו, ישירות מקונטריל. user = null: כולן (מנהל); אחרת רק של המשתמש. */
+  fetchContrealCompleted(user: string | null): Promise<DbResult<{ ok: boolean; error?: string; tasks?: ContrealCompletedTask[]; truncated?: boolean; notMapped?: boolean }>> {
+    return this.invokeContreal({ action: 'completed_tasks', user });
   },
 
   fetchContrealTaskDetails(subtaskId: string): Promise<DbResult<{ ok: boolean; error?: string; task?: Record<string, unknown> }>> {
