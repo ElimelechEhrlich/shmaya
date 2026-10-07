@@ -433,9 +433,10 @@ const FIELD_LABELS: [string, string][] = [
     ['sub_tasks', 'תתי-משימות'],
     ['links', 'קישורים'],
     ['files', 'קבצים'],
+    ['attachments', 'קבצים מצורפים'],
 ];
 // שדות טכניים שלא מוצגים (מזהים, הכותרת שכבר בראש החלונית, קישור שיש לו כפתור)
-const HIDDEN_FIELDS = new Set(['id', 'title', 'url', 'comments', 'project_id', 'client_id', 'step_id', 'meeting_id', 'user_id', 'timer_running', 'visible_to_client']);
+const HIDDEN_FIELDS = new Set(['id', 'title', 'url', 'comments', 'files_truncated', 'project_id', 'client_id', 'step_id', 'meeting_id', 'user_id', 'timer_running', 'visible_to_client']);
 const SOURCE_LABELS: Record<string, string> = { whatsapp: 'וואטסאפ', web: 'אתר' };
 
 function isEmpty(v: unknown): boolean {
@@ -448,8 +449,85 @@ function nameOf(v: any): string {
     return v.name ?? v.priority_name ?? v.title ?? v.file_name ?? v.label ?? v.url ?? JSON.stringify(v);
 }
 
+// ── קבצים: הפונקציה מוסיפה לכל קובץ `link` (get_file_link). תמונה מוצגת, שאר הקבצים — כפתור פתיחה ──
+
+const IMAGE_EXT = /\.(png|jpe?g|gif|webp|bmp|svg|heic)$/i;
+
+function fileName(f: any): string {
+    return f?.name ?? f?.file_name ?? f?.original_name ?? f?.filename ?? f?.title ?? `קובץ ${f?.id ?? f?.file_id ?? ''}`.trim();
+}
+
+/** רק קישור https מוצג (לעולם לא javascript: וכו'). */
+function safeFileLink(f: any): string | null {
+    const url = typeof f?.link === 'string' ? f.link.trim() : '';
+    return /^https:\/\/\S+$/.test(url) ? url : null;
+}
+
+function isImageFile(f: any): boolean {
+    const mime = String(f?.mime_type ?? f?.content_type ?? f?.type ?? '');
+    if (mime.startsWith('image/')) return true;
+    return IMAGE_EXT.test(fileName(f));
+}
+
+function FileList({ files }: { files: any[] }): React.ReactElement | null {
+    const list = (files ?? []).filter(f => f !== null && f !== undefined);
+    if (list.length === 0) return null;
+    return (
+        <div className="flex flex-wrap gap-2 mt-1">
+            {list.map((raw, i) => {
+                const f = typeof raw === 'object' ? raw : { id: raw };
+                const name = fileName(f);
+                const url = safeFileLink(f);
+                if (url && isImageFile(f)) {
+                    return (
+                        <a key={i} href={url} target="_blank" rel="noopener noreferrer" title={name}
+                           className="block border border-slate-200 rounded-lg overflow-hidden bg-white hover:border-violet-300">
+                            <img src={url} alt={name} loading="lazy" referrerPolicy="no-referrer"
+                                 className="h-28 max-w-[14rem] object-cover" />
+                        </a>
+                    );
+                }
+                return url ? (
+                    <a key={i} href={url} target="_blank" rel="noopener noreferrer"
+                       className="inline-flex items-center gap-1.5 text-xs bg-white border border-slate-200 hover:border-violet-300 hover:bg-violet-50 text-violet-700 rounded-lg px-2.5 py-1.5 max-w-full">
+                        <span>📎</span><span className="truncate">{name}</span><span className="shrink-0">↗</span>
+                    </a>
+                ) : (
+                    <span key={i} title={f.link_error ?? undefined}
+                          className="inline-flex items-center gap-1.5 text-xs bg-slate-50 border border-slate-200 text-slate-500 rounded-lg px-2.5 py-1.5 max-w-full">
+                        <span>📎</span><span className="truncate">{name}</span><span className="shrink-0">(לא זמין)</span>
+                    </span>
+                );
+            })}
+        </div>
+    );
+}
+
+/** קבצים של תגובה, בכל אחד מהשמות שקונטריל עשוי להשתמש בהם. */
+function commentFiles(c: any): any[] {
+    return [...(Array.isArray(c?.files) ? c.files : []), ...(Array.isArray(c?.attachments) ? c.attachments : [])];
+}
+
+function CommentItem({ c, depth = 0 }: { c: any; depth?: number }): React.ReactElement {
+    const replies: any[] = Array.isArray(c?.replies) ? c.replies : [];
+    const text = String(c?.content ?? c?.text ?? c?.body ?? '');
+    return (
+        <div className={depth === 0 ? 'bg-slate-50 rounded-lg p-3' : 'border-r-2 border-slate-200 pr-3 mt-2'}>
+            <div className="text-[11px] text-slate-400 mb-1">
+                {nameOf(c?.author ?? c?.user ?? c?.created_by)}
+                {c?.created_at ? ` · ${formatContrealDateTime(c.created_at) ?? ''}` : ''}
+            </div>
+            {text && <div className="whitespace-pre-wrap text-slate-700">{text}</div>}
+            <FileList files={commentFiles(c)} />
+            {depth < 5 && replies.map((r, i) => <CommentItem key={i} c={r} depth={depth + 1} />)}
+        </div>
+    );
+}
+
 function renderField(key: string, value: any): React.ReactNode {
     switch (key) {
+        case 'files': case 'attachments':
+            return Array.isArray(value) ? <FileList files={value} /> : String(value);
         case 'deadline_date': return formatContrealDeadline(value)?.full ?? String(value);
         case 'created_at': case 'updated_at': case 'completed_at': return formatContrealDateTime(value) ?? String(value);
         case 'estimated_minutes': return value ? `${value} דקות` : null;
@@ -623,19 +701,14 @@ function ContrealTaskDetailsModal({ row, onClose }: { row: ContrealTaskRow; onCl
                                     );
                                 })}
                             </dl>
+                            {task.files_truncated && (
+                                <p className="mt-2 text-[11px] text-slate-400">יש במשימה יותר מ-30 קבצים — חלקם מוצגים בלי קישור. את כולם אפשר לראות בקונטריל.</p>
+                            )}
                             {comments.length > 0 && (
                                 <div className="mt-5">
                                     <h4 className="text-xs font-bold text-slate-500 mb-2">תגובות ({comments.length})</h4>
                                     <div className="space-y-2">
-                                        {comments.map((c, i) => (
-                                            <div key={i} className="bg-slate-50 rounded-lg p-3">
-                                                <div className="text-[11px] text-slate-400 mb-1">
-                                                    {nameOf(c.author ?? c.user ?? c.created_by)}
-                                                    {c.created_at ? ` · ${formatContrealDateTime(c.created_at) ?? ''}` : ''}
-                                                </div>
-                                                <div className="whitespace-pre-wrap text-slate-700">{String(c.content ?? c.text ?? c.body ?? '')}</div>
-                                            </div>
-                                        ))}
+                                        {comments.map((c, i) => <CommentItem key={i} c={c} />)}
                                     </div>
                                 </div>
                             )}
