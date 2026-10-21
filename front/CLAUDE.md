@@ -97,6 +97,23 @@ Migrations applied (in order):
 - `db/migrations/0007_drop_legacy_detail_tables.sql` — drops the five legacy 1:1 detail tables (applied 2026-06-23).
 - `0009`–`0025` — see the files in `db/migrations/`.
 - `db/migrations/0026_contreal_auth.sql` / `0027_contreal_tasks.sql` / `0028_contreal_sync_cron.sql` / `0029_contreal_sync_every_5_min.sql` — Contreal sync (see below).
+- `db/migrations/0030_explicit_api_grants.sql` — explicit Data API grants for all existing tables (GRANT only; a no-op on the live DB, needed only if the schema is recreated).
+
+### New tables need explicit grants
+
+Since 30/10/2026 Supabase no longer grants Data API access automatically to new tables in `public`. A table created without grants is unreachable from supabase-js / PostgREST ("permission denied"). **Every migration that creates a table must also grant it**, in the same file, choosing the narrowest access that fits:
+
+```sql
+-- browser reads + writes (RLS still applies)
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.my_table TO anon, authenticated, service_role;
+-- browser read-only, server writes (like contreal_task_link)
+GRANT SELECT ON public.my_table TO anon, authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.my_table TO service_role;
+-- server only, e.g. secrets (like contreal_auth)
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.my_table TO service_role;
+```
+
+Grants decide whether the API can reach a table at all; RLS still decides which rows. Add RLS and its policies in the same migration as well. Existing tables keep their grants (stated explicitly in `0030`).
 
 ### Live schema (reference only — not for execution)
 
